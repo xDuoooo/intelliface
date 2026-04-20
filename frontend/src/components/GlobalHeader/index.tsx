@@ -81,6 +81,31 @@ export default function GlobalHeader() {
     setIsUserDropdownOpen(false);
   }, [pathname]);
 
+  useEffect(() => {
+    if (pathname !== "/questions") {
+      setQuestionSearchText("");
+      return;
+    }
+    if (typeof window === "undefined") {
+      return;
+    }
+    const syncQuestionSearchText = () => {
+      const nextKeyword = new URLSearchParams(window.location.search).get("q") || "";
+      setQuestionSearchText(nextKeyword);
+    };
+    const handleQuestionSearchSync = (event: Event) => {
+      const customEvent = event as CustomEvent<{ keyword?: string }>;
+      setQuestionSearchText(customEvent.detail?.keyword || "");
+    };
+    syncQuestionSearchText();
+    window.addEventListener("popstate", syncQuestionSearchText);
+    window.addEventListener("question-search-sync", handleQuestionSearchSync as EventListener);
+    return () => {
+      window.removeEventListener("popstate", syncQuestionSearchText);
+      window.removeEventListener("question-search-sync", handleQuestionSearchSync as EventListener);
+    };
+  }, [pathname]);
+
   const handleQuestionSearch = () => {
     const keyword = questionSearchText.trim();
     const nextUrl = keyword ? `/questions?q=${encodeURIComponent(keyword)}` : "/questions";

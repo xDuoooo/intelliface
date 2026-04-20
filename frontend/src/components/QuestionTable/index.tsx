@@ -115,6 +115,15 @@ const QuestionTable: React.FC<Props> = (props) => {
       searchParam.set("page", String(nextParams.current));
     }
     const queryString = searchParam.toString();
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(
+        new CustomEvent("question-search-sync", {
+          detail: {
+            keyword: nextParams.searchText || "",
+          },
+        }),
+      );
+    }
     router.replace(queryString ? `${currentPathname}?${queryString}` : currentPathname, { scroll: false });
   };
 

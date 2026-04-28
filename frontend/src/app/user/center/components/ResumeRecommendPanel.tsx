@@ -15,8 +15,7 @@ import { getLoginUserUsingGet, updateMyUserUsingPost } from "@/api/userControlle
 import TagList from "@/components/TagList";
 import { QUESTION_DIFFICULTY_COLOR_MAP } from "@/constants/question";
 import { RootState } from "@/stores";
-import { useSelector, useDispatch } from "react-redux";
-import { QUESTION_DIFFICULTY_COLOR_MAP } from "@/constants/question";
+import { useSelector } from "react-redux";
 import type { AppDispatch } from "@/stores";
 import { setLoginUser } from "@/stores/loginUser";
 

@@ -11,8 +11,11 @@ import {
   recommendQuestionsByResumeFileUsingPost,
   recommendQuestionsByResumeUsingPost,
 } from "@/api/questionController";
-import { mergeMyInterestTagsUsingPost } from "@/api/userController";
+import { getLoginUserUsingGet, updateMyUserUsingPost } from "@/api/userController";
 import TagList from "@/components/TagList";
+import { QUESTION_DIFFICULTY_COLOR_MAP } from "@/constants/question";
+import { RootState } from "@/stores";
+import { useSelector, useDispatch } from "react-redux";
 import { QUESTION_DIFFICULTY_COLOR_MAP } from "@/constants/question";
 import type { AppDispatch } from "@/stores";
 import { setLoginUser } from "@/stores/loginUser";
@@ -39,17 +42,24 @@ const ResumeRecommendPanel: React.FC = () => {
   const [result, setResult] = useState<API.ResumeQuestionRecommendVO>();
   const [selectedExtractedTags, setSelectedExtractedTags] = useState<string[]>([]);
 
-  const extractedTagList = useMemo(
-    () => Array.from(new Set((result?.extractedTags || []).map((tag) => tag?.trim()).filter(Boolean) as string[])),
-    [result?.extractedTags],
+  const loginUser = useSelector((state: RootState) => state.loginUser);
+  const existingTags = useMemo(() => loginUser?.interestTagList || [], [loginUser?.interestTagList]);
+
+  const allAvailableTags = useMemo(
+    () => Array.from(new Set([
+      ...existingTags,
+      ...(result?.extractedTags || []).map((tag) => tag?.trim()).filter(Boolean) as string[],
+    ])),
+    [existingTags, result?.extractedTags],
   );
 
   const applyResult = (nextResult?: API.ResumeQuestionRecommendVO) => {
     setResult(nextResult);
-    const nextTagList = Array.from(
+    const parsedTags = Array.from(
       new Set(((nextResult?.extractedTags || []).map((tag) => tag?.trim()).filter(Boolean) as string[])),
     );
-    setSelectedExtractedTags(nextTagList);
+    const combined = Array.from(new Set([...existingTags, ...parsedTags]));
+    setSelectedExtractedTags(combined.slice(0, 8)); // 默认选中最多前8个
   };
 
   const handleRecommend = async () => {
@@ -98,13 +108,16 @@ const ResumeRecommendPanel: React.FC = () => {
     }
     setSavingTags(true);
     try {
-      const res = await mergeMyInterestTagsUsingPost({ interestTags: tagList });
+      const res = await updateMyUserUsingPost({ interestTags: tagList });
       if (res.data) {
-        dispatch(setLoginUser(res.data));
+        const userRes = await getLoginUserUsingGet();
+        if (userRes.data) {
+          dispatch(setLoginUser(userRes.data));
+        }
       }
-      message.success("技能标签已添加到个人资料");
+      message.success("技能标签已更新");
     } catch (error: any) {
-      message.error("添加失败：" + (error?.message || "请稍后重试"));
+      message.error("更新失败：" + (error?.message || "请稍后重试"));
     } finally {
       setSavingTags(false);
     }
@@ -113,6 +126,10 @@ const ResumeRecommendPanel: React.FC = () => {
   const toggleExtractedTag = (tag: string, checked: boolean) => {
     setSelectedExtractedTags((current) => {
       if (checked) {
+        if (current.length >= 8) {
+          message.warning("最多只能保留 8 个技能标签");
+          return current;
+        }
         return Array.from(new Set([...current, tag]));
       }
       return current.filter((item) => item !== tag);
@@ -134,7 +151,7 @@ const ResumeRecommendPanel: React.FC = () => {
       bordered={false}
       className="overflow-hidden rounded-[2rem] border border-slate-100 shadow-2xl shadow-slate-200/40"
     >
-      <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1.15fr_0.85fr]">
+      <div className="flex flex-col gap-6">
         <div className="rounded-[1.75rem] border border-slate-100 bg-slate-50/70 p-6">
           <div className="flex items-center justify-between gap-4">
             <div>
@@ -262,15 +279,15 @@ const ResumeRecommendPanel: React.FC = () => {
 
               <div>
                 <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-                  <div className="font-semibold text-slate-800">识别出的技能标签</div>
-                  {extractedTagList.length ? (
+                  <div className="font-semibold text-slate-800">自主选择技能标签 (最多 8 个)</div>
+                  {allAvailableTags.length ? (
                     <div className="flex flex-wrap items-center gap-2">
                       <Button
                         size="small"
-                        onClick={() => setSelectedExtractedTags(extractedTagList)}
+                        onClick={() => setSelectedExtractedTags(allAvailableTags.slice(0, 8))}
                         className="rounded-full"
                       >
-                        全选
+                        全选/拉满
                       </Button>
                       <Button
                         size="small"
@@ -287,23 +304,23 @@ const ResumeRecommendPanel: React.FC = () => {
                         onClick={handleMergeTagsToProfile}
                         className="rounded-full"
                       >
-                        添加选中标签
+                        更新至个人资料
                       </Button>
                     </div>
                   ) : null}
                 </div>
-                {extractedTagList.length ? (
+                {allAvailableTags.length ? (
                   <div className="space-y-3">
                     <Text className="text-sm text-slate-500">
-                      已选择 {selectedExtractedTags.length} / {extractedTagList.length} 个标签加入个人资料
+                      已选择 {selectedExtractedTags.length} / {allAvailableTags.length} 个标签加入个人资料（包含你已有的标签）
                     </Text>
                     <div className="flex flex-wrap gap-2">
-                      {extractedTagList.map((tag) => (
+                      {allAvailableTags.map((tag) => (
                         <CheckableTag
                           key={tag}
                           checked={selectedExtractedTags.includes(tag)}
                           onChange={(checked) => toggleExtractedTag(tag, checked)}
-                          className="!m-0 rounded-full border px-3 py-1 text-sm font-semibold transition"
+                          className={`!m-0 rounded-full border px-3 py-1 text-sm font-semibold transition ${existingTags.includes(tag) && !selectedExtractedTags.includes(tag) ? 'border-dashed border-rose-300 text-slate-400' : ''}`}
                         >
                           {tag}
                         </CheckableTag>

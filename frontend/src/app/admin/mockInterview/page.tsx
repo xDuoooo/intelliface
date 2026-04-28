@@ -33,6 +33,30 @@ function downloadBlob(blob: Blob, fileName: string) {
 export default function AdminMockInterviewPage() {
   const actionRef = useRef<ActionType>();
 
+  const normalizeScalar = (value: unknown) => {
+    if (Array.isArray(value)) {
+      return value[0];
+    }
+    return value === "" ? undefined : value;
+  };
+
+  const buildMockInterviewQueryRequest = (params: Record<string, any>, sort: Record<string, any>) => {
+    const sortField = Object.keys(sort || {})[0];
+    const sortOrder = sortField ? sort?.[sortField] : undefined;
+    return {
+      current: Number(params.current) || 1,
+      pageSize: Number(params.pageSize) || 10,
+      id: normalizeScalar(params.id),
+      userId: normalizeScalar(params.userId),
+      jobPosition: normalizeScalar(params.jobPosition),
+      interviewType: normalizeScalar(params.interviewType),
+      difficulty: normalizeScalar(params.difficulty),
+      status: normalizeScalar(params.status),
+      sortField,
+      sortOrder,
+    } as API.MockInterviewQueryRequest;
+  };
+
   const handleDelete = async (id?: string | number) => {
     if (!id) {
       return;
@@ -231,20 +255,9 @@ export default function AdminMockInterviewPage() {
           columns={columns}
           request={async (params, sort) => {
             try {
-              const sortField = Object.keys(sort || {})[0];
-              const sortOrder = sortField ? (sort as Record<string, "ascend" | "descend">)[sortField] : undefined;
-              const res = await listMockInterviewByPageUsingPost({
-                current: params.current,
-                pageSize: params.pageSize,
-                id: params.id,
-                userId: params.userId,
-                jobPosition: params.jobPosition,
-                interviewType: params.interviewType,
-                difficulty: params.difficulty,
-                status: params.status,
-                sortField,
-                sortOrder,
-              });
+              const res = await listMockInterviewByPageUsingPost(
+                buildMockInterviewQueryRequest(params, sort as Record<string, any>),
+              );
               return {
                 data: res.data?.records || [],
                 total: Number(res.data?.total || 0),

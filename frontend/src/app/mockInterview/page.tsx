@@ -2,11 +2,38 @@
 
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
-import { Button, Card, Empty, List, Spin, Tag, Typography, message } from "antd";
-import { ArrowRight, BrainCircuit, Briefcase, Clock3, Sparkles } from "lucide-react";
-import { listMockInterviewVoByPageUsingPost } from "@/api/mockInterviewController";
+import {
+  Button,
+  Card,
+  Empty,
+  List,
+  Pagination,
+  Popconfirm,
+  Segmented,
+  Spin,
+  Tag,
+  Typography,
+  message,
+} from "antd";
+import {
+  ArrowRight,
+  BrainCircuit,
+  Briefcase,
+  Clock3,
+  Download,
+  RefreshCw,
+  Sparkles,
+  Trash2,
+} from "lucide-react";
+import {
+  deleteMockInterviewUsingPost,
+  downloadMockInterviewReviewUsingGet,
+  listMockInterviewVoByPageUsingPost,
+} from "@/api/mockInterviewController";
 
 const { Title, Paragraph, Text } = Typography;
+
+const PAGE_SIZE = 6;
 
 const statusMap: Record<number, { text: string; color: string }> = {
   0: { text: "待开始", color: "orange" },
@@ -14,6 +41,16 @@ const statusMap: Record<number, { text: string; color: string }> = {
   2: { text: "已结束", color: "red" },
   3: { text: "已暂停", color: "gold" },
 };
+
+const statusFilterOptions = [
+  { label: "全部", value: "all" },
+  { label: "待开始", value: "0" },
+  { label: "进行中", value: "1" },
+  { label: "已结束", value: "2" },
+  { label: "已暂停", value: "3" },
+] as const;
+
+type StatusFilterValue = (typeof statusFilterOptions)[number]["value"];
 
 function safeParseJson<T>(value?: string | null): T | null {
   if (!value) {
@@ -29,17 +66,29 @@ function safeParseJson<T>(value?: string | null): T | null {
 export default function MockInterviewHomePage() {
   const [loading, setLoading] = useState(true);
   const [interviewList, setInterviewList] = useState<API.MockInterview[]>([]);
+  const [total, setTotal] = useState(0);
+  const [current, setCurrent] = useState(1);
+  const [statusFilter, setStatusFilter] = useState<StatusFilterValue>("all");
+  const [exportingId, setExportingId] = useState<string | number>();
+  const [deletingId, setDeletingId] = useState<string | number>();
 
-  const loadMyInterviews = async () => {
+  const loadMyInterviews = async (
+    nextCurrent = current,
+    nextStatusFilter: StatusFilterValue = statusFilter,
+  ) => {
     setLoading(true);
     try {
       const res = await listMockInterviewVoByPageUsingPost({
-        current: 1,
-        pageSize: 10,
-        sortField: "createTime",
+        current: nextCurrent,
+        pageSize: PAGE_SIZE,
+        status: nextStatusFilter === "all" ? undefined : Number(nextStatusFilter),
+        sortField: "updateTime",
         sortOrder: "descend",
       });
       setInterviewList(res.data?.records || []);
+      setTotal(Number(res.data?.total || 0));
+      setCurrent(nextCurrent);
+      setStatusFilter(nextStatusFilter);
     } catch (error: any) {
       message.error(error?.message || "加载模拟面试记录失败");
     } finally {
@@ -48,8 +97,49 @@ export default function MockInterviewHomePage() {
   };
 
   useEffect(() => {
-    loadMyInterviews();
+    void loadMyInterviews(1, "all");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const handleExport = async (id?: string | number) => {
+    if (!id) {
+      return;
+    }
+    setExportingId(id);
+    try {
+      const { blob, fileName } = await downloadMockInterviewReviewUsingGet(id);
+      const objectUrl = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = objectUrl;
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(objectUrl);
+      message.success("逐题复盘已导出");
+    } catch (error: any) {
+      message.error(error?.message || "导出复盘失败");
+    } finally {
+      setExportingId(undefined);
+    }
+  };
+
+  const handleDelete = async (id?: string | number) => {
+    if (!id) {
+      return;
+    }
+    setDeletingId(id);
+    try {
+      await deleteMockInterviewUsingPost({ id });
+      message.success("模拟面试记录已删除");
+      const fallbackPage = interviewList.length === 1 && current > 1 ? current - 1 : current;
+      await loadMyInterviews(fallbackPage, statusFilter);
+    } catch (error: any) {
+      message.error(error?.message || "删除失败");
+    } finally {
+      setDeletingId(undefined);
+    }
+  };
 
   return (
     <div className="max-width-content space-y-8">
@@ -88,6 +178,16 @@ export default function MockInterviewHomePage() {
       <Card
         title={<span className="text-lg font-black text-slate-800">我的模拟面试记录</span>}
         className="rounded-[2rem] border border-slate-100 shadow-xl shadow-slate-200/40"
+        extra={
+          <div className="flex flex-wrap items-center justify-end gap-3">
+            <Segmented
+              options={statusFilterOptions as any}
+              value={statusFilter}
+              onChange={(value) => void loadMyInterviews(1, value as StatusFilterValue)}
+            />
+            <Text className="text-slate-400">共 {total} 条</Text>
+          </div>
+        }
       >
         {loading ? (
           <div className="py-16 text-center">
@@ -103,70 +203,118 @@ export default function MockInterviewHomePage() {
             </Link>
           </Empty>
         ) : (
-          <List
-            dataSource={interviewList}
-            split={false}
-            renderItem={(item) => {
-              const status = statusMap[item.status ?? 0] || statusMap[0];
-              const report = safeParseJson<{
-                readinessLevel?: string;
-                currentFocus?: string;
-              }>(item.report);
-              return (
-                <List.Item className="!px-0">
-                  <Card className="w-full rounded-2xl border border-slate-100 shadow-sm">
-                    <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-                      <div className="space-y-3">
-                        <div className="flex flex-wrap items-center gap-3">
-                          <Title level={4} className="!mb-0 !text-slate-900">
-                            {item.jobPosition || "未命名模拟面试"}
-                          </Title>
-                          <Tag color={status.color}>{status.text}</Tag>
-                        </div>
-                        <div className="flex flex-wrap gap-4 text-sm text-slate-500">
-                          <span className="inline-flex items-center gap-1.5">
-                            <Briefcase size={14} />
-                            {item.workExperience || "经验不限"}
-                          </span>
-                          <span className="inline-flex items-center gap-1.5">
-                            <BrainCircuit size={14} />
-                            {item.interviewType || "技术深挖"}
-                          </span>
-                          <span className="inline-flex items-center gap-1.5">
-                            <Clock3 size={14} />
-                            难度：{item.difficulty || "中等"}
-                          </span>
-                          <span className="inline-flex items-center gap-1.5">
-                            <Sparkles size={14} />
-                            轮次：{item.currentRound || 0}/{item.expectedRounds || 5}
-                          </span>
-                        </div>
-                        {report?.readinessLevel ? (
-                          <div className="inline-flex items-center rounded-full bg-primary/10 px-3 py-1 text-xs font-bold text-primary">
-                            当前就绪度：{report.readinessLevel}
+          <>
+            <List
+              dataSource={interviewList}
+              split={false}
+              renderItem={(item) => {
+                const status = statusMap[item.status ?? 0] || statusMap[0];
+                const report = safeParseJson<{
+                  readinessLevel?: string;
+                  currentFocus?: string;
+                }>(item.report);
+                return (
+                  <List.Item className="!px-0">
+                    <Card className="w-full rounded-2xl border border-slate-100 shadow-sm">
+                      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                        <div className="space-y-3">
+                          <div className="flex flex-wrap items-center gap-3">
+                            <Title level={4} className="!mb-0 !text-slate-900">
+                              {item.jobPosition || "未命名模拟面试"}
+                            </Title>
+                            <Tag color={status.color}>{status.text}</Tag>
                           </div>
-                        ) : null}
-                        {report?.currentFocus && item.status !== 2 ? (
-                          <Text className="block text-slate-500">
-                            当前停留重点：{report.currentFocus}
+                          <div className="flex flex-wrap gap-4 text-sm text-slate-500">
+                            <span className="inline-flex items-center gap-1.5">
+                              <Briefcase size={14} />
+                              {item.workExperience || "经验不限"}
+                            </span>
+                            <span className="inline-flex items-center gap-1.5">
+                              <BrainCircuit size={14} />
+                              {item.interviewType || "技术深挖"}
+                            </span>
+                            <span className="inline-flex items-center gap-1.5">
+                              <Clock3 size={14} />
+                              难度：{item.difficulty || "中等"}
+                            </span>
+                            <span className="inline-flex items-center gap-1.5">
+                              <Sparkles size={14} />
+                              轮次：{item.currentRound || 0}/{item.expectedRounds || 5}
+                            </span>
+                          </div>
+                          {report?.readinessLevel ? (
+                            <div className="inline-flex items-center rounded-full bg-primary/10 px-3 py-1 text-xs font-bold text-primary">
+                              当前就绪度：{report.readinessLevel}
+                            </div>
+                          ) : null}
+                          {report?.currentFocus && item.status !== 2 ? (
+                            <Text className="block text-slate-500">
+                              当前停留重点：{report.currentFocus}
+                            </Text>
+                          ) : null}
+                          <Text className="text-slate-400">
+                            最近更新时间：{item.updateTime ? new Date(item.updateTime).toLocaleString() : "-"}
                           </Text>
-                        ) : null}
-                        <Text className="text-slate-400">
-                          最近更新时间：{item.updateTime ? new Date(item.updateTime).toLocaleString() : "-"}
-                        </Text>
+                        </div>
+                        <div className="flex flex-wrap gap-3">
+                          <Link href={`/mockInterview/add?from=${item.id}`}>
+                            <Button className="h-11 rounded-2xl px-5 font-bold">
+                              <RefreshCw size={16} />
+                              再来一场
+                            </Button>
+                          </Link>
+                          {item.status === 2 ? (
+                            <Button
+                              className="h-11 rounded-2xl px-5 font-bold"
+                              loading={exportingId === item.id}
+                              onClick={() => void handleExport(item.id)}
+                            >
+                              <Download size={16} />
+                              导出复盘
+                            </Button>
+                          ) : null}
+                          <Link href={`/mockInterview/chat/${item.id}`}>
+                            <Button type="primary" className="h-11 rounded-2xl px-5 font-bold">
+                              {item.status === 3 ? "继续会话" : item.status === 2 ? "查看复盘" : "进入会话"}
+                              <ArrowRight size={16} />
+                            </Button>
+                          </Link>
+                          <Popconfirm
+                            title="确认删除这条模拟面试记录？"
+                            description="删除后无法恢复，逐题复盘也会一起移除。"
+                            okText="确认删除"
+                            cancelText="取消"
+                            okButtonProps={{ danger: true }}
+                            onConfirm={() => void handleDelete(item.id)}
+                          >
+                            <Button
+                              danger
+                              className="h-11 rounded-2xl px-5 font-bold"
+                              loading={deletingId === item.id}
+                            >
+                              <Trash2 size={16} />
+                              删除
+                            </Button>
+                          </Popconfirm>
+                        </div>
                       </div>
-                      <Link href={`/mockInterview/chat/${item.id}`}>
-                        <Button type="primary" className="h-11 rounded-2xl px-5 font-bold">
-                          {item.status === 3 ? "继续会话" : "进入会话"}
-                          <ArrowRight size={16} />
-                        </Button>
-                      </Link>
-                    </div>
-                  </Card>
-                </List.Item>
-              );
-            }}
-          />
+                    </Card>
+                  </List.Item>
+                );
+              }}
+            />
+            {total > PAGE_SIZE ? (
+              <div className="mt-6 flex justify-center">
+                <Pagination
+                  current={current}
+                  pageSize={PAGE_SIZE}
+                  total={total}
+                  showSizeChanger={false}
+                  onChange={(page) => void loadMyInterviews(page, statusFilter)}
+                />
+              </div>
+            ) : null}
+          </>
         )}
       </Card>
     </div>

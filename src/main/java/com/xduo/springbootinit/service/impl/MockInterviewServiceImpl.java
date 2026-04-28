@@ -47,6 +47,10 @@ public class MockInterviewServiceImpl extends ServiceImpl<MockInterviewMapper, M
     private static final int MAX_ROUNDS = 8;
     private static final int SHORT_ANSWER_THRESHOLD = 35;
     private static final long MAX_AUDIO_FILE_SIZE = 8L * 1024 * 1024;
+    private static final int MAX_PROMPT_BACKGROUND_CHARS = 1200;
+    private static final int MAX_PROMPT_TRANSCRIPT_MESSAGES = 14;
+    private static final int MAX_PROMPT_TRANSCRIPT_CHARS = 3200;
+    private static final int MAX_PROMPT_MESSAGE_CHARS = 280;
     private static final List<String> SUPPORTED_AUDIO_SUFFIX_LIST = List.of("webm", "wav", "mp3", "m4a", "mp4", "ogg", "oga");
 
     @Resource
@@ -569,7 +573,7 @@ public class MockInterviewServiceImpl extends ServiceImpl<MockInterviewMapper, M
                 StringUtils.defaultIfBlank(mockInterview.getDifficulty(), "中等"),
                 StringUtils.defaultIfBlank(mockInterview.getInterviewType(), "技术深挖"),
                 StringUtils.defaultIfBlank(mockInterview.getTechStack(), "通用后端"),
-                StringUtils.defaultIfBlank(mockInterview.getResumeText(), "暂无额外背景"),
+                buildCandidateBackgroundContext(mockInterview),
                 planItem == null ? "项目背景与自我介绍" : planItem.getFocusTopic(),
                 planItem == null ? "开场问题" : planItem.getQuestionStyle());
         return chatWithFallback(systemPrompt, userPrompt, buildOpeningFallback(mockInterview, planItem));
@@ -604,7 +608,7 @@ public class MockInterviewServiceImpl extends ServiceImpl<MockInterviewMapper, M
                 StringUtils.defaultIfBlank(mockInterview.getTechStack(), "通用后端"),
                 getExpectedRounds(mockInterview),
                 completedRounds,
-                StringUtils.defaultIfBlank(mockInterview.getResumeText(), "暂无额外背景"),
+                buildCandidateBackgroundContext(mockInterview),
                 currentPlan == null ? "技术深挖" : currentPlan.getFocusTopic(),
                 currentPlan == null ? "追问" : currentPlan.getQuestionStyle(),
                 nextPlan == null ? "总结归纳" : nextPlan.getFocusTopic(),
@@ -612,7 +616,7 @@ public class MockInterviewServiceImpl extends ServiceImpl<MockInterviewMapper, M
                 canProbe ? "是" : "否",
                 StringUtils.defaultIfBlank(latestQuestion, "暂无"),
                 StringUtils.defaultIfBlank(latestAnswer, "暂无"),
-                buildTranscript(messageList));
+                buildPromptTranscript(messageList, MAX_PROMPT_TRANSCRIPT_MESSAGES, MAX_PROMPT_TRANSCRIPT_CHARS));
         String fallbackJson = JSONUtil.toJsonStr(buildRoundFallback(mockInterview, completedRounds, currentPlan, nextPlan));
         return parseRoundAnalysis(chatWithFallback(systemPrompt, userPrompt, fallbackJson), mockInterview, completedRounds, currentPlan, nextPlan, canProbe);
     }
@@ -633,9 +637,9 @@ public class MockInterviewServiceImpl extends ServiceImpl<MockInterviewMapper, M
                 StringUtils.defaultIfBlank(mockInterview.getTechStack(), "通用后端"),
                 getExpectedRounds(mockInterview),
                 interviewReport.getCompletedRounds(),
-                StringUtils.defaultIfBlank(mockInterview.getResumeText(), "暂无额外背景"),
+                buildCandidateBackgroundContext(mockInterview),
                 JSONUtil.toJsonStr(interviewReport.getRoundRecords()),
-                buildTranscript(messageList));
+                buildPromptTranscript(messageList, MAX_PROMPT_TRANSCRIPT_MESSAGES + 4, MAX_PROMPT_TRANSCRIPT_CHARS + 800));
         String fallback = JSONUtil.toJsonStr(buildSummaryFallback(interviewReport));
         return parseSummaryResult(chatWithFallback(systemPrompt, userPrompt, fallback), interviewReport);
     }
@@ -648,6 +652,47 @@ public class MockInterviewServiceImpl extends ServiceImpl<MockInterviewMapper, M
                     .append('\n');
         }
         return transcriptBuilder.toString();
+    }
+
+    private String buildPromptTranscript(List<InterviewMessage> messageList, int maxMessages, int maxChars) {
+        if (messageList == null || messageList.isEmpty()) {
+            return "";
+        }
+        int safeMaxMessages = Math.max(1, maxMessages);
+        int startIndex = Math.max(0, messageList.size() - safeMaxMessages);
+        StringBuilder transcriptBuilder = new StringBuilder();
+        if (startIndex > 0) {
+            transcriptBuilder.append("（已省略更早的对话，仅保留最近关键轮次）\n");
+        }
+        for (int i = startIndex; i < messageList.size(); i++) {
+            InterviewMessage message = messageList.get(i);
+            transcriptBuilder.append(message.isAI ? "面试官：" : "候选人：")
+                    .append(abbreviateText(message.content, MAX_PROMPT_MESSAGE_CHARS))
+                    .append('\n');
+        }
+        String transcript = transcriptBuilder.toString();
+        return abbreviateText(transcript, Math.max(400, maxChars));
+    }
+
+    private String buildCandidateBackgroundContext(MockInterview mockInterview) {
+        String background = mockInterview == null ? null : mockInterview.getResumeText();
+        if (StringUtils.isBlank(background)) {
+            return "暂无额外背景";
+        }
+        return abbreviateText(background, MAX_PROMPT_BACKGROUND_CHARS);
+    }
+
+    private String abbreviateText(String content, int maxChars) {
+        String normalized = StringUtils.defaultString(content)
+                .replace('\r', ' ')
+                .replace('\n', ' ')
+                .replaceAll("\\s{2,}", " ")
+                .trim();
+        if (normalized.length() <= maxChars) {
+            return normalized;
+        }
+        int keepLength = Math.max(0, maxChars - 1);
+        return normalized.substring(0, keepLength).trim() + "…";
     }
 
     private InterviewReport initReport(MockInterview mockInterview) {

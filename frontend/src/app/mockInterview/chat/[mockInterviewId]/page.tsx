@@ -138,6 +138,8 @@ const statusMap: Record<number, { text: string; color: string }> = {
   3: { text: "已暂停", color: "gold" },
 };
 
+const AUTO_SPEAK_STORAGE_KEY = "mockInterview:autoSpeakEnabled";
+
 function buildAnswerCoachHints(answer: string) {
   const normalized = answer.trim();
   if (!normalized) {
@@ -235,6 +237,7 @@ function getAudioFileExtension(mimeType?: string) {
 export default function InterviewRoomPage({ params }: { params: { mockInterviewId: string } }) {
   const { mockInterviewId } = params;
   const interviewId = mockInterviewId;
+  const draftStorageKey = useMemo(() => `mockInterview:draft:${interviewId}`, [interviewId]);
   const [submitting, setSubmitting] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -259,6 +262,7 @@ export default function InterviewRoomPage({ params }: { params: { mockInterviewI
   const messageListRef = useRef<HTMLDivElement | null>(null);
   const voiceBaseInputRef = useRef("");
   const lastSpokenKeyRef = useRef("");
+  const draftHydratedKeyRef = useRef<string>();
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
   const recordedChunksRef = useRef<BlobPart[]>([]);
@@ -301,6 +305,10 @@ export default function InterviewRoomPage({ params }: { params: { mockInterviewI
     setSpeechRecognitionSupported(Boolean(getSpeechRecognitionConstructor()));
     setSpeechSynthesisSupported("speechSynthesis" in window);
     setAudioRecordingSupported(Boolean(window.MediaRecorder) && Boolean(navigator.mediaDevices?.getUserMedia));
+    const savedAutoSpeak = window.localStorage.getItem(AUTO_SPEAK_STORAGE_KEY);
+    if (savedAutoSpeak === "0") {
+      setAutoSpeakEnabled(false);
+    }
     return () => {
       speechRecognitionRef.current?.abort();
       speechRecognitionRef.current = null;
@@ -327,6 +335,37 @@ export default function InterviewRoomPage({ params }: { params: { mockInterviewI
       }
     };
   }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || draftHydratedKeyRef.current === draftStorageKey) {
+      return;
+    }
+    const savedDraft = window.localStorage.getItem(draftStorageKey);
+    draftHydratedKeyRef.current = draftStorageKey;
+    if (savedDraft) {
+      setInputMessage(savedDraft);
+      setVoiceStatus("已恢复上次未发送的回答草稿");
+    }
+  }, [draftStorageKey]);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || draftHydratedKeyRef.current !== draftStorageKey) {
+      return;
+    }
+    const normalizedDraft = inputMessage.trim();
+    if (normalizedDraft) {
+      window.localStorage.setItem(draftStorageKey, inputMessage);
+    } else {
+      window.localStorage.removeItem(draftStorageKey);
+    }
+  }, [draftStorageKey, inputMessage]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+    window.localStorage.setItem(AUTO_SPEAK_STORAGE_KEY, autoSpeakEnabled ? "1" : "0");
+  }, [autoSpeakEnabled]);
 
   const status = statusMap[interview?.status ?? 0] || statusMap[0];
   const isStarted = interview?.status === 1;
@@ -440,6 +479,25 @@ export default function InterviewRoomPage({ params }: { params: { mockInterviewI
       behavior: "smooth",
     });
   }, [messages.length, streamingReply?.content]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      const hasPendingInterviewActivity = Boolean(inputMessage.trim())
+        || isListening
+        || isRecording
+        || (submitting && Boolean(streamAbortControllerRef.current));
+      if (!hasPendingInterviewActivity) {
+        return;
+      }
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, [inputMessage, isListening, isRecording, submitting]);
 
   const cancelStreaming = useCallback((reason = "已停止当前实时输出，稍后会刷新面试结果。") => {
     if (streamAbortControllerRef.current) {
@@ -994,6 +1052,9 @@ export default function InterviewRoomPage({ params }: { params: { mockInterviewI
                   stopSpeaking();
                 }}
                 onPressEnter={(e) => {
+                  if ((e.nativeEvent as KeyboardEvent).isComposing) {
+                    return;
+                  }
                   if (!e.shiftKey) {
                     e.preventDefault();
                     void sendMessage();

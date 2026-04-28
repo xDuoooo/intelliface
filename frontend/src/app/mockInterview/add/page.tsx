@@ -21,7 +21,7 @@ const CreateMockInterviewPage: React.FC<Props> = (props) => {
   const [prefillLoading, setPrefillLoading] = useState(false);
   const router = useRouter();
   const searchParams = useSearchParams();
-  const fromInterviewId = useMemo(() => searchParams.get("from"), [searchParams]);
+  const fromInterviewId = useMemo(() => searchParams?.get("from") || "", [searchParams]);
 
   const interviewTypeOptions = [
     { label: "技术深挖", value: "技术深挖" },

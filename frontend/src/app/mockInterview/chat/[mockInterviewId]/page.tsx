@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button, Card, Empty, Input, List, Progress, Skeleton, Tag, Typography, message } from "antd";
 import {
@@ -13,6 +14,7 @@ import {
   Mic,
   MicOff,
   Radar,
+  RefreshCw,
   Square,
   Sparkles,
   Volume2,
@@ -930,6 +932,12 @@ export default function InterviewRoomPage({ params }: { params: { mockInterviewI
             </div>
 
             <div className="hero-actions">
+              <Link href={`/mockInterview/add?from=${interview.id}`}>
+                <Button className="action-button secondary">
+                  <RefreshCw size={16} />
+                  再来一场
+                </Button>
+              </Link>
               <Button
                 type="primary"
                 onClick={() => void handleEvent("start")}

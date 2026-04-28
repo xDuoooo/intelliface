@@ -803,7 +803,7 @@ export default function InterviewRoomPage({ params }: { params: { mockInterviewI
   );
 
   const sendMessage = async () => {
-    if (!inputMessage.trim()) {
+    if (!inputMessage.trim() || submitting || isTranscribing) {
       return;
     }
     if (isListening) {
@@ -1061,6 +1061,10 @@ export default function InterviewRoomPage({ params }: { params: { mockInterviewI
                 }}
                 onPressEnter={(e) => {
                   if ((e.nativeEvent as KeyboardEvent).isComposing) {
+                    return;
+                  }
+                  if (submitting || isTranscribing) {
+                    e.preventDefault();
                     return;
                   }
                   if (!e.shiftKey) {

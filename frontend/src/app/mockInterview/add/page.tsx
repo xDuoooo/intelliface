@@ -10,6 +10,8 @@ import "./index.css";
 
 interface Props {}
 
+const CREATE_DRAFT_STORAGE_KEY = "mockInterview:createDraft:v1";
+
 /**
  * 创建 AI 模拟面试页面
  * @param props
@@ -17,6 +19,7 @@ interface Props {}
  */
 const CreateMockInterviewPage: React.FC<Props> = (props) => {
   const [form] = Form.useForm();
+  const formValues = Form.useWatch([], form);
   const [loading, setLoading] = useState(false);
   const [prefillLoading, setPrefillLoading] = useState(false);
   const router = useRouter();
@@ -35,6 +38,23 @@ const CreateMockInterviewPage: React.FC<Props> = (props) => {
     { label: "中等", value: "中等" },
     { label: "高级", value: "高级" },
   ];
+
+  useEffect(() => {
+    if (typeof window === "undefined" || fromInterviewId) {
+      return;
+    }
+    const savedDraft = window.localStorage.getItem(CREATE_DRAFT_STORAGE_KEY);
+    if (!savedDraft) {
+      return;
+    }
+    try {
+      const parsedDraft = JSON.parse(savedDraft);
+      form.setFieldsValue(parsedDraft);
+      message.success("已恢复你上次未完成的面试配置");
+    } catch {
+      window.localStorage.removeItem(CREATE_DRAFT_STORAGE_KEY);
+    }
+  }, [form, fromInterviewId]);
 
   useEffect(() => {
     const hydrateFromInterview = async () => {
@@ -56,6 +76,9 @@ const CreateMockInterviewPage: React.FC<Props> = (props) => {
           difficulty: res.data.difficulty,
           expectedRounds: res.data.expectedRounds,
         });
+        if (typeof window !== "undefined") {
+          window.localStorage.removeItem(CREATE_DRAFT_STORAGE_KEY);
+        }
         message.success("已为你带入上一场面试的配置");
       } catch (error: any) {
         message.error(error?.message || "读取上一场面试配置失败");
@@ -65,6 +88,32 @@ const CreateMockInterviewPage: React.FC<Props> = (props) => {
     };
     void hydrateFromInterview();
   }, [form, fromInterviewId]);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || prefillLoading || fromInterviewId) {
+      return;
+    }
+    const nextDraft = {
+      jobPosition: formValues?.jobPosition,
+      workExperience: formValues?.workExperience,
+      interviewType: formValues?.interviewType,
+      techStack: formValues?.techStack,
+      resumeText: formValues?.resumeText,
+      difficulty: formValues?.difficulty,
+      expectedRounds: formValues?.expectedRounds,
+    };
+    const hasContent = Object.values(nextDraft).some((value) => {
+      if (typeof value === "string") {
+        return Boolean(value.trim());
+      }
+      return value !== undefined && value !== null;
+    });
+    if (!hasContent) {
+      window.localStorage.removeItem(CREATE_DRAFT_STORAGE_KEY);
+      return;
+    }
+    window.localStorage.setItem(CREATE_DRAFT_STORAGE_KEY, JSON.stringify(nextDraft));
+  }, [formValues, fromInterviewId, prefillLoading]);
 
   /**
    * 提交表单
@@ -78,6 +127,9 @@ const CreateMockInterviewPage: React.FC<Props> = (props) => {
       const res = await addMockInterviewUsingPost(values);
       hide();
       message.success("模拟面试创建成功");
+      if (typeof window !== "undefined") {
+        window.localStorage.removeItem(CREATE_DRAFT_STORAGE_KEY);
+      }
       form.resetFields(); // 重置表单
       // 跳转到模拟面试列表页面
       router.push("/mockInterview/chat/" + res.data);
@@ -178,15 +230,29 @@ const CreateMockInterviewPage: React.FC<Props> = (props) => {
 
         {/* 面试难度 */}
         <Form.Item>
-          <Button
-            loading={loading}
-            disabled={prefillLoading}
-            style={{ width: 220 }}
-            type="primary"
-            htmlType="submit"
-          >
-            {prefillLoading ? "正在载入配置..." : "创建并进入模拟面试"}
-          </Button>
+          <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+            <Button
+              loading={loading}
+              disabled={prefillLoading}
+              style={{ width: 220 }}
+              type="primary"
+              htmlType="submit"
+            >
+              {prefillLoading ? "正在载入配置..." : "创建并进入模拟面试"}
+            </Button>
+            <Button
+              disabled={prefillLoading}
+              onClick={() => {
+                form.resetFields();
+                if (typeof window !== "undefined") {
+                  window.localStorage.removeItem(CREATE_DRAFT_STORAGE_KEY);
+                }
+                message.success("已清空当前草稿");
+              }}
+            >
+              清空草稿
+            </Button>
+          </div>
         </Form.Item>
         </Form>
       </div>

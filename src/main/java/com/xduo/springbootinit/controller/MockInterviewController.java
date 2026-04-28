@@ -1,5 +1,6 @@
 package com.xduo.springbootinit.controller;
 
+import cn.hutool.json.JSONUtil;
 import cn.dev33.satoken.annotation.SaCheckRole;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.xduo.springbootinit.common.BaseResponse;
@@ -29,6 +30,9 @@ import jakarta.servlet.http.HttpServletRequest;
 
 import java.nio.charset.StandardCharsets;
 import java.net.URLEncoder;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 
 /**
  * 模拟面试接口
@@ -133,6 +137,7 @@ public class MockInterviewController {
         validatePageRequest(queryRequest.getCurrent(), queryRequest.getPageSize());
         Page<MockInterview> page = mockInterviewService.page(new Page<>(queryRequest.getCurrent(), queryRequest.getPageSize()),
                 mockInterviewService.getQueryWrapper(queryRequest));
+        compactPageForList(page);
         return ResultUtils.success(page);
     }
 
@@ -145,6 +150,7 @@ public class MockInterviewController {
         queryRequest.setUserId(loginUser.getId());
         Page<MockInterview> page = mockInterviewService.page(new Page<>(queryRequest.getCurrent(), queryRequest.getPageSize()),
                 mockInterviewService.getQueryWrapper(queryRequest));
+        compactPageForList(page);
         return ResultUtils.success(page);
     }
 
@@ -160,5 +166,34 @@ public class MockInterviewController {
             throw new BusinessException(ErrorCode.NO_AUTH_ERROR);
         }
         return mockInterview;
+    }
+
+    private void compactPageForList(Page<MockInterview> page) {
+        List<MockInterview> records = page == null ? null : page.getRecords();
+        if (records == null || records.isEmpty()) {
+            return;
+        }
+        for (MockInterview record : records) {
+            if (record == null) {
+                continue;
+            }
+            record.setMessages(null);
+            record.setResumeText(null);
+            record.setReport(compactReport(record.getReport()));
+        }
+    }
+
+    private String compactReport(String report) {
+        if (report == null || report.isBlank()) {
+            return report;
+        }
+        try {
+            Map<String, Object> reportMap = JSONUtil.toBean(report, LinkedHashMap.class);
+            reportMap.remove("roundRecords");
+            reportMap.remove("agenda");
+            return JSONUtil.toJsonStr(reportMap);
+        } catch (Exception e) {
+            return report;
+        }
     }
 }

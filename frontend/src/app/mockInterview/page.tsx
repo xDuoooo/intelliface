@@ -212,6 +212,7 @@ export default function MockInterviewHomePage() {
                 const report = safeParseJson<{
                   readinessLevel?: string;
                   currentFocus?: string;
+                  summary?: string;
                 }>(item.report);
                 return (
                   <List.Item className="!px-0">
@@ -250,6 +251,11 @@ export default function MockInterviewHomePage() {
                           {report?.currentFocus && item.status !== 2 ? (
                             <Text className="block text-slate-500">
                               当前停留重点：{report.currentFocus}
+                            </Text>
+                          ) : null}
+                          {report?.summary && item.status === 2 ? (
+                            <Text className="block text-slate-500">
+                              复盘摘要：{report.summary}
                             </Text>
                           ) : null}
                           <Text className="text-slate-400">

@@ -1195,6 +1195,7 @@ declare namespace API {
     userAccount?: string;
     userAvatar?: string;
     userName?: string;
+    userPassword?: string;
     userRole?: string;
   };
 
@@ -1272,6 +1273,7 @@ declare namespace API {
     city?: string;
     id?: string | number;
     interestTags?: string[];
+    userAccount?: string;
     userAvatar?: string;
     userName?: string;
     userProfile?: string;

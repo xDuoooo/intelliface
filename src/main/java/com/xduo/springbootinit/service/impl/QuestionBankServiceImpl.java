@@ -8,6 +8,7 @@ import com.xduo.springbootinit.common.ErrorCode;
 import com.xduo.springbootinit.constant.CommonConstant;
 import com.xduo.springbootinit.constant.QuestionBankConstant;
 import com.xduo.springbootinit.exception.ThrowUtils;
+import com.xduo.springbootinit.manager.CosManager;
 import com.xduo.springbootinit.mapper.QuestionBankMapper;
 import com.xduo.springbootinit.model.dto.questionbank.QuestionBankQueryRequest;
 import com.xduo.springbootinit.model.entity.QuestionBank;
@@ -39,6 +40,9 @@ public class QuestionBankServiceImpl extends ServiceImpl<QuestionBankMapper, Que
 
     @Resource
     private UserService userService;
+
+    @Resource
+    private CosManager cosManager;
 
     /**
      * 校验数据
@@ -117,6 +121,7 @@ public class QuestionBankServiceImpl extends ServiceImpl<QuestionBankMapper, Que
     public QuestionBankVO getQuestionBankVO(QuestionBank questionBank, HttpServletRequest request) {
         // 对象转封装类
         QuestionBankVO questionBankVO = QuestionBankVO.objToVo(questionBank);
+        questionBankVO.setPicture(cosManager.resolveSignedUrl(questionBankVO.getPicture()));
         // 关联查询用户信息
         Long userId = questionBank.getUserId();
         User user = null;
@@ -145,7 +150,9 @@ public class QuestionBankServiceImpl extends ServiceImpl<QuestionBankMapper, Que
         }
         // 对象列表 => 封装对象列表
         List<QuestionBankVO> questionBankVOList = questionBankList.stream().map(questionBank -> {
-            return QuestionBankVO.objToVo(questionBank);
+            QuestionBankVO questionBankVO = QuestionBankVO.objToVo(questionBank);
+            questionBankVO.setPicture(cosManager.resolveSignedUrl(questionBankVO.getPicture()));
+            return questionBankVO;
         }).collect(Collectors.toList());
         // 关联查询用户信息
         Set<Long> userIdSet = questionBankList.stream()

@@ -5,8 +5,9 @@ import dynamic from "next/dynamic";
 import { deleteUserUsingPost, listUserByPageUsingPost } from "@/api/userController";
 import { Plus, Trash2, Edit3, UserCog } from "lucide-react";
 import ProTable from "@/components/DynamicProTable";
+import UserAvatar from "@/components/UserAvatar";
 import type { ActionType, ProColumns } from "@ant-design/pro-components";
-import { message, Space, Tag, Avatar, Popconfirm } from "antd";
+import { message, Space, Tag, Popconfirm } from "antd";
 import { useSelector } from "react-redux";
 import { RootState } from "@/stores";
 import { CITY_GROUP_OPTIONS, CITY_VALUE_ENUM } from "@/config/cityOptions";
@@ -88,11 +89,9 @@ const UserAdminPage: React.FC = () => {
     {
       title: "头像",
       dataIndex: "userAvatar",
-      valueType: "image",
-      fieldProps: { width: 48 },
       hideInSearch: true,
       render: (_, record) => (
-        <Avatar src={record.userAvatar} size="large" className="border border-slate-100 shadow-sm" />
+        <UserAvatar src={record.userAvatar} name={record.userName} size={48} className="border border-slate-100" />
       ),
     },
     {

@@ -40,7 +40,7 @@ export default function QuestionRecommendPanel({ questionId }: Props) {
       if (isLogin) {
         promises.unshift(listPersonalRecommendQuestionVoUsingGet({ questionId, size: 4 }));
       } else {
-        promises.unshift(Promise.resolve({ status: "fulfilled", value: { data: [] } } as any));
+        promises.unshift(Promise.resolve({ data: [] } as any));
       }
       
       const [personalRes, relatedRes] = await Promise.allSettled(promises);
@@ -65,7 +65,7 @@ export default function QuestionRecommendPanel({ questionId }: Props) {
     } finally {
       setLoading(false);
     }
-  }, [questionId]);
+  }, [isLogin, questionId]);
 
   useEffect(() => {
     if (!questionId) {

@@ -233,15 +233,17 @@ public class UserController {
         ThrowUtils.throwIf(userAccount == null, ErrorCode.PARAMS_ERROR, "账号不能为空");
         userService.checkUserAccountUnique(userAccount, null);
         user.setUserAccount(userAccount);
+        String userPassword = StringUtils.trimToNull(userAddRequest.getUserPassword());
+        ThrowUtils.throwIf(userPassword == null, ErrorCode.PARAMS_ERROR, "密码不能为空");
+        ThrowUtils.throwIf(userPassword.length() < 8, ErrorCode.PARAMS_ERROR, "密码至少 8 位");
         String userName = normalizeOptionalUserName(userAddRequest.getUserName());
         userService.checkUserNameUnique(userName, null);
         user.setUserName(userName);
+        user.setUserAvatar(StringUtils.trimToNull(userAddRequest.getUserAvatar()));
         user.setCity(normalizeOptionalSupportedCity(userAddRequest.getCity(), false));
         user.setCareerDirection(normalizeCareerDirection(userAddRequest.getCareerDirection()));
         user.setInterestTags(normalizeInterestTags(userAddRequest.getInterestTags()));
-        // 默认密码 12345678
-        String defaultPassword = "12345678";
-        String encryptPassword = DigestUtils.md5DigestAsHex((SALT + defaultPassword).getBytes());
+        String encryptPassword = DigestUtils.md5DigestAsHex((SALT + userPassword).getBytes());
         user.setUserPassword(encryptPassword);
         user.setPasswordConfigured(1);
         boolean result = userService.save(user);
@@ -383,6 +385,9 @@ public class UserController {
         ThrowUtils.throwIf(current < 1 || size < 1 || size > 100, ErrorCode.PARAMS_ERROR, "分页参数不合法");
         Page<User> userPage = userService.page(new Page<>(current, size),
                 userService.getQueryWrapper(userQueryRequest));
+        userPage.getRecords().forEach(user -> {
+            user.setUserAvatar(userService.getUserVO(user).getUserAvatar());
+        });
         return ResultUtils.success(userPage);
     }
 

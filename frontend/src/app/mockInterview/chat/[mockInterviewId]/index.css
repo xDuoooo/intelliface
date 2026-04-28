@@ -11,6 +11,10 @@
     gap: 24px;
 }
 
+.review-board-section {
+    margin-top: 24px;
+}
+
 .interview-main,
 .interview-side {
     display: flex;
@@ -20,7 +24,8 @@
 
 .hero-card,
 .message-card,
-.side-card {
+.side-card,
+.review-board-card {
     border-radius: 28px !important;
     border: 1px solid rgba(226, 232, 240, 0.9) !important;
     box-shadow: 0 20px 50px rgba(15, 23, 42, 0.08) !important;
@@ -318,6 +323,12 @@
     margin-top: 16px;
 }
 
+.report-placeholder.wide {
+    min-height: 220px;
+    display: flex;
+    align-items: center;
+}
+
 .live-cue-panel {
     margin-top: 16px;
     border-radius: 20px;
@@ -521,6 +532,100 @@
     line-height: 1.8;
 }
 
+.review-board-content {
+    margin-top: 18px;
+}
+
+.review-hero {
+    display: grid;
+    grid-template-columns: 140px minmax(0, 1fr);
+    gap: 18px;
+    align-items: stretch;
+}
+
+.review-score-stack {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    border-radius: 24px;
+    background: linear-gradient(180deg, #f8fafc, #eef2ff);
+    padding: 18px;
+}
+
+.review-summary-panel {
+    border-radius: 24px;
+    background: #f8fafc;
+    padding: 20px 22px;
+}
+
+.review-summary-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    align-items: center;
+    margin-top: 16px;
+}
+
+.review-next-action {
+    color: #475569;
+    line-height: 1.8;
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.review-dimension-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 14px;
+    margin-top: 18px;
+}
+
+.review-detail-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 14px;
+    margin-top: 18px;
+}
+
+.review-detail-panel {
+    border-radius: 22px;
+    background: #f8fafc;
+    padding: 18px;
+}
+
+.review-detail-panel ul {
+    margin: 0;
+    padding-left: 18px;
+    color: #475569;
+    line-height: 1.8;
+}
+
+.review-round-section {
+    margin-top: 22px;
+}
+
+.review-round-title {
+    margin-bottom: 12px;
+}
+
+.review-round-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px;
+}
+
+.review-round-card {
+    border-radius: 22px;
+    background: #f8fafc;
+    padding: 18px;
+}
+
+.review-round-block {
+    margin-top: 14px;
+}
+
 .topic-list {
     display: flex;
     flex-wrap: wrap;
@@ -632,6 +737,13 @@
     line-height: 1.8;
 }
 
+.record-answer {
+    margin-top: 10px;
+    color: #334155;
+    line-height: 1.8;
+    white-space: pre-wrap;
+}
+
 .record-verdict {
     margin-top: 10px;
     color: #0f172a;
@@ -644,6 +756,12 @@
     color: #64748b;
     font-size: 13px;
     font-weight: 600;
+    align-items: flex-start;
+}
+
+.record-comment span {
+    min-width: 0;
+    line-height: 1.8;
 }
 
 .record-style {
@@ -702,6 +820,13 @@
     .interview-shell {
         grid-template-columns: 1fr;
     }
+
+    .review-hero,
+    .review-dimension-grid,
+    .review-detail-grid,
+    .review-round-grid {
+        grid-template-columns: 1fr;
+    }
 }
 
 @media (max-width: 768px) {
@@ -731,7 +856,8 @@
         grid-template-columns: 1fr 1fr;
     }
 
-    .report-overview {
+    .report-overview,
+    .review-hero {
         grid-template-columns: 1fr;
     }
 
@@ -739,5 +865,9 @@
         width: 72px;
         height: 72px;
         border-radius: 20px;
+    }
+
+    .review-score-stack {
+        align-items: flex-start;
     }
 }

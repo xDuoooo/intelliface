@@ -1323,55 +1323,61 @@ export default function InterviewRoomPage({ params }: { params: { mockInterviewI
             </Card>
           ) : null}
 
-          <Card className="side-card">
-            <div className="section-heading compact">
-              <div>
-                <div className="section-eyebrow">Final Report</div>
-                <Title level={5} className="!mb-0 !mt-2">
-                  最终报告
-                </Title>
-              </div>
-              <Sparkles size={18} className="text-amber-500" />
+        </aside>
+      </div>
+
+      <section className="review-board-section">
+        <Card className="review-board-card">
+          <div className="section-heading">
+            <div>
+              <div className="section-eyebrow">Interview Review</div>
+              <Title level={4} className="!mb-0 !mt-2">
+                最终报告与逐轮记录
+              </Title>
             </div>
-            {isEnded && report ? (
-              <div className="report-panel">
-                <div className="report-overview">
+            <Sparkles size={18} className="text-amber-500" />
+          </div>
+
+          {isEnded && report ? (
+            <div className="review-board-content">
+              <div className="review-hero">
+                <div className="review-score-stack">
                   <div className="overall-score">{report.overallScore || 0}</div>
-                  <div>
-                    <div className="report-label">综合评分</div>
-                    <Paragraph className="!mb-0 text-slate-500">
-                      {report.summary || "面试总结已生成。"}
-                    </Paragraph>
+                  <div className="report-label">综合评分</div>
+                </div>
+                <div className="review-summary-panel">
+                  <Paragraph className="!mb-0 text-slate-600">
+                    {report.summary || "面试总结已生成。"}
+                  </Paragraph>
+                  <div className="review-summary-meta">
                     {report.readinessLevel ? (
                       <div className="readiness-pill">{report.readinessLevel}</div>
                     ) : null}
+                    <div className="review-next-action">
+                      {report.recommendedNextAction || "继续围绕项目细节、技术取舍和量化结果做口头表达训练。"}
+                    </div>
                   </div>
                 </div>
+              </div>
 
-                <div className="dimension-list">
-                  {[
-                    { label: "表达能力", value: report.communicationScore || 0 },
-                    { label: "技术深度", value: report.technicalScore || 0 },
-                    { label: "问题分析", value: report.problemSolvingScore || 0 },
-                  ].map((item) => (
-                    <div className="dimension-item" key={item.label}>
-                      <div className="dimension-head">
-                        <span>{item.label}</span>
-                        <strong>{item.value}</strong>
-                      </div>
-                      <Progress percent={item.value} showInfo={false} strokeColor="#0f172a" />
+              <div className="review-dimension-grid">
+                {[
+                  { label: "表达能力", value: report.communicationScore || 0 },
+                  { label: "技术深度", value: report.technicalScore || 0 },
+                  { label: "问题分析", value: report.problemSolvingScore || 0 },
+                ].map((item) => (
+                  <div className="dimension-item" key={item.label}>
+                    <div className="dimension-head">
+                      <span>{item.label}</span>
+                      <strong>{item.value}</strong>
                     </div>
-                  ))}
-                </div>
+                    <Progress percent={item.value} showInfo={false} strokeColor="#0f172a" />
+                  </div>
+                ))}
+              </div>
 
-                <div className="report-block">
-                  <div className="block-title">下一步建议</div>
-                  <Paragraph className="!mb-0 text-slate-600">
-                    {report.recommendedNextAction || "继续围绕项目细节、技术取舍和量化结果做口头表达训练。"}
-                  </Paragraph>
-                </div>
-
-                <div className="report-block">
+              <div className="review-detail-grid">
+                <div className="review-detail-panel">
                   <div className="block-title">亮点</div>
                   <ul>
                     {(report.strengths || []).map((item) => (
@@ -1379,8 +1385,7 @@ export default function InterviewRoomPage({ params }: { params: { mockInterviewI
                     ))}
                   </ul>
                 </div>
-
-                <div className="report-block">
+                <div className="review-detail-panel">
                   <div className="block-title">改进建议</div>
                   <ul>
                     {(report.improvements || []).map((item) => (
@@ -1388,8 +1393,7 @@ export default function InterviewRoomPage({ params }: { params: { mockInterviewI
                     ))}
                   </ul>
                 </div>
-
-                <div className="report-block">
+                <div className="review-detail-panel">
                   <div className="block-title">建议继续准备</div>
                   <div className="topic-list">
                     {(report.suggestedTopics || []).map((item) => (
@@ -1400,60 +1404,63 @@ export default function InterviewRoomPage({ params }: { params: { mockInterviewI
                   </div>
                 </div>
               </div>
-            ) : (
-              <div className="report-placeholder">
-                <Paragraph className="!mb-0 text-slate-500">
-                  面试结束后，这里会生成结构化复盘报告。你也可以直接导出逐题复盘 markdown，方便沉淀到自己的面经笔记。
-                </Paragraph>
-              </div>
-            )}
-          </Card>
 
-          {(report?.roundRecords || []).length ? (
-            <Card className="side-card">
-              <div className="section-heading compact">
-                <div>
-                  <div className="section-eyebrow">Round Review</div>
-                  <Title level={5} className="!mb-0 !mt-2">
-                    逐轮记录
-                  </Title>
-                </div>
-              </div>
-              <div className="round-record-list">
-                {(report?.roundRecords || []).map((item) => (
-                  <div className="round-record-item" key={item.round}>
-                    <div className="record-head">
-                      <strong>第 {item.round} 轮</strong>
-                      <span>{item.score || 0} 分</span>
-                    </div>
-                    <div className="record-question">{item.question}</div>
-                    {item.verdict ? <div className="record-verdict">{item.verdict}</div> : null}
-                    {item.questionStyle ? (
-                      <div className="record-style">
-                        {item.questionStyle} / 建议 {item.recommendedAnswerSeconds || 120}s
+              {(report?.roundRecords || []).length ? (
+                <div className="review-round-section">
+                  <div className="block-title review-round-title">逐轮记录</div>
+                  <div className="review-round-grid">
+                    {(report?.roundRecords || []).map((item) => (
+                      <div className="review-round-card" key={item.round}>
+                        <div className="record-head">
+                          <strong>第 {item.round} 轮</strong>
+                          <span>{item.score || 0} 分</span>
+                        </div>
+                        {item.questionStyle ? (
+                          <div className="record-style">
+                            {item.questionStyle} / 建议 {item.recommendedAnswerSeconds || 120}s
+                          </div>
+                        ) : null}
+                        {item.responseSeconds ? (
+                          <div className="record-meta">实际作答 {item.responseSeconds}s</div>
+                        ) : null}
+                        {item.verdict ? <div className="record-verdict">{item.verdict}</div> : null}
+                        <div className="review-round-block">
+                          <div className="focus-label">面试问题</div>
+                          <div className="record-question">{item.question || "暂无问题记录"}</div>
+                        </div>
+                        <div className="review-round-block">
+                          <div className="focus-label">你的回答</div>
+                          <div className="record-answer">{item.answer || "暂无回答记录"}</div>
+                        </div>
+                        <div className="review-round-block">
+                          <div className="focus-label">面试官评语</div>
+                          <div className="record-comment">
+                            <span>{item.shortComment || "暂无评语"}</span>
+                            <ChevronRight size={14} />
+                          </div>
+                        </div>
+                        {(item.improvementTags || []).length ? (
+                          <div className="record-tags">
+                            {(item.improvementTags || []).map((tag) => (
+                              <span className="feedback-tag" key={`${item.round}-${tag}`}>{tag}</span>
+                            ))}
+                          </div>
+                        ) : null}
                       </div>
-                    ) : null}
-                    {item.responseSeconds ? (
-                      <div className="record-meta">实际作答 {item.responseSeconds}s</div>
-                    ) : null}
-                    {(item.improvementTags || []).length ? (
-                      <div className="record-tags">
-                        {(item.improvementTags || []).map((tag) => (
-                          <span className="feedback-tag" key={`${item.round}-${tag}`}>{tag}</span>
-                        ))}
-                      </div>
-                    ) : null}
-                    <div className="record-comment">
-                      {item.shortComment}
-                      <ChevronRight size={14} />
-                    </div>
+                    ))}
                   </div>
-                ))}
-              </div>
-            </Card>
-          ) : null}
-        </aside>
-      </div>
+                </div>
+              ) : null}
+            </div>
+          ) : (
+            <div className="report-placeholder wide">
+              <Paragraph className="!mb-0 text-slate-500">
+                面试结束后，这里会展示完整的结构化复盘和逐轮记录。现在右侧会先聚焦当前进度、考察点和最近一轮反馈，避免你在会话进行中被大段报告打断。
+              </Paragraph>
+            </div>
+          )}
+        </Card>
+      </section>
     </div>
   );
 }

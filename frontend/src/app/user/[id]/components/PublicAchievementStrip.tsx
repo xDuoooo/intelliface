@@ -41,7 +41,7 @@ export default function PublicAchievementStrip({
   }
 
   return (
-    <div className="max-h-[430px] overflow-y-auto pr-1">
+    <div className="max-h-[430px] min-w-0 overflow-y-auto pr-0 sm:pr-1">
       <div className="space-y-3">
         {achievementList.map((item, index) => {
           const percent = Math.max(0, Math.min(100, toNumber(item.percent)));
@@ -51,7 +51,7 @@ export default function PublicAchievementStrip({
           return (
             <div
               key={itemKey}
-              className={`rounded-[1.5rem] border px-4 py-4 ${
+              className={`min-w-0 rounded-[1.5rem] border px-4 py-4 ${
                 item.maxLevel
                   ? "border-emerald-200 bg-emerald-50/80"
                   : percent > 0

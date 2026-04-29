@@ -60,7 +60,7 @@ export default function PublicLearningInsights({
   return (
     <div className="rounded-[1.75rem] border border-slate-100 bg-slate-50/70 p-5">
       <div className="grid gap-3 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,2fr)]">
-        <div className="rounded-[1.4rem] border border-primary/10 bg-white p-4">
+        <div className="min-w-0 rounded-[1.4rem] border border-primary/10 bg-white p-4">
           <div className="flex items-center gap-2 text-sm font-black text-slate-500">
             <Target className="h-4 w-4 text-primary" />
             今日目标
@@ -84,14 +84,14 @@ export default function PublicLearningInsights({
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-3 xl:grid-cols-6">
+        <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-6">
           {insights.map((item) => (
-            <div key={item.key} className="rounded-[1.4rem] border border-slate-100 bg-white p-4">
-              <div className="flex items-center gap-2 text-xs font-black text-slate-400">
+            <div key={item.key} className="min-w-0 overflow-hidden rounded-[1.4rem] border border-slate-100 bg-white p-4">
+              <div className="flex min-w-0 items-center gap-2 text-xs font-black text-slate-400">
                 {item.icon}
-                <span>{item.label}</span>
+                <span className="truncate">{item.label}</span>
               </div>
-              <div className="mt-3 truncate text-lg font-black text-slate-900">
+              <div className="mt-3 break-words text-lg font-black leading-7 text-slate-900 sm:truncate">
                 {item.value}
               </div>
             </div>

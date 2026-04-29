@@ -74,15 +74,15 @@ export default function PublicLearningHeatmap({
           </div>
           <h3 className="mt-2 text-lg font-black text-slate-900">刷题热力图</h3>
         </div>
-        <div className="flex gap-2 text-xs font-black text-slate-500">
+        <div className="flex flex-wrap gap-2 text-xs font-black text-slate-500 sm:justify-end">
           <span className="rounded-full bg-white px-3 py-1">{activeDays} 天活跃</span>
           <span className="rounded-full bg-white px-3 py-1">{totalCount} 道题</span>
         </div>
       </div>
 
-      <div className="mt-5 overflow-x-auto pb-2">
+      <div className="-mx-1 mt-5 overflow-x-auto px-1 pb-2 touch-pan-x">
         <div
-          className="grid auto-cols-[14px] grid-flow-col gap-1"
+          className="grid min-w-max auto-cols-[14px] grid-flow-col gap-1 pr-1"
           style={{ gridTemplateRows: "repeat(7, 14px)" }}
         >
           {days.map((day, index) => {
@@ -113,7 +113,7 @@ export default function PublicLearningHeatmap({
         </div>
       </div>
 
-      <div className="mt-3 flex items-center justify-end gap-2 text-[11px] font-bold text-slate-400">
+      <div className="mt-3 flex flex-wrap items-center justify-start gap-2 text-[11px] font-bold text-slate-400 sm:justify-end">
         <span>少</span>
         <span className="h-3 w-3 rounded-[4px] bg-slate-100" />
         <span className="h-3 w-3 rounded-[4px] bg-emerald-100" />

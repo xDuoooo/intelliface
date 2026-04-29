@@ -1,13 +1,15 @@
 "use client";
-import React from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { ChevronRight, FileQuestion } from "lucide-react";
+import { ChevronDown, ChevronRight, FileQuestion } from "lucide-react";
 import TagList from "@/components/TagList";
 
 interface Props {
   questionBankId?: number;
   questionList: API.QuestionVO[];
   cardTitle?: string;
+  collapsibleOnMobile?: boolean;
+  mobileInitialCount?: number;
 }
 
 /**
@@ -16,7 +18,38 @@ interface Props {
  * @constructor
  */
 const QuestionList = (props: Props) => {
-  const { questionList = [], cardTitle, questionBankId } = props;
+  const {
+    questionList = [],
+    cardTitle,
+    questionBankId,
+    collapsibleOnMobile = false,
+    mobileInitialCount = 6,
+  } = props;
+  const [isMobile, setIsMobile] = useState(false);
+  const [expanded, setExpanded] = useState(false);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+    const mediaQuery = window.matchMedia("(max-width: 768px)");
+    const updateIsMobile = (event?: MediaQueryListEvent) => {
+      setIsMobile(event ? event.matches : mediaQuery.matches);
+    };
+    updateIsMobile();
+    mediaQuery.addEventListener("change", updateIsMobile);
+    return () => mediaQuery.removeEventListener("change", updateIsMobile);
+  }, []);
+
+  const shouldCollapseOnMobile =
+    collapsibleOnMobile && isMobile && questionList.length > mobileInitialCount;
+
+  const visibleQuestionList = useMemo(() => {
+    if (!shouldCollapseOnMobile || expanded) {
+      return questionList;
+    }
+    return questionList.slice(0, mobileInitialCount);
+  }, [expanded, mobileInitialCount, questionList, shouldCollapseOnMobile]);
 
   return (
     <div className="space-y-4">
@@ -26,8 +59,9 @@ const QuestionList = (props: Props) => {
         </h2>
       )}
       {questionList.length ? (
+        <>
         <div className="grid gap-3">
-          {questionList.map((item) => (
+          {visibleQuestionList.map((item) => (
             <Link
               key={item.id}
               href={
@@ -51,6 +85,27 @@ const QuestionList = (props: Props) => {
             </Link>
           ))}
         </div>
+        {shouldCollapseOnMobile ? (
+          <div className="rounded-[1.75rem] border border-slate-200 bg-slate-50/80 px-4 py-4 sm:hidden">
+            <div className="flex flex-col gap-3">
+              <div className="text-sm font-medium text-slate-500">
+                当前显示 <span className="font-bold text-slate-700">{visibleQuestionList.length}</span> /{" "}
+                <span className="font-bold text-slate-700">{questionList.length}</span> 道题目
+              </div>
+              <button
+                type="button"
+                onClick={() => setExpanded((prev) => !prev)}
+                className="inline-flex h-11 items-center justify-center gap-2 rounded-2xl border border-primary/15 bg-white px-4 text-sm font-bold text-primary transition-all active:scale-95"
+              >
+                {expanded ? "收起题目列表" : "展开全部题目"}
+                <ChevronDown
+                  className={`h-4 w-4 transition-transform ${expanded ? "rotate-180" : ""}`}
+                />
+              </button>
+            </div>
+          </div>
+        ) : null}
+        </>
       ) : (
         <div className="flex min-h-44 flex-col items-center justify-center rounded-[2rem] border border-dashed border-slate-200 bg-white/70 px-6 py-12 text-center">
           <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-50 text-slate-400">

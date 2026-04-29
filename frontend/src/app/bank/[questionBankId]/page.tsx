@@ -166,6 +166,8 @@ export default async function BankPage({ params }: { params: { questionBankId: s
           questionBankId={questionBankId as any}
           questionList={bank.questionPage?.records ?? []}
           cardTitle={`题目列表 (${bank.questionPage?.total || 0})`}
+          collapsibleOnMobile
+          mobileInitialCount={6}
         />
       </section>
     </div>

@@ -616,13 +616,26 @@ const AccountSecurityCenter: React.FC<Props> = ({ user }) => {
         renderItem={(item) => (
           <List.Item
             className="px-4 py-6 hover:bg-slate-50/50 transition-colors border-b border-slate-100 last:border-b-0"
-            actions={[item.action]}
           >
-            <List.Item.Meta
-              avatar={<div className="p-2.5 bg-white rounded-xl shadow-sm border border-slate-100">{item.icon}</div>}
-              title={<span className="font-semibold text-slate-800 flex items-center gap-3">{item.title} {item.status}</span>}
-              description={item.description}
-            />
+            <div className="flex w-full min-w-0 flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+              <div className="flex min-w-0 flex-1 items-start gap-3 sm:gap-4">
+                <div className="shrink-0 rounded-xl border border-slate-100 bg-white p-2.5 shadow-sm">
+                  {item.icon}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2 text-slate-800">
+                    <span className="whitespace-nowrap font-semibold">{item.title}</span>
+                    {item.status}
+                  </div>
+                  <div className="mt-1 text-sm leading-6 text-slate-500 break-words">
+                    {item.description}
+                  </div>
+                </div>
+              </div>
+              <div className="flex min-w-0 flex-wrap items-center gap-2 sm:ml-4 sm:max-w-[45%] sm:justify-end">
+                {item.action}
+              </div>
+            </div>
           </List.Item>
         )}
       />

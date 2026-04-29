@@ -96,6 +96,9 @@ export default function UserProfileHoverCard({
   placement = "top",
   triggerClassName,
 }: Props) {
+  const actionButtonClass =
+    "h-11 w-full rounded-xl px-4 text-sm font-bold shadow-none transition-all active:scale-95";
+
   const loginUser = useSelector((state: RootState) => state.loginUser);
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -315,13 +318,16 @@ export default function UserProfileHoverCard({
             userId={resolvedDisplayUserId}
             initialFollowed={Boolean(profile?.hasFollowed)}
             onChange={handleFollowChange}
-            className="h-10 rounded-xl font-bold"
+            className={cn("!h-11 !w-full !rounded-xl", actionButtonClass)}
           />
         ) : null}
         <Link
           href={`/user/${targetUserId}`}
           prefetch={false}
-          className="flex h-10 items-center justify-center rounded-xl border border-slate-200 bg-white px-4 text-sm font-bold text-slate-700 transition-all hover:border-primary/20 hover:text-primary active:scale-95"
+          className={cn(
+            "inline-flex items-center justify-center border border-slate-200 bg-white text-slate-700 hover:border-primary/20 hover:text-primary",
+            actionButtonClass,
+          )}
         >
           进入主页
         </Link>

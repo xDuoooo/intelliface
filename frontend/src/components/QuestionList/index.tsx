@@ -1,5 +1,5 @@
 "use client";
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useMemo, useState } from "react";
 import Link from "next/link";
 import { ChevronDown, ChevronRight, FileQuestion } from "lucide-react";
 import TagList from "@/components/TagList";
@@ -25,31 +25,41 @@ const QuestionList = (props: Props) => {
     collapsibleOnMobile = false,
     mobileInitialCount = 6,
   } = props;
-  const [isMobile, setIsMobile] = useState(false);
   const [expanded, setExpanded] = useState(false);
 
-  useEffect(() => {
-    if (typeof window === "undefined") {
-      return;
-    }
-    const mediaQuery = window.matchMedia("(max-width: 768px)");
-    const updateIsMobile = (event?: MediaQueryListEvent) => {
-      setIsMobile(event ? event.matches : mediaQuery.matches);
-    };
-    updateIsMobile();
-    mediaQuery.addEventListener("change", updateIsMobile);
-    return () => mediaQuery.removeEventListener("change", updateIsMobile);
-  }, []);
+  const canCollapseOnMobile =
+    collapsibleOnMobile && questionList.length > mobileInitialCount;
 
-  const shouldCollapseOnMobile =
-    collapsibleOnMobile && isMobile && questionList.length > mobileInitialCount;
-
-  const visibleQuestionList = useMemo(() => {
-    if (!shouldCollapseOnMobile || expanded) {
+  const mobileVisibleQuestionList = useMemo(() => {
+    if (!canCollapseOnMobile || expanded) {
       return questionList;
     }
     return questionList.slice(0, mobileInitialCount);
-  }, [expanded, mobileInitialCount, questionList, shouldCollapseOnMobile]);
+  }, [canCollapseOnMobile, expanded, mobileInitialCount, questionList]);
+
+  const renderQuestionItem = (item: API.QuestionVO) => (
+    <Link
+      key={item.id}
+      href={
+        questionBankId
+          ? `/bank/${questionBankId}/question/${item.id}`
+          : `/question/${item.id}`
+      }
+      className="group flex w-full min-w-0 flex-col justify-between overflow-hidden rounded-3xl border border-slate-100 bg-white p-5 transition-all duration-300 hover:border-primary/30 hover:shadow-xl hover:shadow-primary/5 sm:flex-row sm:items-center"
+    >
+      <div className="flex min-w-0 flex-1 flex-col gap-2 pr-0 sm:pr-4">
+        <span className="break-words text-base font-bold text-foreground transition-colors group-hover:text-primary sm:truncate">
+          {item.title}
+        </span>
+        <div className="scale-95 origin-left opacity-90 transition-opacity group-hover:opacity-100">
+          <TagList tagList={item.tagList} />
+        </div>
+      </div>
+      <div className="mt-4 flex h-10 w-10 shrink-0 items-center justify-center self-end rounded-2xl bg-slate-50 transition-colors group-hover:bg-primary/10 sm:mt-0 sm:self-auto">
+        <ChevronRight className="h-5 w-5 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:text-primary" />
+      </div>
+    </Link>
+  );
 
   return (
     <div className="space-y-4">
@@ -60,36 +70,25 @@ const QuestionList = (props: Props) => {
       )}
       {questionList.length ? (
         <>
-        <div className="grid gap-3">
-          {visibleQuestionList.map((item) => (
-            <Link
-              key={item.id}
-              href={
-                questionBankId
-                  ? `/bank/${questionBankId}/question/${item.id}`
-                  : `/question/${item.id}`
-              }
-              className="group flex w-full min-w-0 flex-col justify-between overflow-hidden rounded-3xl border border-slate-100 bg-white p-5 transition-all duration-300 hover:border-primary/30 hover:shadow-xl hover:shadow-primary/5 sm:flex-row sm:items-center"
-            >
-              <div className="flex min-w-0 flex-1 flex-col gap-2 pr-0 sm:pr-4">
-                <span className="break-words text-base font-bold text-foreground transition-colors group-hover:text-primary sm:truncate">
-                  {item.title}
-                </span>
-                <div className="scale-95 origin-left opacity-90 group-hover:opacity-100 transition-opacity">
-                  <TagList tagList={item.tagList} />
-                </div>
+          {canCollapseOnMobile ? (
+            <>
+              <div className="grid gap-3 sm:hidden">
+                {mobileVisibleQuestionList.map(renderQuestionItem)}
               </div>
-              <div className="mt-4 flex h-10 w-10 shrink-0 items-center justify-center self-end rounded-2xl bg-slate-50 transition-colors group-hover:bg-primary/10 sm:mt-0 sm:self-auto">
-                <ChevronRight className="h-5 w-5 text-muted-foreground group-hover:text-primary transition-transform group-hover:translate-x-0.5" />
+              <div className="hidden gap-3 sm:grid">
+                {questionList.map(renderQuestionItem)}
               </div>
-            </Link>
-          ))}
-        </div>
-        {shouldCollapseOnMobile ? (
+            </>
+          ) : (
+            <div className="grid gap-3">
+              {questionList.map(renderQuestionItem)}
+            </div>
+          )}
+        {canCollapseOnMobile ? (
           <div className="rounded-[1.75rem] border border-slate-200 bg-slate-50/80 px-4 py-4 sm:hidden">
             <div className="flex flex-col gap-3">
               <div className="text-sm font-medium text-slate-500">
-                当前显示 <span className="font-bold text-slate-700">{visibleQuestionList.length}</span> /{" "}
+                当前显示 <span className="font-bold text-slate-700">{mobileVisibleQuestionList.length}</span> /{" "}
                 <span className="font-bold text-slate-700">{questionList.length}</span> 道题目
               </div>
               <button

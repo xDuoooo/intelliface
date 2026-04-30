@@ -66,7 +66,7 @@ export default function PublicLearningHeatmap({
   const totalCount = recordList.reduce((sum, item) => sum + toNumber(item.count), 0);
 
   return (
-    <div className="rounded-[1.75rem] border border-slate-100 bg-slate-50/70 p-5">
+    <div className="min-w-0 overflow-hidden rounded-[1.75rem] border border-slate-100 bg-slate-50/70 p-5">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <div className="text-xs font-black uppercase tracking-[0.18em] text-primary">
@@ -80,9 +80,9 @@ export default function PublicLearningHeatmap({
         </div>
       </div>
 
-      <div className="-mx-1 mt-5 overflow-x-auto px-1 pb-2 touch-pan-x">
+      <div className="mt-5 max-w-full overflow-x-auto pb-2 touch-pan-x">
         <div
-          className="grid min-w-max auto-cols-[14px] grid-flow-col gap-1 pr-1"
+          className="grid w-max min-w-max auto-cols-[14px] grid-flow-col gap-1 pr-1"
           style={{ gridTemplateRows: "repeat(7, 14px)" }}
         >
           {days.map((day, index) => {

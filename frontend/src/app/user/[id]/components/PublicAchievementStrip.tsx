@@ -34,14 +34,14 @@ export default function PublicAchievementStrip({
 }) {
   if (!achievementList.length) {
     return (
-      <div className="flex min-h-[280px] items-center justify-center rounded-[1.75rem] border border-dashed border-slate-200 bg-slate-50/70 px-6 py-10 text-center text-sm text-slate-400">
+      <div className="flex min-h-[280px] min-w-0 items-center justify-center rounded-[1.75rem] border border-dashed border-slate-200 bg-slate-50/70 px-6 py-10 text-center text-sm text-slate-400">
         暂无公开成就进度。
       </div>
     );
   }
 
   return (
-    <div className="max-h-[430px] min-w-0 overflow-y-auto pr-0 sm:pr-1">
+    <div className="max-h-[430px] min-w-0 overflow-hidden overflow-y-auto pr-0 sm:pr-1">
       <div className="space-y-3">
         {achievementList.map((item, index) => {
           const percent = Math.max(0, Math.min(100, toNumber(item.percent)));
@@ -51,7 +51,7 @@ export default function PublicAchievementStrip({
           return (
             <div
               key={itemKey}
-              className={`min-w-0 rounded-[1.5rem] border px-4 py-4 ${
+              className={`min-w-0 overflow-hidden rounded-[1.5rem] border px-4 py-4 ${
                 item.maxLevel
                   ? "border-emerald-200 bg-emerald-50/80"
                   : percent > 0
@@ -59,7 +59,7 @@ export default function PublicAchievementStrip({
                     : "border-slate-100 bg-slate-50/80"
               }`}
             >
-              <div className="flex items-start justify-between gap-3">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-white text-primary shadow-sm shadow-slate-200/70">
@@ -71,7 +71,7 @@ export default function PublicAchievementStrip({
                     {item.statusText || item.description}
                   </div>
                 </div>
-                <div className="shrink-0 rounded-full bg-white px-3 py-1 text-xs font-black text-slate-600 shadow-sm shadow-slate-200/70">
+                <div className="self-start rounded-full bg-white px-3 py-1 text-xs font-black text-slate-600 shadow-sm shadow-slate-200/70 sm:shrink-0">
                   {item.maxLevel ? "满级" : `Lv.${item.currentLevel || 0}/${item.totalLevels || 0}`}
                 </div>
               </div>
@@ -83,9 +83,9 @@ export default function PublicAchievementStrip({
                 />
               </div>
 
-              <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs font-bold text-slate-500">
-                <span>{item.currentStageTitle || "尚未解锁"}</span>
-                <span>
+              <div className="mt-3 flex flex-col items-start gap-1 text-xs font-bold text-slate-500 sm:flex-row sm:items-center sm:justify-between">
+                <span className="break-words">{item.currentStageTitle || "尚未解锁"}</span>
+                <span className="break-words">
                   {current}/{nextTarget}
                   {item.unit || ""}
                 </span>

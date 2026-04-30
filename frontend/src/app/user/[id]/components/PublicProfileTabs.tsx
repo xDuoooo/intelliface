@@ -144,9 +144,13 @@ export default function PublicProfileTabs({
               <PublicLearningInsights profile={profile} />
             </div>
 
-            <div className="mt-5 grid gap-5 xl:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]">
-              <PublicAchievementStrip achievementList={profile.achievementList} />
-              <PublicLearningHeatmap recordList={profile.questionHistoryRecordList} />
+            <div className="mt-5 grid min-w-0 gap-5 xl:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]">
+              <div className="min-w-0">
+                <PublicAchievementStrip achievementList={profile.achievementList} />
+              </div>
+              <div className="min-w-0">
+                <PublicLearningHeatmap recordList={profile.questionHistoryRecordList} />
+              </div>
             </div>
           </div>
         ) : null}

@@ -51,6 +51,7 @@ public class MockInterviewServiceImpl extends ServiceImpl<MockInterviewMapper, M
     private static final int MAX_PROMPT_TRANSCRIPT_MESSAGES = 14;
     private static final int MAX_PROMPT_TRANSCRIPT_CHARS = 3200;
     private static final int MAX_PROMPT_MESSAGE_CHARS = 280;
+    private static final int MAX_USER_MESSAGE_CHARS = 4000;
     private static final List<String> SUPPORTED_AUDIO_SUFFIX_LIST = List.of("webm", "wav", "mp3", "m4a", "mp4", "ogg", "oga");
 
     @Resource
@@ -59,6 +60,7 @@ public class MockInterviewServiceImpl extends ServiceImpl<MockInterviewMapper, M
     @Override
     public void validMockInterview(MockInterview mockInterview, boolean add) {
         ThrowUtils.throwIf(mockInterview == null, ErrorCode.PARAMS_ERROR);
+        normalizeInterviewFields(mockInterview);
         if (add) {
             ThrowUtils.throwIf(StringUtils.isBlank(mockInterview.getJobPosition()), ErrorCode.PARAMS_ERROR, "岗位不能为空");
         }
@@ -73,6 +75,15 @@ public class MockInterviewServiceImpl extends ServiceImpl<MockInterviewMapper, M
         }
         ThrowUtils.throwIf(mockInterview.getExpectedRounds() < MIN_ROUNDS || mockInterview.getExpectedRounds() > MAX_ROUNDS,
                 ErrorCode.PARAMS_ERROR, "面试轮次需在 3 到 8 轮之间");
+    }
+
+    private void normalizeInterviewFields(MockInterview mockInterview) {
+        mockInterview.setJobPosition(StringUtils.trimToNull(mockInterview.getJobPosition()));
+        mockInterview.setWorkExperience(StringUtils.trimToNull(mockInterview.getWorkExperience()));
+        mockInterview.setInterviewType(StringUtils.trimToNull(mockInterview.getInterviewType()));
+        mockInterview.setTechStack(StringUtils.trimToNull(mockInterview.getTechStack()));
+        mockInterview.setResumeText(StringUtils.trimToNull(mockInterview.getResumeText()));
+        mockInterview.setDifficulty(StringUtils.trimToNull(mockInterview.getDifficulty()));
     }
 
     @Override
@@ -100,7 +111,7 @@ public class MockInterviewServiceImpl extends ServiceImpl<MockInterviewMapper, M
     @Override
     public String handleInterviewEvent(MockInterview mockInterview, String event, String userMessage) {
         ThrowUtils.throwIf(mockInterview == null || mockInterview.getId() == null, ErrorCode.PARAMS_ERROR);
-        String eventType = StringUtils.defaultIfBlank(event, "chat");
+        String eventType = StringUtils.lowerCase(StringUtils.defaultIfBlank(event, "chat").trim());
         List<InterviewMessage> messageList = parseMessages(mockInterview.getMessages());
 
         switch (eventType) {
@@ -132,14 +143,18 @@ public class MockInterviewServiceImpl extends ServiceImpl<MockInterviewMapper, M
                         ErrorCode.OPERATION_ERROR, "请先开始面试");
                 ThrowUtils.throwIf(mockInterview.getStatus() == 3, ErrorCode.OPERATION_ERROR, "当前面试已暂停，请先继续面试");
                 ThrowUtils.throwIf(mockInterview.getStatus() == 2, ErrorCode.OPERATION_ERROR, "当前面试已结束");
-                ThrowUtils.throwIf(StringUtils.isBlank(userMessage), ErrorCode.PARAMS_ERROR, "回答不能为空");
+                String trimmedAnswer = StringUtils.trimToEmpty(userMessage);
+                ThrowUtils.throwIf(StringUtils.isBlank(trimmedAnswer), ErrorCode.PARAMS_ERROR, "回答不能为空");
+                ThrowUtils.throwIf(StringUtils.length(trimmedAnswer) > MAX_USER_MESSAGE_CHARS,
+                        ErrorCode.PARAMS_ERROR, "回答内容过长，请控制在 4000 字以内");
 
                 int answerRound = getNextRoundNumber(messageList);
-                String latestQuestion = getLatestQuestion(messageList);
+                InterviewMessage latestQuestionMessage = getLatestQuestionMessage(messageList);
+                String latestQuestion = latestQuestionMessage == null ? "" : latestQuestionMessage.content;
+                boolean probeAnswer = latestQuestionMessage != null && "probe".equals(latestQuestionMessage.stage);
                 Integer responseSeconds = calculateResponseSeconds(messageList);
                 InterviewReport interviewReport = parseReport(mockInterview.getReport(), mockInterview);
                 InterviewPlanItem currentPlan = getPlanItem(interviewReport, answerRound);
-                String trimmedAnswer = userMessage.trim();
                 messageList.add(new InterviewMessage(trimmedAnswer, false, System.currentTimeMillis(), answerRound, "answer"));
 
                 RoundAnalysis roundAnalysis = buildRoundAnalysis(mockInterview, messageList, answerRound, currentPlan);
@@ -150,7 +165,7 @@ public class MockInterviewServiceImpl extends ServiceImpl<MockInterviewMapper, M
                     roundAnalysis.setProbe(false);
                 }
 
-                interviewReport.getRoundRecords().add(new RoundRecord(
+                upsertRoundRecord(interviewReport, new RoundRecord(
                         answerRound,
                         latestQuestion,
                         trimmedAnswer,
@@ -165,7 +180,7 @@ public class MockInterviewServiceImpl extends ServiceImpl<MockInterviewMapper, M
                         responseSeconds,
                         roundAnalysis.getVerdict(),
                         roundAnalysis.getImprovementTags()
-                ));
+                ), probeAnswer);
                 interviewReport.setCompletedRounds(answerRound);
                 mockInterview.setCurrentRound(answerRound);
 
@@ -390,7 +405,8 @@ public class MockInterviewServiceImpl extends ServiceImpl<MockInterviewMapper, M
                     audioFile.getBytes(),
                     audioFile.getContentType(),
                     "zh",
-                    buildTranscriptionPrompt(mockInterview)
+                    buildTranscriptionPrompt(mockInterview),
+                    mockInterview.getUserId()
             );
             String cleanedTranscript = sanitizeTranscript(transcript);
             ThrowUtils.throwIf(StringUtils.isBlank(cleanedTranscript), ErrorCode.SYSTEM_ERROR, "转写结果为空，请重试");
@@ -491,6 +507,71 @@ public class MockInterviewServiceImpl extends ServiceImpl<MockInterviewMapper, M
         return answeredRoundSet.size() + answerCountWithoutRound;
     }
 
+    private void upsertRoundRecord(InterviewReport interviewReport, RoundRecord nextRecord, boolean mergeWithExistingRound) {
+        if (interviewReport.getRoundRecords() == null) {
+            interviewReport.setRoundRecords(new ArrayList<>());
+        }
+        if (!mergeWithExistingRound || nextRecord == null || nextRecord.getRound() == null) {
+            interviewReport.getRoundRecords().add(nextRecord);
+            return;
+        }
+        for (int i = interviewReport.getRoundRecords().size() - 1; i >= 0; i--) {
+            RoundRecord existingRecord = interviewReport.getRoundRecords().get(i);
+            if (existingRecord == null || !nextRecord.getRound().equals(existingRecord.getRound())) {
+                continue;
+            }
+            existingRecord.setQuestion(mergeLabeledText(existingRecord.getQuestion(), "追问", nextRecord.getQuestion()));
+            existingRecord.setAnswer(mergeLabeledText(existingRecord.getAnswer(), "补充回答", nextRecord.getAnswer()));
+            existingRecord.setShortComment(mergeLabeledText(existingRecord.getShortComment(), "追问评语", nextRecord.getShortComment()));
+            existingRecord.setFocus(nextRecord.getFocus());
+            existingRecord.setScore(nextRecord.getScore());
+            existingRecord.setCommunicationScore(nextRecord.getCommunicationScore());
+            existingRecord.setTechnicalScore(nextRecord.getTechnicalScore());
+            existingRecord.setProblemSolvingScore(nextRecord.getProblemSolvingScore());
+            existingRecord.setQuestionStyle(nextRecord.getQuestionStyle());
+            existingRecord.setRecommendedAnswerSeconds(nextRecord.getRecommendedAnswerSeconds());
+            existingRecord.setResponseSeconds(nextRecord.getResponseSeconds());
+            existingRecord.setVerdict(nextRecord.getVerdict());
+            existingRecord.setImprovementTags(mergeStringList(existingRecord.getImprovementTags(), nextRecord.getImprovementTags()));
+            return;
+        }
+        interviewReport.getRoundRecords().add(nextRecord);
+    }
+
+    private String mergeLabeledText(String existingText, String label, String nextText) {
+        String safeNextText = StringUtils.trimToEmpty(nextText);
+        if (StringUtils.isBlank(safeNextText)) {
+            return existingText;
+        }
+        String safeExistingText = StringUtils.trimToEmpty(existingText);
+        if (StringUtils.isBlank(safeExistingText)) {
+            return safeNextText;
+        }
+        if (safeExistingText.contains(safeNextText)) {
+            return safeExistingText;
+        }
+        return safeExistingText + "\n\n" + label + "：" + safeNextText;
+    }
+
+    private List<String> mergeStringList(List<String> firstList, List<String> secondList) {
+        List<String> result = new ArrayList<>();
+        appendDistinctStrings(result, firstList);
+        appendDistinctStrings(result, secondList);
+        return result;
+    }
+
+    private void appendDistinctStrings(List<String> target, List<String> source) {
+        if (source == null || source.isEmpty()) {
+            return;
+        }
+        for (String item : source) {
+            String normalizedItem = StringUtils.trimToEmpty(item);
+            if (StringUtils.isNotBlank(normalizedItem) && !target.contains(normalizedItem)) {
+                target.add(normalizedItem);
+            }
+        }
+    }
+
     private String buildInterviewerPersona(MockInterview mockInterview) {
         String interviewType = StringUtils.defaultIfBlank(mockInterview == null ? null : mockInterview.getInterviewType(), "技术深挖");
         String difficulty = StringUtils.defaultIfBlank(mockInterview == null ? null : mockInterview.getDifficulty(), "中等");
@@ -576,7 +657,7 @@ public class MockInterviewServiceImpl extends ServiceImpl<MockInterviewMapper, M
                 buildCandidateBackgroundContext(mockInterview),
                 planItem == null ? "项目背景与自我介绍" : planItem.getFocusTopic(),
                 planItem == null ? "开场问题" : planItem.getQuestionStyle());
-        return chatWithFallback(systemPrompt, userPrompt, buildOpeningFallback(mockInterview, planItem));
+        return chatWithFallback(mockInterview, systemPrompt, userPrompt, buildOpeningFallback(mockInterview, planItem));
     }
 
     private RoundAnalysis buildRoundAnalysis(MockInterview mockInterview,
@@ -618,7 +699,7 @@ public class MockInterviewServiceImpl extends ServiceImpl<MockInterviewMapper, M
                 StringUtils.defaultIfBlank(latestAnswer, "暂无"),
                 buildPromptTranscript(messageList, MAX_PROMPT_TRANSCRIPT_MESSAGES, MAX_PROMPT_TRANSCRIPT_CHARS));
         String fallbackJson = JSONUtil.toJsonStr(buildRoundFallback(mockInterview, completedRounds, currentPlan, nextPlan));
-        return parseRoundAnalysis(chatWithFallback(systemPrompt, userPrompt, fallbackJson), mockInterview, completedRounds, currentPlan, nextPlan, canProbe);
+        return parseRoundAnalysis(chatWithFallback(mockInterview, systemPrompt, userPrompt, fallbackJson), mockInterview, completedRounds, currentPlan, nextPlan, canProbe);
     }
 
     private SummaryResult buildSummary(MockInterview mockInterview, List<InterviewMessage> messageList, InterviewReport interviewReport) {
@@ -641,7 +722,7 @@ public class MockInterviewServiceImpl extends ServiceImpl<MockInterviewMapper, M
                 JSONUtil.toJsonStr(interviewReport.getRoundRecords()),
                 buildPromptTranscript(messageList, MAX_PROMPT_TRANSCRIPT_MESSAGES + 4, MAX_PROMPT_TRANSCRIPT_CHARS + 800));
         String fallback = JSONUtil.toJsonStr(buildSummaryFallback(interviewReport));
-        return parseSummaryResult(chatWithFallback(systemPrompt, userPrompt, fallback), interviewReport);
+        return parseSummaryResult(chatWithFallback(mockInterview, systemPrompt, userPrompt, fallback), interviewReport);
     }
 
     private String buildTranscript(List<InterviewMessage> messageList) {
@@ -752,13 +833,18 @@ public class MockInterviewServiceImpl extends ServiceImpl<MockInterviewMapper, M
     }
 
     private String getLatestQuestion(List<InterviewMessage> messageList) {
+        InterviewMessage latestQuestionMessage = getLatestQuestionMessage(messageList);
+        return latestQuestionMessage == null ? "" : latestQuestionMessage.content;
+    }
+
+    private InterviewMessage getLatestQuestionMessage(List<InterviewMessage> messageList) {
         for (int i = messageList.size() - 1; i >= 0; i--) {
             InterviewMessage interviewMessage = messageList.get(i);
             if (interviewMessage.isAI && ("question".equals(interviewMessage.stage) || "probe".equals(interviewMessage.stage))) {
-                return interviewMessage.content;
+                return interviewMessage;
             }
         }
-        return "";
+        return null;
     }
 
     private String getLatestCandidateAnswer(List<InterviewMessage> messageList) {
@@ -940,7 +1026,7 @@ public class MockInterviewServiceImpl extends ServiceImpl<MockInterviewMapper, M
                 currentPlan == null ? "项目细节" : currentPlan.getFocusTopic(),
                 userAnswer);
         String fallback = "这部分我想继续深挖一下。请你补充讲清楚：当时的业务背景是什么、你负责了哪一块、核心技术方案怎么定的、最后拿到了什么量化结果？";
-        return chatWithFallback(systemPrompt, userPrompt, fallback);
+        return chatWithFallback(mockInterview, systemPrompt, userPrompt, fallback);
     }
 
     private boolean shouldForceElaboration(MockInterview mockInterview, String userAnswer, Integer score) {
@@ -1024,9 +1110,9 @@ public class MockInterviewServiceImpl extends ServiceImpl<MockInterviewMapper, M
         return count == 0 ? defaultValue : Math.max(0, Math.min(100, sum / count));
     }
 
-    private String chatWithFallback(String systemPrompt, String userPrompt, String fallback) {
+    private String chatWithFallback(MockInterview mockInterview, String systemPrompt, String userPrompt, String fallback) {
         try {
-            String content = aiManager.doChat(systemPrompt, userPrompt);
+            String content = aiManager.doChat(systemPrompt, userPrompt, mockInterview == null ? null : mockInterview.getUserId());
             return StringUtils.isBlank(content) ? fallback : content.trim();
         } catch (Exception e) {
             log.warn("模拟面试 AI 调用失败，使用兜底回复: " + e.getMessage());

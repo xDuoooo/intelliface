@@ -141,6 +141,7 @@ const statusMap: Record<number, { text: string; color: string }> = {
 };
 
 const AUTO_SPEAK_STORAGE_KEY = "mockInterview:autoSpeakEnabled";
+const MAX_ANSWER_LENGTH = 4000;
 
 function buildAnswerCoachHints(answer: string) {
   const normalized = answer.trim();
@@ -378,18 +379,6 @@ export default function InterviewRoomPage({ params }: { params: { mockInterviewI
   const currentRound = interview?.currentRound || report?.completedRounds || 0;
   const progressPercent = Math.min(100, Math.round((currentRound / Math.max(1, expectedRounds)) * 100));
 
-  const latestRoundRecord = useMemo(() => {
-    const roundRecords = report?.roundRecords || [];
-    return roundRecords.length ? roundRecords[roundRecords.length - 1] : null;
-  }, [report?.roundRecords]);
-
-  const activeAgendaRound = useMemo(() => {
-    if (isEnded) {
-      return 0;
-    }
-    return Math.min(expectedRounds, Math.max(1, currentRound + 1));
-  }, [currentRound, expectedRounds, isEnded]);
-
   const latestQuestionMessage = useMemo(() => {
     for (let i = messages.length - 1; i >= 0; i -= 1) {
       const item = messages[i];
@@ -399,6 +388,21 @@ export default function InterviewRoomPage({ params }: { params: { mockInterviewI
     }
     return null;
   }, [messages]);
+
+  const latestRoundRecord = useMemo(() => {
+    const roundRecords = report?.roundRecords || [];
+    return roundRecords.length ? roundRecords[roundRecords.length - 1] : null;
+  }, [report?.roundRecords]);
+
+  const activeAgendaRound = useMemo(() => {
+    if (isEnded) {
+      return 0;
+    }
+    if (latestQuestionMessage?.round && latestQuestionMessage.round > 0) {
+      return Math.min(expectedRounds, latestQuestionMessage.round);
+    }
+    return Math.min(expectedRounds, Math.max(1, currentRound + 1));
+  }, [currentRound, expectedRounds, isEnded, latestQuestionMessage?.round]);
 
   const latestSpeakableMessage = useMemo(() => {
     for (let i = messages.length - 1; i >= 0; i -= 1) {
@@ -806,6 +810,11 @@ export default function InterviewRoomPage({ params }: { params: { mockInterviewI
     if (!inputMessage.trim() || submitting || isTranscribing) {
       return;
     }
+    const nextAnswer = inputMessage.trim();
+    if (nextAnswer.length > MAX_ANSWER_LENGTH) {
+      message.error(`回答内容过长，请控制在 ${MAX_ANSWER_LENGTH} 字以内`);
+      return;
+    }
     if (isListening) {
       stopVoiceInput();
     }
@@ -813,7 +822,7 @@ export default function InterviewRoomPage({ params }: { params: { mockInterviewI
       stopAudioRecording();
       return;
     }
-    const success = await handleEvent("chat", inputMessage.trim());
+    const success = await handleEvent("chat", nextAnswer);
     if (success) {
       setInputMessage("");
       setVoiceStatus("");
@@ -1056,6 +1065,8 @@ export default function InterviewRoomPage({ params }: { params: { mockInterviewI
                 placeholder="输入你的回答。建议尽量具体，给出业务背景、技术方案、结果指标和复盘。"
                 disabled={!canAnswer}
                 rows={4}
+                maxLength={MAX_ANSWER_LENGTH}
+                showCount
                 onFocus={() => {
                   stopSpeaking();
                 }}
@@ -1409,8 +1420,8 @@ export default function InterviewRoomPage({ params }: { params: { mockInterviewI
                 <div className="review-round-section">
                   <div className="block-title review-round-title">逐轮记录</div>
                   <div className="review-round-grid">
-                    {(report?.roundRecords || []).map((item) => (
-                      <div className="review-round-card" key={item.round}>
+                    {(report?.roundRecords || []).map((item, index) => (
+                      <div className="review-round-card" key={`${item.round || "round"}-${index}`}>
                         <div className="record-head">
                           <strong>第 {item.round} 轮</strong>
                           <span>{item.score || 0} 分</span>

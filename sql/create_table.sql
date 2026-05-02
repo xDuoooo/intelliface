@@ -344,7 +344,7 @@ create table if not exists mock_interview
     currentRound   int      default 0                 not null comment '当前已完成轮次',
     messages       longtext                           null comment '消息记录（json 数组）',
     report         longtext                           null comment '结构化面试报告（json）',
-    status         int      default 0                 not null comment '状态：0-待开始, 1-进行中, 2-已结束',
+    status         int      default 0                 not null comment '状态：0-待开始, 1-进行中, 2-已结束, 3-已暂停',
     userId         bigint                             not null comment '创建用户 id',
     createTime     datetime default CURRENT_TIMESTAMP not null comment '创建时间',
     updateTime     datetime default CURRENT_TIMESTAMP not null on update CURRENT_TIMESTAMP comment '更新时间',

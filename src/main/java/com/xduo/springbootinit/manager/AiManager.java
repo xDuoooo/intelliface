@@ -127,11 +127,22 @@ public class AiManager {
      * @return AI 回复
      */
     public String doChat(String systemPrompt, String userPrompt) {
+        return doChat(systemPrompt, userPrompt, (String) null);
+    }
+
+    /**
+     * 发送 AI 请求，并按指定用户维度限流。
+     */
+    public String doChat(String systemPrompt, String userPrompt, Long userId) {
+        return doChat(systemPrompt, userPrompt, buildUserRateLimitActor(userId));
+    }
+
+    private String doChat(String systemPrompt, String userPrompt, String rateLimitActor) {
         String resolvedChatApiKey = resolveChatApiKey();
         if (!hasConfiguredApiKey(resolvedChatApiKey)) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR, "请先配置 AI API Key");
         }
-        checkAiRateLimit("chat", chatMaxPerMinute, 60, chatMaxPerDay, secondsUntilTomorrow());
+        checkAiRateLimit("chat", chatMaxPerMinute, 60, chatMaxPerDay, secondsUntilTomorrow(), rateLimitActor);
 
         // 构造请求参数
         Map<String, Object> requestMap = new HashMap<>();
@@ -175,10 +186,19 @@ public class AiManager {
      * @return 转写文本
      */
     public String transcribeAudio(String fileName, byte[] fileBytes, String contentType, String language, String prompt) {
+        return transcribeAudio(fileName, fileBytes, contentType, language, prompt, null);
+    }
+
+    /**
+     * 调用音频转写接口，并按指定用户维度限流。
+     */
+    public String transcribeAudio(String fileName, byte[] fileBytes, String contentType,
+                                  String language, String prompt, Long userId) {
         if (fileBytes == null || fileBytes.length == 0) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR, "音频内容不能为空");
         }
-        checkAiRateLimit("audio", audioMaxPerMinute, 60, audioMaxPerDay, secondsUntilTomorrow());
+        checkAiRateLimit("audio", audioMaxPerMinute, 60, audioMaxPerDay, secondsUntilTomorrow(),
+                buildUserRateLimitActor(userId));
         String provider = StringUtils.defaultIfBlank(speechProvider, "openai").trim().toLowerCase();
         return switch (provider) {
             case "volcengine", "volc", "doubao" ->
@@ -338,10 +358,15 @@ public class AiManager {
 
     private void checkAiRateLimit(String operation, int maxPerMinute, long minuteWindowSeconds,
                                   int maxPerDay, long dayWindowSeconds) {
+        checkAiRateLimit(operation, maxPerMinute, minuteWindowSeconds, maxPerDay, dayWindowSeconds, null);
+    }
+
+    private void checkAiRateLimit(String operation, int maxPerMinute, long minuteWindowSeconds,
+                                  int maxPerDay, long dayWindowSeconds, String rateLimitActor) {
         if (!rateLimitEnabled) {
             return;
         }
-        String actor = resolveRateLimitActor();
+        String actor = StringUtils.defaultIfBlank(rateLimitActor, resolveRateLimitActor());
         String today = LocalDate.now(RATE_LIMIT_ZONE_ID).format(DAY_FORMATTER);
         long minuteCount = incrementAndExpire(
                 "ai_rate_limit:" + operation + ":minute:" + actor,
@@ -368,6 +393,13 @@ public class AiManager {
                 String.valueOf(Math.max(1, expireSeconds))
         );
         return currentCount == null ? 0 : currentCount;
+    }
+
+    private String buildUserRateLimitActor(Long userId) {
+        if (userId == null || userId <= 0) {
+            return null;
+        }
+        return "user:" + userId;
     }
 
     private String resolveRateLimitActor() {

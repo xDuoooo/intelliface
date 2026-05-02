@@ -1,16 +1,74 @@
 "use client";
-import { Button, Form, Input, InputNumber, Select, message } from "antd";
+import { Button, Form, Input, InputNumber, Progress, Select, Tag, message } from "antd";
 import React, { useEffect, useMemo, useState } from "react";
 import {
   addMockInterviewUsingPost,
   getMockInterviewByIdUsingGet,
 } from "@/api/mockInterviewController";
 import { useRouter, useSearchParams } from "next/navigation";
+import { ClipboardCheck, Sparkles } from "lucide-react";
 import "./index.css";
 
 interface Props {}
 
 const CREATE_DRAFT_STORAGE_KEY = "mockInterview:createDraft:v1";
+
+function buildBackgroundTemplate(values?: Partial<API.MockInterviewAddRequest>) {
+  const position = values?.jobPosition || "目标岗位";
+  const techStack = values?.techStack || "核心技术栈";
+  return `项目背景：我在一个面向 ${position} 的项目中，主要解决了什么业务问题。\n我的职责：我具体负责的模块、接口、数据流或协作范围。\n技术方案：使用 ${techStack} 做了哪些关键设计，为什么这样选。\n难点取舍：遇到的性能、稳定性、成本、复杂度或协作问题，以及我的处理方式。\n量化结果：上线后 QPS、耗时、错误率、成本、转化率或人效有什么变化。\n复盘改进：如果重新做一次，我会优先优化什么。`;
+}
+
+function buildQualityItems(values?: Partial<API.MockInterviewAddRequest>) {
+  const resumeText = values?.resumeText?.trim() || "";
+  return [
+    {
+      label: "岗位清晰",
+      matched: Boolean(values?.jobPosition?.trim()),
+      hint: "补目标岗位后，开场问题会更贴近真实招聘场景。",
+    },
+    {
+      label: "技术方向",
+      matched: Boolean(values?.techStack?.trim()),
+      hint: "补技术栈后，AI 才能围绕具体技术点追问。",
+    },
+    {
+      label: "项目背景",
+      matched: resumeText.length >= 80,
+      hint: "建议至少写清一个项目的背景、目标和业务场景。",
+    },
+    {
+      label: "个人职责",
+      matched: /(我|本人|负责|主导|参与|推进|落地)/.test(resumeText),
+      hint: "说明你具体负责哪一块，避免面试官只能问团队层面的泛题。",
+    },
+    {
+      label: "难点取舍",
+      matched: /(难点|瓶颈|故障|性能|稳定性|取舍|权衡|风险|异常|优化)/.test(resumeText),
+      hint: "补充难点和取舍后，项目深挖会更像真实面试。",
+    },
+    {
+      label: "量化结果",
+      matched: /(\d|%|\b(qps|rt|ms|sla|p95|p99)\b|秒|分钟|提升|降低|减少|增长|成本|耗时)/i.test(resumeText),
+      hint: "补一个指标，最终反馈和追问都会更具体。",
+    },
+  ];
+}
+
+function buildInterviewPreview(values?: Partial<API.MockInterviewAddRequest>) {
+  const interviewType = values?.interviewType || "技术深挖";
+  const techStack = values?.techStack || values?.jobPosition || "你的核心项目";
+  if (interviewType === "项目拷打") {
+    return ["项目背景与职责边界", `${techStack} 的方案拆解和技术取舍`, "难点、量化结果和复盘改进"];
+  }
+  if (interviewType === "系统设计") {
+    return ["需求澄清与容量估算", `${techStack} 场景下的架构拆分`, "高可用、扩展性、成本和降级方案"];
+  }
+  if (interviewType === "HR") {
+    return ["自我介绍与求职动机", "具体事件里的协作、冲突和压力处理", "职业规划、稳定性和岗位匹配度"];
+  }
+  return ["自我介绍与代表性项目", `${techStack} 的原理和场景落地`, "性能、稳定性、边界条件和综合追问"];
+}
 
 /**
  * 创建 AI 模拟面试页面
@@ -25,6 +83,10 @@ const CreateMockInterviewPage: React.FC<Props> = (props) => {
   const router = useRouter();
   const searchParams = useSearchParams();
   const fromInterviewId = useMemo(() => searchParams?.get("from") || "", [searchParams]);
+  const qualityItems = useMemo(() => buildQualityItems(formValues), [formValues]);
+  const qualityScore = Math.round((qualityItems.filter((item) => item.matched).length / qualityItems.length) * 100);
+  const interviewPreview = useMemo(() => buildInterviewPreview(formValues), [formValues]);
+  const missingQualityItems = qualityItems.filter((item) => !item.matched).slice(0, 3);
 
   const interviewTypeOptions = [
     { label: "技术深挖", value: "技术深挖" },
@@ -157,17 +219,18 @@ const CreateMockInterviewPage: React.FC<Props> = (props) => {
           ) : null}
         </div>
 
-        <Form
-          form={form}
-          layout="vertical"
-          style={{ marginTop: 24 }}
-          onFinish={doSubmit}
-          initialValues={{
-            difficulty: "中等",
-            interviewType: "技术深挖",
-            expectedRounds: 5,
-          }}
-        >
+        <div className="create-content-grid">
+          <div className="create-form-column">
+            <Form
+              form={form}
+              layout="vertical"
+              onFinish={doSubmit}
+              initialValues={{
+                difficulty: "中等",
+                interviewType: "技术深挖",
+                expectedRounds: 5,
+              }}
+            >
         {/* 工作岗位 */}
         <Form.Item
           label="目标岗位"
@@ -252,9 +315,69 @@ const CreateMockInterviewPage: React.FC<Props> = (props) => {
             >
               清空草稿
             </Button>
+            <Button
+              disabled={prefillLoading}
+              onClick={() => {
+                form.setFieldsValue({ resumeText: buildBackgroundTemplate(form.getFieldsValue()) });
+                message.success("已插入项目背景模板");
+              }}
+            >
+              <ClipboardCheck size={16} />
+              插入背景模板
+            </Button>
           </div>
         </Form.Item>
-        </Form>
+            </Form>
+          </div>
+
+          <aside className="create-preview-panel">
+            <div className="preview-card quality-card">
+              <div className="preview-card-head">
+                <div>
+                  <span>Config Check</span>
+                  <strong>配置质量</strong>
+                </div>
+                <Tag color={qualityScore >= 80 ? "green" : qualityScore >= 50 ? "blue" : "orange"}>
+                  {qualityScore}%
+                </Tag>
+              </div>
+              <Progress percent={qualityScore} showInfo={false} strokeColor={qualityScore >= 80 ? "#10b981" : "#1677ff"} />
+              <div className="quality-list">
+                {qualityItems.map((item) => (
+                  <div className={`quality-item ${item.matched ? "done" : ""}`} key={item.label}>
+                    <span>{item.label}</span>
+                    <strong>{item.matched ? "已具备" : "待补充"}</strong>
+                  </div>
+                ))}
+              </div>
+              {missingQualityItems.length ? (
+                <div className="quality-tip">
+                  {missingQualityItems[0].hint}
+                </div>
+              ) : (
+                <div className="quality-tip strong">当前配置已经足够支撑一场比较具体的模拟面试。</div>
+              )}
+            </div>
+
+            <div className="preview-card">
+              <div className="preview-card-head">
+                <div>
+                  <span>Interview Preview</span>
+                  <strong>可能追问路径</strong>
+                </div>
+                <Sparkles size={18} />
+              </div>
+              <div className="preview-step-list">
+                {interviewPreview.map((item, index) => (
+                  <div className="preview-step" key={item}>
+                    <span>{index + 1}</span>
+                    <div>{item}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </aside>
+        </div>
       </div>
     </div>
   );

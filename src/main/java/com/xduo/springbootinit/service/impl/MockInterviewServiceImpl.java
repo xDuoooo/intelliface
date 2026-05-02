@@ -52,6 +52,15 @@ public class MockInterviewServiceImpl extends ServiceImpl<MockInterviewMapper, M
     private static final int MAX_PROMPT_TRANSCRIPT_CHARS = 3200;
     private static final int MAX_PROMPT_MESSAGE_CHARS = 280;
     private static final int MAX_USER_MESSAGE_CHARS = 4000;
+    private static final int MAX_NEXT_QUESTION_CHARS = 160;
+    private static final int MAX_FEEDBACK_TEXT_CHARS = 220;
+    private static final int MAX_SUMMARY_TEXT_CHARS = 520;
+    private static final int MAX_DISPLAY_TEXT_CHARS = 900;
+    private static final int MAX_LIST_ITEMS = 4;
+    private static final int MAX_LIST_ITEM_CHARS = 90;
+    private static final int MAX_PRACTICE_PLAN_ITEMS = 3;
+    private static final int MAX_PRACTICE_PLAN_ITEM_CHARS = 140;
+    private static final int MIN_ROUNDS_BEFORE_AI_FINISH = 3;
     private static final List<String> SUPPORTED_AUDIO_SUFFIX_LIST = List.of("webm", "wav", "mp3", "m4a", "mp4", "ogg", "oga");
 
     @Resource
@@ -179,12 +188,16 @@ public class MockInterviewServiceImpl extends ServiceImpl<MockInterviewMapper, M
                         roundAnalysis.getRecommendedAnswerSeconds(),
                         responseSeconds,
                         roundAnalysis.getVerdict(),
-                        roundAnalysis.getImprovementTags()
+                        roundAnalysis.getImprovementTags(),
+                        roundAnalysis.getMissingPoints(),
+                        roundAnalysis.getAnswerRewriteSuggestion(),
+                        roundAnalysis.getFollowUpReason()
                 ), probeAnswer);
                 interviewReport.setCompletedRounds(answerRound);
                 mockInterview.setCurrentRound(answerRound);
 
-                boolean shouldFinish = answerRound >= getExpectedRounds(mockInterview) || roundAnalysis.isShouldFinish();
+                boolean shouldFinish = answerRound >= getExpectedRounds(mockInterview)
+                        || (roundAnalysis.isShouldFinish() && canAiFinishInterview(mockInterview, answerRound));
                 if (shouldFinish) {
                     SummaryResult summaryResult = buildSummary(mockInterview, messageList, interviewReport);
                     fillInterviewReportFromSummary(interviewReport, summaryResult);
@@ -341,6 +354,7 @@ public class MockInterviewServiceImpl extends ServiceImpl<MockInterviewMapper, M
         appendMarkdownStringList(markdownBuilder, "亮点总结", interviewReport.getStrengths());
         appendMarkdownStringList(markdownBuilder, "改进建议", interviewReport.getImprovements());
         appendMarkdownStringList(markdownBuilder, "建议继续准备", interviewReport.getSuggestedTopics());
+        appendMarkdownStringList(markdownBuilder, "下一步训练计划", interviewReport.getPracticePlan());
 
         markdownBuilder.append("\n## 逐题复盘\n");
         if (interviewReport.getRoundRecords() == null || interviewReport.getRoundRecords().isEmpty()) {
@@ -362,12 +376,22 @@ public class MockInterviewServiceImpl extends ServiceImpl<MockInterviewMapper, M
                 if (roundRecord.getImprovementTags() != null && !roundRecord.getImprovementTags().isEmpty()) {
                     appendMarkdownBullet(markdownBuilder, "重点提醒", String.join("、", roundRecord.getImprovementTags()));
                 }
+                if (roundRecord.getMissingPoints() != null && !roundRecord.getMissingPoints().isEmpty()) {
+                    appendMarkdownBullet(markdownBuilder, "本轮缺口", String.join("、", roundRecord.getMissingPoints()));
+                }
+                if (StringUtils.isNotBlank(roundRecord.getFollowUpReason())) {
+                    appendMarkdownBullet(markdownBuilder, "追问理由", roundRecord.getFollowUpReason());
+                }
                 markdownBuilder.append('\n').append("#### 面试问题\n\n");
                 appendMarkdownQuote(markdownBuilder, StringUtils.defaultIfBlank(roundRecord.getQuestion(), "暂无问题记录"));
                 markdownBuilder.append("\n#### 候选人回答\n\n");
                 appendMarkdownQuote(markdownBuilder, StringUtils.defaultIfBlank(roundRecord.getAnswer(), "暂无回答记录"));
                 markdownBuilder.append("\n#### 面试官评语\n\n");
                 appendMarkdownQuote(markdownBuilder, StringUtils.defaultIfBlank(roundRecord.getShortComment(), "暂无评语"));
+                if (StringUtils.isNotBlank(roundRecord.getAnswerRewriteSuggestion())) {
+                    markdownBuilder.append("\n#### 改进版回答骨架\n\n");
+                    appendMarkdownQuote(markdownBuilder, roundRecord.getAnswerRewriteSuggestion());
+                }
             }
         }
 
@@ -429,6 +453,7 @@ public class MockInterviewServiceImpl extends ServiceImpl<MockInterviewMapper, M
         interviewReport.setProblemSolvingScore(summaryResult.getProblemSolvingScore());
         interviewReport.setReadinessLevel(summaryResult.getReadinessLevel());
         interviewReport.setRecommendedNextAction(summaryResult.getRecommendedNextAction());
+        interviewReport.setPracticePlan(summaryResult.getPracticePlan());
     }
 
     private void applyCurrentPlan(InterviewReport interviewReport, InterviewPlanItem planItem, String nextActionHint) {
@@ -436,6 +461,7 @@ public class MockInterviewServiceImpl extends ServiceImpl<MockInterviewMapper, M
         interviewReport.setCurrentQuestionStyle(planItem == null ? null : planItem.getQuestionStyle());
         interviewReport.setRecommendedAnswerSeconds(planItem == null ? null : planItem.getRecommendedAnswerSeconds());
         interviewReport.setNextActionHint(nextActionHint);
+        interviewReport.setAnswerChecklist(buildAnswerChecklist(planItem));
     }
 
     private void clearCurrentPlan(InterviewReport interviewReport) {
@@ -443,6 +469,7 @@ public class MockInterviewServiceImpl extends ServiceImpl<MockInterviewMapper, M
         interviewReport.setCurrentQuestionStyle(null);
         interviewReport.setRecommendedAnswerSeconds(null);
         interviewReport.setNextActionHint(null);
+        interviewReport.setAnswerChecklist(new ArrayList<>());
     }
 
     private List<InterviewMessage> parseMessages(String messages) {
@@ -474,6 +501,9 @@ public class MockInterviewServiceImpl extends ServiceImpl<MockInterviewMapper, M
             if (interviewReport.getSuggestedTopics() == null) {
                 interviewReport.setSuggestedTopics(new ArrayList<>());
             }
+            if (interviewReport.getPracticePlan() == null) {
+                interviewReport.setPracticePlan(new ArrayList<>());
+            }
             if (StringUtils.isBlank(interviewReport.getReadinessLevel())) {
                 interviewReport.setReadinessLevel("继续训练中");
             }
@@ -484,6 +514,11 @@ public class MockInterviewServiceImpl extends ServiceImpl<MockInterviewMapper, M
             interviewReport.setAgenda(agenda);
             if (interviewReport.getExpectedRounds() == null || interviewReport.getExpectedRounds() <= 0) {
                 interviewReport.setExpectedRounds(normalizeExpectedRounds(mockInterview.getExpectedRounds()));
+            }
+            if (interviewReport.getAnswerChecklist() == null) {
+                InterviewPlanItem currentPlan = getPlanItem(interviewReport,
+                        Math.max(1, interviewReport.getCompletedRounds() == null ? 1 : interviewReport.getCompletedRounds() + 1));
+                interviewReport.setAnswerChecklist(buildAnswerChecklist(currentPlan));
             }
             return interviewReport;
         } catch (Exception e) {
@@ -532,7 +567,17 @@ public class MockInterviewServiceImpl extends ServiceImpl<MockInterviewMapper, M
             existingRecord.setRecommendedAnswerSeconds(nextRecord.getRecommendedAnswerSeconds());
             existingRecord.setResponseSeconds(nextRecord.getResponseSeconds());
             existingRecord.setVerdict(nextRecord.getVerdict());
-            existingRecord.setImprovementTags(mergeStringList(existingRecord.getImprovementTags(), nextRecord.getImprovementTags()));
+            existingRecord.setImprovementTags(limitStringList(
+                    mergeStringList(existingRecord.getImprovementTags(), nextRecord.getImprovementTags()),
+                    MAX_LIST_ITEMS,
+                    32));
+            existingRecord.setMissingPoints(limitStringList(
+                    mergeStringList(existingRecord.getMissingPoints(), nextRecord.getMissingPoints()),
+                    MAX_LIST_ITEMS,
+                    MAX_LIST_ITEM_CHARS));
+            existingRecord.setAnswerRewriteSuggestion(mergeLabeledText(existingRecord.getAnswerRewriteSuggestion(),
+                    "补充改法", nextRecord.getAnswerRewriteSuggestion()));
+            existingRecord.setFollowUpReason(nextRecord.getFollowUpReason());
             return;
         }
         interviewReport.getRoundRecords().add(nextRecord);
@@ -570,6 +615,34 @@ public class MockInterviewServiceImpl extends ServiceImpl<MockInterviewMapper, M
                 target.add(normalizedItem);
             }
         }
+    }
+
+    private List<String> buildAnswerChecklist(InterviewPlanItem planItem) {
+        String questionStyle = planItem == null ? "" : StringUtils.defaultString(planItem.getQuestionStyle());
+        List<String> checklist = new ArrayList<>();
+        if (questionStyle.contains("架构") || questionStyle.contains("设计") || questionStyle.contains("扩展")) {
+            checklist.add("先澄清业务目标、约束和量级");
+            checklist.add("给出核心模块、数据流和关键接口");
+            checklist.add("说明瓶颈、降级、监控和成本取舍");
+            return checklist;
+        }
+        if (questionStyle.contains("行为") || questionStyle.contains("压力") || questionStyle.contains("协作")
+                || questionStyle.contains("动机") || questionStyle.contains("规划")) {
+            checklist.add("用一个具体事件回答，避免只讲观点");
+            checklist.add("说清当时背景、你的行动和冲突处理");
+            checklist.add("补充结果、反思和下一次会怎么做");
+            return checklist;
+        }
+        if (questionStyle.contains("原理")) {
+            checklist.add("先给出核心概念和适用场景");
+            checklist.add("补充关键机制、边界条件和常见坑");
+            checklist.add("结合项目里一次真实使用或排障经验");
+            return checklist;
+        }
+        checklist.add("讲清业务背景、目标和你的职责边界");
+        checklist.add("解释技术方案、关键取舍和为什么这样做");
+        checklist.add("给出量化结果、问题复盘和后续优化");
+        return checklist;
     }
 
     private String buildInterviewerPersona(MockInterview mockInterview) {
@@ -644,8 +717,8 @@ public class MockInterviewServiceImpl extends ServiceImpl<MockInterviewMapper, M
     private String buildOpeningQuestion(MockInterview mockInterview, InterviewPlanItem planItem) {
         String systemPrompt = buildInterviewerPersona(mockInterview)
                 + buildQuestionPolicy(mockInterview)
-                + "要求：只问一个问题；问题要贴合岗位、技术方向和候选人背景；不要输出 markdown；不要附带答案。"
-                + "除非是 HR 面试，否则不要只问泛泛的自我介绍。";
+                + "要求：只问一个问题；像真人面试官口头提问，优先引用候选人背景中的项目或技术词；不要输出 markdown；不要附带答案。"
+                + "问题长度控制在 80 个中文字符内。除非是 HR 面试，否则不要只问泛泛的自我介绍。";
         String userPrompt = String.format(
                 "岗位：%s；工作年限：%s；难度：%s；面试类型：%s；技术方向：%s；候选人背景：%s。"
                         + "第一轮考察重点：%s；问题类型：%s。请给出开场问题。",
@@ -657,7 +730,8 @@ public class MockInterviewServiceImpl extends ServiceImpl<MockInterviewMapper, M
                 buildCandidateBackgroundContext(mockInterview),
                 planItem == null ? "项目背景与自我介绍" : planItem.getFocusTopic(),
                 planItem == null ? "开场问题" : planItem.getQuestionStyle());
-        return chatWithFallback(mockInterview, systemPrompt, userPrompt, buildOpeningFallback(mockInterview, planItem));
+        String fallback = buildOpeningFallback(mockInterview, planItem);
+        return normalizeNextQuestion(chatWithFallback(mockInterview, systemPrompt, userPrompt, fallback), fallback);
     }
 
     private RoundAnalysis buildRoundAnalysis(MockInterview mockInterview,
@@ -667,20 +741,26 @@ public class MockInterviewServiceImpl extends ServiceImpl<MockInterviewMapper, M
         InterviewPlanItem nextPlan = getPlanByRound(mockInterview, completedRounds + 1);
         String latestQuestion = getLatestQuestion(messageList);
         String latestAnswer = getLatestCandidateAnswer(messageList);
+        String askedQuestionSummary = buildAskedQuestionSummary(messageList);
+        String answerQualitySignals = buildAnswerQualitySignals(latestAnswer);
         int probeCount = (int) countAiMessagesByRoundAndStage(messageList, completedRounds, "probe");
         boolean canProbe = probeCount == 0;
         String systemPrompt = buildInterviewerPersona(mockInterview)
                 + buildQuestionPolicy(mockInterview)
                 + buildScoringPolicy(mockInterview)
                 + "请严格输出 JSON 对象，不要输出 markdown。"
-                + "字段必须包含：shortComment、focus、score、communicationScore、technicalScore、problemSolvingScore、questionStyle、recommendedAnswerSeconds、verdict、improvementTags、nextActionHint、nextQuestion、shouldFinish、probe。"
-                + "nextQuestion 必须只包含一个问题，且要结合候选人最新回答追问具体细节，不要机械复述题纲。"
+                + "字段必须包含：shortComment、focus、score、communicationScore、technicalScore、problemSolvingScore、questionStyle、recommendedAnswerSeconds、verdict、improvementTags、missingPoints、answerRewriteSuggestion、followUpReason、nextActionHint、nextQuestion、shouldFinish、probe。"
+                + "shortComment 必须引用候选人回答里的具体表现或缺失信息；missingPoints 输出 2 到 4 个本轮缺口；answerRewriteSuggestion 给出一段可直接照着练的改进版回答骨架。"
+                + "nextQuestion 必须只包含一个口语化问题，长度不超过 100 个中文字符，要结合候选人最新回答追问具体细节，不要机械复述题纲，不要连续问多个问题。"
+                + "followUpReason 用一句话说明为什么问下一题，方便前端展示面试官意图。"
+                + "下一问不能重复已问过问题的表达和考察角度；如果需要继续深挖，必须换一个更具体的证据点。"
+                + "如果候选人表达“不知道、没做过、不确定”，不要只给空泛安慰，要追问其理解、推理路径、验证方法或学习补齐计划。"
                 + "probe=true 表示继续深挖本轮同一考点；只有当本轮还没有追问过、且最新回答缺少关键判断依据时才允许 probe=true。"
                 + "如果本轮已经追问过一次，必须 probe=false 并进入下一考点。";
         String userPrompt = String.format(
                 "岗位：%s；工作年限：%s；难度：%s；面试类型：%s；技术方向：%s；计划轮次：%d；当前已完成轮次：%d；候选人背景：%s。"
                         + "当前轮考察重点：%s；当前问题类型：%s；下一轮建议考察重点：%s；本轮已追问次数：%d；是否还能继续深挖本轮：%s。"
-                        + "最新问题：%s\n最新回答：%s\n"
+                        + "已问过的问题：%s\n回答质量信号：%s\n最新问题：%s\n最新回答：%s\n"
                         + "请根据以下完整对话，对候选人最新回答做专业判断，并给出下一问。\n%s",
                 StringUtils.defaultIfBlank(mockInterview.getJobPosition(), "技术岗位"),
                 StringUtils.defaultIfBlank(mockInterview.getWorkExperience(), "不限"),
@@ -695,19 +775,22 @@ public class MockInterviewServiceImpl extends ServiceImpl<MockInterviewMapper, M
                 nextPlan == null ? "总结归纳" : nextPlan.getFocusTopic(),
                 probeCount,
                 canProbe ? "是" : "否",
+                askedQuestionSummary,
+                answerQualitySignals,
                 StringUtils.defaultIfBlank(latestQuestion, "暂无"),
                 StringUtils.defaultIfBlank(latestAnswer, "暂无"),
                 buildPromptTranscript(messageList, MAX_PROMPT_TRANSCRIPT_MESSAGES, MAX_PROMPT_TRANSCRIPT_CHARS));
         String fallbackJson = JSONUtil.toJsonStr(buildRoundFallback(mockInterview, completedRounds, currentPlan, nextPlan));
-        return parseRoundAnalysis(chatWithFallback(mockInterview, systemPrompt, userPrompt, fallbackJson), mockInterview, completedRounds, currentPlan, nextPlan, canProbe);
+        return parseRoundAnalysis(chatWithFallback(mockInterview, systemPrompt, userPrompt, fallbackJson),
+                mockInterview, completedRounds, currentPlan, nextPlan, canProbe, latestQuestion, latestAnswer);
     }
 
     private SummaryResult buildSummary(MockInterview mockInterview, List<InterviewMessage> messageList, InterviewReport interviewReport) {
         String systemPrompt = buildInterviewerPersona(mockInterview)
                 + buildScoringPolicy(mockInterview)
                 + "请严格输出 JSON 对象，不要输出 markdown。"
-                + "字段必须包含：overallScore、summary、strengths、improvements、suggestedTopics、communicationScore、technicalScore、problemSolvingScore、readinessLevel、recommendedNextAction、displayText。"
-                + "displayText 必须以【面试结束】开头。总结要具体指出 2 到 3 个真实短板，不要写空泛鼓励。";
+                + "字段必须包含：overallScore、summary、strengths、improvements、suggestedTopics、communicationScore、technicalScore、problemSolvingScore、readinessLevel、recommendedNextAction、practicePlan、displayText。"
+                + "practicePlan 输出 3 条下一步训练动作，每条必须具体到练什么和如何验收。displayText 必须以【面试结束】开头。总结要具体指出 2 到 3 个真实短板，不要写空泛鼓励。";
         String userPrompt = String.format(
                 "岗位：%s；工作年限：%s；难度：%s；面试类型：%s；技术方向：%s；计划轮次：%d；实际完成轮次：%d；候选人背景：%s。"
                         + "请总结以下面试记录，并结合已有轮次评语给出结构化终评。\n轮次评语：%s\n对话记录：\n%s",
@@ -755,6 +838,75 @@ public class MockInterviewServiceImpl extends ServiceImpl<MockInterviewMapper, M
         return abbreviateText(transcript, Math.max(400, maxChars));
     }
 
+    private String buildAskedQuestionSummary(List<InterviewMessage> messageList) {
+        if (messageList == null || messageList.isEmpty()) {
+            return "暂无";
+        }
+        List<String> questions = new ArrayList<>();
+        for (InterviewMessage message : messageList) {
+            if (message.isAI && ("question".equals(message.stage) || "probe".equals(message.stage))) {
+                String question = abbreviateText(message.content, 90);
+                if (StringUtils.isNotBlank(question)) {
+                    questions.add(String.format("第%s轮：%s",
+                            message.round == null ? "-" : message.round,
+                            question));
+                }
+            }
+        }
+        if (questions.isEmpty()) {
+            return "暂无";
+        }
+        int startIndex = Math.max(0, questions.size() - 6);
+        return String.join("；", questions.subList(startIndex, questions.size()));
+    }
+
+    private String buildAnswerQualitySignals(String answer) {
+        String normalizedAnswer = StringUtils.trimToEmpty(answer);
+        if (StringUtils.isBlank(normalizedAnswer)) {
+            return "空回答";
+        }
+        List<String> signals = new ArrayList<>();
+        if (looksLikeNonAnswer(normalizedAnswer)) {
+            signals.add("候选人表达不知道或没做过，需要追问理解、推理和补齐计划");
+        }
+        if (normalizedAnswer.length() < SHORT_ANSWER_THRESHOLD) {
+            signals.add("回答偏短");
+        }
+        if (!hasQuantitativeSignal(normalizedAnswer)) {
+            signals.add("缺少量化指标");
+        }
+        if (!hasResponsibilitySignal(normalizedAnswer)) {
+            signals.add("个人职责不清楚");
+        }
+        if (!hasReasoningSignal(normalizedAnswer)) {
+            signals.add("技术取舍或推理链不足");
+        }
+        if (!hasReviewSignal(normalizedAnswer)) {
+            signals.add("缺少复盘或风险意识");
+        }
+        return signals.isEmpty() ? "回答信息相对完整，可继续按计划深挖" : String.join("；", signals);
+    }
+
+    private boolean hasQuantitativeSignal(String answer) {
+        return StringUtils.defaultString(answer)
+                .matches(".*(\\d|%|QPS|qps|RT|rt|ms|SLA|sla|p95|p99|秒|分钟|提升|降低|减少|增长|成本|耗时).*");
+    }
+
+    private boolean hasResponsibilitySignal(String answer) {
+        return StringUtils.defaultString(answer)
+                .matches(".*(我|本人|负责|主导|参与|推进|落地).*");
+    }
+
+    private boolean hasReasoningSignal(String answer) {
+        return StringUtils.defaultString(answer)
+                .matches(".*(因为|所以|权衡|取舍|方案|设计|架构|选型|考虑).*");
+    }
+
+    private boolean hasReviewSignal(String answer) {
+        return StringUtils.defaultString(answer)
+                .matches(".*(复盘|优化|改进|风险|异常|降级|监控|告警|如果重来).*");
+    }
+
     private String buildCandidateBackgroundContext(MockInterview mockInterview) {
         String background = mockInterview == null ? null : mockInterview.getResumeText();
         if (StringUtils.isBlank(background)) {
@@ -788,8 +940,10 @@ public class MockInterviewServiceImpl extends ServiceImpl<MockInterviewMapper, M
         report.setStrengths(new ArrayList<>());
         report.setImprovements(new ArrayList<>());
         report.setSuggestedTopics(new ArrayList<>());
+        report.setPracticePlan(new ArrayList<>());
         report.setRoundRecords(new ArrayList<>());
         report.setAgenda(buildInterviewAgenda(mockInterview));
+        report.setAnswerChecklist(buildAnswerChecklist(getPlanItem(report, 1)));
         report.setReadinessLevel("继续训练中");
         report.setRecommendedNextAction("建议先把项目背景、技术方案、量化结果和复盘四段式表达练顺。");
         return report;
@@ -806,6 +960,10 @@ public class MockInterviewServiceImpl extends ServiceImpl<MockInterviewMapper, M
         int expectedRounds = normalizeExpectedRounds(mockInterview.getExpectedRounds());
         mockInterview.setExpectedRounds(expectedRounds);
         return expectedRounds;
+    }
+
+    private boolean canAiFinishInterview(MockInterview mockInterview, int completedRounds) {
+        return completedRounds >= Math.min(getExpectedRounds(mockInterview), MIN_ROUNDS_BEFORE_AI_FINISH);
     }
 
     private int getNextRoundNumber(List<InterviewMessage> messageList) {
@@ -893,6 +1051,30 @@ public class MockInterviewServiceImpl extends ServiceImpl<MockInterviewMapper, M
                 StringUtils.defaultIfBlank(mockInterview.getJobPosition(), "当前岗位"));
     }
 
+    private String buildFallbackNextQuestion(MockInterview mockInterview,
+                                             InterviewPlanItem currentPlan,
+                                             InterviewPlanItem nextPlan) {
+        InterviewPlanItem targetPlan = nextPlan == null ? currentPlan : nextPlan;
+        String topic = targetPlan == null
+                ? StringUtils.defaultIfBlank(mockInterview.getTechStack(), mockInterview.getJobPosition())
+                : targetPlan.getFocusTopic();
+        String style = targetPlan == null ? "" : StringUtils.defaultString(targetPlan.getQuestionStyle());
+        if (style.contains("架构") || style.contains("设计") || style.contains("扩展")) {
+            return String.format("围绕 %s，你会先怎么拆核心模块和数据流？", StringUtils.defaultIfBlank(topic, "这个系统"));
+        }
+        if (style.contains("原理")) {
+            return String.format("你刚才提到的 %s，核心机制和最容易踩坑的边界是什么？", StringUtils.defaultIfBlank(topic, "这个技术点"));
+        }
+        if (style.contains("行为") || style.contains("压力") || style.contains("协作")) {
+            return "请举一个具体事件，说说你当时怎么推进、遇到什么阻力、最后结果如何？";
+        }
+        if (style.contains("结果") || style.contains("复盘")) {
+            return "这件事最后拿到了什么可量化结果，如果重来你会优先改哪一点？";
+        }
+        return String.format("围绕 %s，你当时最关键的技术取舍是什么，为什么这样选？",
+                StringUtils.defaultIfBlank(topic, "这个场景"));
+    }
+
     private RoundAnalysis buildRoundFallback(MockInterview mockInterview,
                                              int completedRounds,
                                              InterviewPlanItem currentPlan,
@@ -910,8 +1092,10 @@ public class MockInterviewServiceImpl extends ServiceImpl<MockInterviewMapper, M
         roundAnalysis.setNextActionHint(buildNextActionHint(nextPlan));
         roundAnalysis.setVerdict(completedRounds <= 2 ? "回答方向基本正确，但深度还不够" : "回答较稳，但还缺更强的量化和取舍表达");
         roundAnalysis.setImprovementTags(new ArrayList<>(List.of("补量化结果", "补设计取舍", "补异常场景")));
-        roundAnalysis.setNextQuestion(String.format("如果让你继续优化刚才提到的 %s 场景，你会从系统设计、性能、稳定性和异常处理几个方面分别怎么做？",
-                StringUtils.defaultIfBlank(mockInterview.getTechStack(), mockInterview.getJobPosition())));
+        roundAnalysis.setMissingPoints(new ArrayList<>(List.of("缺少可验证指标", "技术取舍理由不够明确", "异常和边界场景覆盖不足")));
+        roundAnalysis.setAnswerRewriteSuggestion("可以按“背景目标 -> 我的职责 -> 关键方案和取舍 -> 量化结果 -> 复盘改进”的顺序重答一遍。");
+        roundAnalysis.setFollowUpReason("继续确认候选人是否能把方案落到真实业务指标和边界场景。");
+        roundAnalysis.setNextQuestion(buildFallbackNextQuestion(mockInterview, currentPlan, nextPlan));
         roundAnalysis.setShouldFinish(false);
         roundAnalysis.setProbe(false);
         return roundAnalysis;
@@ -930,6 +1114,11 @@ public class MockInterviewServiceImpl extends ServiceImpl<MockInterviewMapper, M
         summaryResult.setProblemSolvingScore(Math.max(60, Math.min(90, 67 + completedRounds * 2)));
         summaryResult.setReadinessLevel("具备一轮技术面试基础，建议继续冲刺表达和系统设计");
         summaryResult.setRecommendedNextAction("优先复盘回答太短的轮次，并围绕量化结果、技术选型理由和稳定性方案做二次演练。");
+        summaryResult.setPracticePlan(new ArrayList<>(List.of(
+                "挑 2 道回答最短的题，用 2 分钟版本重录，并检查是否包含背景、职责、方案、结果、复盘",
+                "为核心项目补 3 个量化指标，例如 QPS、耗时、成本、稳定性或业务收益",
+                "准备 2 个失败或线上问题案例，练习说明定位过程、取舍和复盘改进"
+        )));
         summaryResult.setDisplayText("【面试结束】总体评价：回答较完整，具备一定技术基础。亮点：能结合项目经验展开说明。改进建议：继续补充量化结果、设计取舍和异常场景细节。");
         return summaryResult;
     }
@@ -939,26 +1128,46 @@ public class MockInterviewServiceImpl extends ServiceImpl<MockInterviewMapper, M
                                              int completedRounds,
                                              InterviewPlanItem currentPlan,
                                              InterviewPlanItem nextPlan,
-                                             boolean canProbe) {
+                                             boolean canProbe,
+                                             String latestQuestion,
+                                             String latestAnswer) {
         try {
             Map<?, ?> result = JSONUtil.toBean(extractJsonContent(content), Map.class);
             RoundAnalysis fallback = buildRoundFallback(mockInterview, completedRounds, currentPlan, nextPlan);
             RoundAnalysis roundAnalysis = new RoundAnalysis();
-            roundAnalysis.setShortComment(getString(result.get("shortComment"), fallback.getShortComment()));
-            roundAnalysis.setFocus(getString(result.get("focus"), fallback.getFocus()));
+            roundAnalysis.setShortComment(getLimitedString(result.get("shortComment"), fallback.getShortComment(), MAX_FEEDBACK_TEXT_CHARS));
+            roundAnalysis.setFocus(getLimitedString(result.get("focus"), fallback.getFocus(), MAX_FEEDBACK_TEXT_CHARS));
             roundAnalysis.setScore(normalizeScore(result.get("score"), fallback.getScore()));
             roundAnalysis.setCommunicationScore(normalizeScore(result.get("communicationScore"), fallback.getCommunicationScore()));
             roundAnalysis.setTechnicalScore(normalizeScore(result.get("technicalScore"), fallback.getTechnicalScore()));
             roundAnalysis.setProblemSolvingScore(normalizeScore(result.get("problemSolvingScore"), fallback.getProblemSolvingScore()));
-            roundAnalysis.setQuestionStyle(getString(result.get("questionStyle"), fallback.getQuestionStyle()));
+            roundAnalysis.setQuestionStyle(getLimitedString(result.get("questionStyle"), fallback.getQuestionStyle(), 40));
             roundAnalysis.setRecommendedAnswerSeconds(normalizeRecommendedAnswerSeconds(result.get("recommendedAnswerSeconds"),
                     fallback.getRecommendedAnswerSeconds()));
-            roundAnalysis.setNextActionHint(getString(result.get("nextActionHint"), fallback.getNextActionHint()));
-            roundAnalysis.setVerdict(getString(result.get("verdict"), fallback.getVerdict()));
-            roundAnalysis.setImprovementTags(getStringList(result.get("improvementTags"), fallback.getImprovementTags()));
-            roundAnalysis.setNextQuestion(getString(result.get("nextQuestion"), fallback.getNextQuestion()));
-            roundAnalysis.setShouldFinish(Boolean.parseBoolean(String.valueOf(result.get("shouldFinish"))));
-            roundAnalysis.setProbe(canProbe && Boolean.parseBoolean(String.valueOf(result.get("probe"))));
+            roundAnalysis.setNextActionHint(getLimitedString(result.get("nextActionHint"), fallback.getNextActionHint(), MAX_FEEDBACK_TEXT_CHARS));
+            roundAnalysis.setVerdict(getLimitedString(result.get("verdict"), fallback.getVerdict(), MAX_FEEDBACK_TEXT_CHARS));
+            roundAnalysis.setImprovementTags(getLimitedStringList(result.get("improvementTags"),
+                    fallback.getImprovementTags(), MAX_LIST_ITEMS, 32));
+            roundAnalysis.setMissingPoints(getLimitedStringList(result.get("missingPoints"),
+                    fallback.getMissingPoints(), MAX_LIST_ITEMS, MAX_LIST_ITEM_CHARS));
+            roundAnalysis.setAnswerRewriteSuggestion(getLimitedString(result.get("answerRewriteSuggestion"),
+                    fallback.getAnswerRewriteSuggestion(), MAX_FEEDBACK_TEXT_CHARS));
+            roundAnalysis.setFollowUpReason(getLimitedString(result.get("followUpReason"),
+                    fallback.getFollowUpReason(), MAX_FEEDBACK_TEXT_CHARS));
+            boolean shouldFinish = Boolean.parseBoolean(String.valueOf(result.get("shouldFinish")));
+            boolean probe = canProbe && Boolean.parseBoolean(String.valueOf(result.get("probe")));
+            String nextQuestion = normalizeNextQuestion(getString(result.get("nextQuestion"), fallback.getNextQuestion()),
+                    fallback.getNextQuestion());
+            roundAnalysis.setNextQuestion(ensureFreshNextQuestion(
+                    nextQuestion,
+                    latestQuestion,
+                    mockInterview,
+                    currentPlan,
+                    nextPlan,
+                    probe));
+            roundAnalysis.setShouldFinish(shouldFinish);
+            roundAnalysis.setProbe(probe);
+            applyAnswerQualityGuardrails(roundAnalysis, mockInterview, latestAnswer);
             return roundAnalysis;
         } catch (Exception e) {
             return buildRoundFallback(mockInterview, completedRounds, currentPlan, nextPlan);
@@ -971,16 +1180,24 @@ public class MockInterviewServiceImpl extends ServiceImpl<MockInterviewMapper, M
             SummaryResult fallback = buildSummaryFallback(interviewReport);
             SummaryResult summaryResult = new SummaryResult();
             summaryResult.setOverallScore(normalizeScore(result.get("overallScore"), fallback.getOverallScore()));
-            summaryResult.setSummary(getString(result.get("summary"), fallback.getSummary()));
-            summaryResult.setStrengths(getStringList(result.get("strengths"), fallback.getStrengths()));
-            summaryResult.setImprovements(getStringList(result.get("improvements"), fallback.getImprovements()));
-            summaryResult.setSuggestedTopics(getStringList(result.get("suggestedTopics"), fallback.getSuggestedTopics()));
+            summaryResult.setSummary(getLimitedString(result.get("summary"), fallback.getSummary(), MAX_SUMMARY_TEXT_CHARS));
+            summaryResult.setStrengths(getLimitedStringList(result.get("strengths"),
+                    fallback.getStrengths(), MAX_LIST_ITEMS, MAX_LIST_ITEM_CHARS));
+            summaryResult.setImprovements(getLimitedStringList(result.get("improvements"),
+                    fallback.getImprovements(), MAX_LIST_ITEMS, MAX_LIST_ITEM_CHARS));
+            summaryResult.setSuggestedTopics(getLimitedStringList(result.get("suggestedTopics"),
+                    fallback.getSuggestedTopics(), MAX_LIST_ITEMS, MAX_LIST_ITEM_CHARS));
             summaryResult.setCommunicationScore(normalizeScore(result.get("communicationScore"), fallback.getCommunicationScore()));
             summaryResult.setTechnicalScore(normalizeScore(result.get("technicalScore"), fallback.getTechnicalScore()));
             summaryResult.setProblemSolvingScore(normalizeScore(result.get("problemSolvingScore"), fallback.getProblemSolvingScore()));
-            summaryResult.setReadinessLevel(getString(result.get("readinessLevel"), fallback.getReadinessLevel()));
-            summaryResult.setRecommendedNextAction(getString(result.get("recommendedNextAction"), fallback.getRecommendedNextAction()));
-            summaryResult.setDisplayText(getString(result.get("displayText"), fallback.getDisplayText()));
+            summaryResult.setReadinessLevel(getLimitedString(result.get("readinessLevel"),
+                    fallback.getReadinessLevel(), 120));
+            summaryResult.setRecommendedNextAction(getLimitedString(result.get("recommendedNextAction"),
+                    fallback.getRecommendedNextAction(), MAX_FEEDBACK_TEXT_CHARS));
+            summaryResult.setPracticePlan(getLimitedStringList(result.get("practicePlan"),
+                    fallback.getPracticePlan(), MAX_PRACTICE_PLAN_ITEMS, MAX_PRACTICE_PLAN_ITEM_CHARS));
+            summaryResult.setDisplayText(getLimitedString(result.get("displayText"),
+                    fallback.getDisplayText(), MAX_DISPLAY_TEXT_CHARS));
             if (!summaryResult.getDisplayText().startsWith("【面试结束】")) {
                 summaryResult.setDisplayText("【面试结束】" + summaryResult.getDisplayText());
             }
@@ -990,13 +1207,90 @@ public class MockInterviewServiceImpl extends ServiceImpl<MockInterviewMapper, M
         }
     }
 
+    private void applyAnswerQualityGuardrails(RoundAnalysis roundAnalysis,
+                                              MockInterview mockInterview,
+                                              String latestAnswer) {
+        String answer = StringUtils.trimToEmpty(latestAnswer);
+        if (roundAnalysis == null || StringUtils.isBlank(answer)) {
+            return;
+        }
+        boolean hrInterview = "HR".equals(StringUtils.defaultString(mockInterview == null ? null : mockInterview.getInterviewType()));
+        List<String> improvementTags = new ArrayList<>(roundAnalysis.getImprovementTags() == null
+                ? Collections.emptyList()
+                : roundAnalysis.getImprovementTags());
+        List<String> missingPoints = new ArrayList<>(roundAnalysis.getMissingPoints() == null
+                ? Collections.emptyList()
+                : roundAnalysis.getMissingPoints());
+
+        int scoreCap = 100;
+        if (looksLikeNonAnswer(answer)) {
+            scoreCap = Math.min(scoreCap, 48);
+            appendDistinctStrings(improvementTags, List.of("补基础理解", "补验证方法"));
+            appendDistinctStrings(missingPoints, List.of("没有说明已有理解", "缺少推理或验证路径"));
+            roundAnalysis.setVerdict("当前回答还没有形成可判断的技术思路");
+            roundAnalysis.setNextActionHint("请先说出你的初步理解、推理过程、验证方法和学习补齐计划。");
+        } else {
+            if (answer.length() < SHORT_ANSWER_THRESHOLD) {
+                scoreCap = Math.min(scoreCap, 60);
+                appendDistinctStrings(improvementTags, List.of("扩展回答结构"));
+                appendDistinctStrings(missingPoints, List.of("回答信息量偏少"));
+            }
+            if (!hrInterview && !hasQuantitativeSignal(answer)) {
+                scoreCap = Math.min(scoreCap, 82);
+                appendDistinctStrings(improvementTags, List.of("补量化指标"));
+                appendDistinctStrings(missingPoints, List.of("缺少可验证指标"));
+            }
+            if (!hasResponsibilitySignal(answer)) {
+                scoreCap = Math.min(scoreCap, 78);
+                appendDistinctStrings(improvementTags, List.of("补职责边界"));
+                appendDistinctStrings(missingPoints, List.of("个人职责边界不清楚"));
+            }
+            if (!hasReasoningSignal(answer)) {
+                scoreCap = Math.min(scoreCap, 78);
+                appendDistinctStrings(improvementTags, List.of("补设计取舍"));
+                appendDistinctStrings(missingPoints, List.of("技术取舍或推理链不足"));
+            }
+            if (!hrInterview && !hasReviewSignal(answer)) {
+                scoreCap = Math.min(scoreCap, 85);
+                appendDistinctStrings(improvementTags, List.of("补复盘风险"));
+                appendDistinctStrings(missingPoints, List.of("缺少复盘或风险意识"));
+            }
+            if (looksUncertain(answer)) {
+                scoreCap = Math.min(scoreCap, 68);
+                appendDistinctStrings(improvementTags, List.of("补事实证据"));
+                appendDistinctStrings(missingPoints, List.of("不确定表达较多，缺少事实支撑"));
+            }
+        }
+
+        capRoundScores(roundAnalysis, scoreCap);
+        roundAnalysis.setImprovementTags(limitStringList(improvementTags, MAX_LIST_ITEMS, 32));
+        roundAnalysis.setMissingPoints(limitStringList(missingPoints, MAX_LIST_ITEMS, MAX_LIST_ITEM_CHARS));
+    }
+
+    private void capRoundScores(RoundAnalysis roundAnalysis, int scoreCap) {
+        int safeCap = Math.max(0, Math.min(100, scoreCap));
+        roundAnalysis.setScore(Math.min(roundAnalysis.getScore() == null ? safeCap : roundAnalysis.getScore(), safeCap));
+        roundAnalysis.setCommunicationScore(Math.min(roundAnalysis.getCommunicationScore() == null
+                ? safeCap
+                : roundAnalysis.getCommunicationScore(), safeCap));
+        roundAnalysis.setTechnicalScore(Math.min(roundAnalysis.getTechnicalScore() == null
+                ? safeCap
+                : roundAnalysis.getTechnicalScore(), safeCap));
+        roundAnalysis.setProblemSolvingScore(Math.min(roundAnalysis.getProblemSolvingScore() == null
+                ? safeCap
+                : roundAnalysis.getProblemSolvingScore(), safeCap));
+    }
+
     private RoundAnalysis buildElaborationAnalysis(MockInterview mockInterview,
                                                    InterviewPlanItem currentPlan,
                                                    int currentRound,
                                                    String userAnswer,
                                                    RoundAnalysis baseAnalysis) {
+        boolean nonAnswer = looksLikeNonAnswer(userAnswer);
         RoundAnalysis roundAnalysis = new RoundAnalysis();
-        roundAnalysis.setShortComment("这轮回答还偏简略，面试官会继续追问你把关键细节讲完整。");
+        roundAnalysis.setShortComment(nonAnswer
+                ? "这轮回答出现了“不知道”或“不确定”表达，面试官会先确认你的理解和推理路径。"
+                : "这轮回答还偏简略，面试官会继续追问你把关键细节讲完整。");
         roundAnalysis.setFocus(currentPlan == null ? "继续补充背景、方案和结果指标" : currentPlan.getFocusTopic() + "（补充细节）");
         roundAnalysis.setScore(Math.min(baseAnalysis.getScore(), 62));
         roundAnalysis.setCommunicationScore(Math.min(baseAnalysis.getCommunicationScore(), 60));
@@ -1004,9 +1298,24 @@ public class MockInterviewServiceImpl extends ServiceImpl<MockInterviewMapper, M
         roundAnalysis.setProblemSolvingScore(Math.min(baseAnalysis.getProblemSolvingScore(), 60));
         roundAnalysis.setQuestionStyle("追问补充");
         roundAnalysis.setRecommendedAnswerSeconds(Math.max(90, currentPlan == null ? 90 : currentPlan.getRecommendedAnswerSeconds()));
-        roundAnalysis.setNextActionHint("请补充业务背景、你的职责、关键技术方案、量化结果以及复盘。");
-        roundAnalysis.setVerdict("这一轮回答偏简略，面试官还拿不到足够多的判断依据");
-        roundAnalysis.setImprovementTags(new ArrayList<>(List.of("补背景", "补关键决策", "补量化结果", "补复盘")));
+        roundAnalysis.setNextActionHint(nonAnswer
+                ? "可以诚实说明不熟，但要补上你的理解、推理过程、验证方法和学习补齐计划。"
+                : "请补充业务背景、你的职责、关键技术方案、量化结果以及复盘。");
+        roundAnalysis.setVerdict(nonAnswer
+                ? "当前回答还没有形成可判断的技术思路"
+                : "这一轮回答偏简略，面试官还拿不到足够多的判断依据");
+        roundAnalysis.setImprovementTags(nonAnswer
+                ? new ArrayList<>(List.of("补基础理解", "补推理路径", "补验证方法", "补学习计划"))
+                : new ArrayList<>(List.of("补背景", "补关键决策", "补量化结果", "补复盘")));
+        roundAnalysis.setMissingPoints(nonAnswer
+                ? new ArrayList<>(List.of("没有说明已有理解", "缺少推理或排查路径", "没有给出如何验证", "缺少补齐计划"))
+                : new ArrayList<>(List.of("业务背景不清楚", "个人职责边界不清楚", "缺少量化结果", "缺少复盘")));
+        roundAnalysis.setAnswerRewriteSuggestion(nonAnswer
+                ? "可以按“这个点我不完全熟 -> 我的初步理解是 -> 我会先验证哪些假设 -> 落到项目会关注哪些风险 -> 后续怎么补齐”来回答。"
+                : "请按“当时要解决什么问题 -> 我负责什么 -> 我怎么做 -> 最后指标变化 -> 复盘得到什么”补一版。");
+        roundAnalysis.setFollowUpReason(nonAnswer
+                ? "需要确认候选人在不熟悉问题下是否具备基本推理、拆解和学习能力。"
+                : "当前回答信息量不足，需要先补齐事实依据再判断能力深度。");
         roundAnalysis.setNextQuestion(buildElaborationQuestion(mockInterview, currentPlan, currentRound, userAnswer));
         roundAnalysis.setShouldFinish(false);
         roundAnalysis.setProbe(true);
@@ -1014,26 +1323,47 @@ public class MockInterviewServiceImpl extends ServiceImpl<MockInterviewMapper, M
     }
 
     private String buildElaborationQuestion(MockInterview mockInterview, InterviewPlanItem currentPlan, int currentRound, String userAnswer) {
+        boolean nonAnswer = looksLikeNonAnswer(userAnswer);
         String systemPrompt = buildInterviewerPersona(mockInterview)
                 + buildQuestionPolicy(mockInterview)
-                + "候选人的回答偏简略。请输出一句自然的追问，让候选人补充关键细节，不要输出 markdown。";
+                + (nonAnswer
+                ? "候选人表达了不知道或没做过。请输出一句自然的追问，要求候选人说明已有理解、推理路径或验证方法，不要输出 markdown。"
+                : "候选人的回答偏简略。请输出一句自然的追问，让候选人补充关键细节，不要输出 markdown。");
         String userPrompt = String.format(
                 "岗位：%s；面试类型：%s；当前轮次：%d；当前考察重点：%s；候选人刚才的回答：%s。"
-                        + "请给出一个补充追问，要求候选人把背景、方案、量化结果和复盘说完整。",
+                        + "请给出一个补充追问，要求：%s。",
                 StringUtils.defaultIfBlank(mockInterview.getJobPosition(), "技术岗位"),
                 StringUtils.defaultIfBlank(mockInterview.getInterviewType(), "技术深挖"),
                 currentRound,
                 currentPlan == null ? "项目细节" : currentPlan.getFocusTopic(),
-                userAnswer);
-        String fallback = "这部分我想继续深挖一下。请你补充讲清楚：当时的业务背景是什么、你负责了哪一块、核心技术方案怎么定的、最后拿到了什么量化结果？";
-        return chatWithFallback(mockInterview, systemPrompt, userPrompt, fallback);
+                userAnswer,
+                nonAnswer
+                        ? "候选人说出自己的初步理解、会如何拆解问题、会用什么方式验证"
+                        : "候选人把背景、方案、量化结果和复盘说完整");
+        String fallback = nonAnswer
+                ? "如果这个点你不熟，那你先说说你的初步理解，以及你会怎么验证自己的判断？"
+                : "这部分我想继续深挖一下：这件事里你具体负责哪一块，最后用什么指标证明效果？";
+        return normalizeNextQuestion(chatWithFallback(mockInterview, systemPrompt, userPrompt, fallback), fallback);
     }
 
     private boolean shouldForceElaboration(MockInterview mockInterview, String userAnswer, Integer score) {
         int answerLengthThreshold = getShortAnswerThreshold(mockInterview);
         int scoreThreshold = getLowScoreProbeThreshold(mockInterview);
-        return StringUtils.length(StringUtils.trimToEmpty(userAnswer)) < answerLengthThreshold
+        return looksLikeNonAnswer(userAnswer)
+                || StringUtils.length(StringUtils.trimToEmpty(userAnswer)) < answerLengthThreshold
                 || (score != null && score < scoreThreshold);
+    }
+
+    private boolean looksLikeNonAnswer(String userAnswer) {
+        String normalized = StringUtils.trimToEmpty(userAnswer);
+        return StringUtils.isNotBlank(normalized)
+                && normalized.matches(".*(不会|不知道|不清楚|不了解|没接触|没做过|不太懂|答不上来).*");
+    }
+
+    private boolean looksUncertain(String userAnswer) {
+        String normalized = StringUtils.trimToEmpty(userAnswer);
+        return normalized.length() < 120
+                && normalized.matches(".*(可能|大概|应该|也许|好像|不确定).*");
     }
 
     private String extractJsonContent(String content) {
@@ -1073,6 +1403,31 @@ public class MockInterviewServiceImpl extends ServiceImpl<MockInterviewMapper, M
         return new ArrayList<>(defaultValue == null ? Collections.emptyList() : defaultValue);
     }
 
+    private String getLimitedString(Object value, String defaultValue, int maxChars) {
+        return abbreviateText(getString(value, defaultValue), maxChars);
+    }
+
+    private List<String> getLimitedStringList(Object value, List<String> defaultValue, int maxItems, int maxChars) {
+        return limitStringList(getStringList(value, defaultValue), maxItems, maxChars);
+    }
+
+    private List<String> limitStringList(List<String> source, int maxItems, int maxChars) {
+        if (source == null || source.isEmpty()) {
+            return new ArrayList<>();
+        }
+        List<String> result = new ArrayList<>();
+        for (String item : source) {
+            String text = abbreviateText(item, maxChars);
+            if (StringUtils.isNotBlank(text) && !result.contains(text)) {
+                result.add(text);
+            }
+            if (result.size() >= maxItems) {
+                break;
+            }
+        }
+        return result;
+    }
+
     private int normalizeScore(Object value, int defaultValue) {
         if (value instanceof Number number) {
             return Math.max(0, Math.min(100, number.intValue()));
@@ -1094,6 +1449,82 @@ public class MockInterviewServiceImpl extends ServiceImpl<MockInterviewMapper, M
         } catch (Exception e) {
             return Math.max(45, Math.min(240, fallback));
         }
+    }
+
+    private String normalizeNextQuestion(String question, String fallbackQuestion) {
+        String normalized = StringUtils.trimToEmpty(question)
+                .replace('\r', ' ')
+                .replace('\n', ' ')
+                .replaceAll("\\s{2,}", " ")
+                .replaceAll("^[\\-•\\d.、)）\\s]+", "");
+        if (StringUtils.isBlank(normalized)) {
+            normalized = StringUtils.defaultIfBlank(fallbackQuestion, "请继续结合一个真实项目，讲清楚你的方案、取舍和结果。");
+        }
+        int firstQuestionMark = findFirstQuestionMark(normalized);
+        if (firstQuestionMark >= 0 && firstQuestionMark < normalized.length() - 1) {
+            normalized = normalized.substring(0, firstQuestionMark + 1).trim();
+        }
+        if (normalized.length() > MAX_NEXT_QUESTION_CHARS) {
+            normalized = normalized.substring(0, MAX_NEXT_QUESTION_CHARS - 1).trim() + "？";
+        }
+        return normalized;
+    }
+
+    private String ensureFreshNextQuestion(String nextQuestion,
+                                           String latestQuestion,
+                                           MockInterview mockInterview,
+                                           InterviewPlanItem currentPlan,
+                                           InterviewPlanItem nextPlan,
+                                           boolean probe) {
+        if (!isRepeatedQuestion(nextQuestion, latestQuestion)) {
+            return nextQuestion;
+        }
+        InterviewPlanItem targetPlan = probe ? currentPlan : nextPlan;
+        String topic = targetPlan == null
+                ? StringUtils.defaultIfBlank(mockInterview == null ? null : mockInterview.getTechStack(), "这个场景")
+                : targetPlan.getFocusTopic();
+        String style = targetPlan == null ? "" : StringUtils.defaultString(targetPlan.getQuestionStyle());
+        String fallback;
+        if (probe) {
+            fallback = String.format("换个角度追一下，围绕 %s，你当时最关键的判断依据是什么？",
+                    StringUtils.defaultIfBlank(topic, "刚才这个回答"));
+        } else if (style.contains("结果") || style.contains("复盘")) {
+            fallback = "我们换到结果复盘上，这件事最后最能证明价值的指标是什么？";
+        } else {
+            fallback = buildFallbackNextQuestion(mockInterview, currentPlan, nextPlan);
+        }
+        return normalizeNextQuestion(fallback, "换个角度继续追问，你能补一个更具体的项目证据吗？");
+    }
+
+    private boolean isRepeatedQuestion(String nextQuestion, String latestQuestion) {
+        String next = normalizeQuestionForCompare(nextQuestion);
+        String latest = normalizeQuestionForCompare(latestQuestion);
+        if (StringUtils.isAnyBlank(next, latest)) {
+            return false;
+        }
+        if (next.equals(latest)) {
+            return true;
+        }
+        int shorterLength = Math.min(next.length(), latest.length());
+        return shorterLength >= 18 && (next.contains(latest) || latest.contains(next));
+    }
+
+    private String normalizeQuestionForCompare(String question) {
+        return StringUtils.defaultString(question)
+                .replaceAll("[\\s，。！？?、；;：:,.]", "")
+                .trim();
+    }
+
+    private int findFirstQuestionMark(String text) {
+        int chineseQuestionMarkIndex = text.indexOf('？');
+        int englishQuestionMarkIndex = text.indexOf('?');
+        if (chineseQuestionMarkIndex < 0) {
+            return englishQuestionMarkIndex;
+        }
+        if (englishQuestionMarkIndex < 0) {
+            return chineseQuestionMarkIndex;
+        }
+        return Math.min(chineseQuestionMarkIndex, englishQuestionMarkIndex);
     }
 
     private int averageRoundScore(InterviewReport report, Function<RoundRecord, Integer> getter, int defaultValue) {
@@ -1389,6 +1820,9 @@ public class MockInterviewServiceImpl extends ServiceImpl<MockInterviewMapper, M
         private String nextActionHint;
         private String verdict;
         private List<String> improvementTags;
+        private List<String> missingPoints;
+        private String answerRewriteSuggestion;
+        private String followUpReason;
         private String nextQuestion;
         private boolean shouldFinish;
         private boolean probe;
@@ -1412,6 +1846,9 @@ public class MockInterviewServiceImpl extends ServiceImpl<MockInterviewMapper, M
         private Integer responseSeconds;
         private String verdict;
         private List<String> improvementTags;
+        private List<String> missingPoints;
+        private String answerRewriteSuggestion;
+        private String followUpReason;
     }
 
     @Data
@@ -1442,8 +1879,10 @@ public class MockInterviewServiceImpl extends ServiceImpl<MockInterviewMapper, M
         private List<String> strengths;
         private List<String> improvements;
         private List<String> suggestedTopics;
+        private List<String> practicePlan;
         private List<RoundRecord> roundRecords;
         private List<InterviewPlanItem> agenda;
+        private List<String> answerChecklist;
         private String readinessLevel;
         private String recommendedNextAction;
     }
@@ -1459,6 +1898,7 @@ public class MockInterviewServiceImpl extends ServiceImpl<MockInterviewMapper, M
         private List<String> strengths;
         private List<String> improvements;
         private List<String> suggestedTopics;
+        private List<String> practicePlan;
         private String readinessLevel;
         private String recommendedNextAction;
         private String displayText;

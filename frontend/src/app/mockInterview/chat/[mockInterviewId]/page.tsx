@@ -54,6 +54,9 @@ interface RoundRecord {
   responseSeconds?: number;
   verdict?: string;
   improvementTags?: string[];
+  missingPoints?: string[];
+  answerRewriteSuggestion?: string;
+  followUpReason?: string;
 }
 
 interface InterviewAgendaItem {
@@ -79,8 +82,10 @@ interface InterviewReport {
   strengths?: string[];
   improvements?: string[];
   suggestedTopics?: string[];
+  practicePlan?: string[];
   roundRecords?: RoundRecord[];
   agenda?: InterviewAgendaItem[];
+  answerChecklist?: string[];
   readinessLevel?: string;
   recommendedNextAction?: string;
 }
@@ -164,6 +169,60 @@ function buildAnswerCoachHints(answer: string) {
   return hints.slice(0, 3);
 }
 
+function buildAnswerRecoveryHint(answer: string) {
+  const normalized = answer.trim();
+  if (!normalized) {
+    return "";
+  }
+  if (/(不会|不知道|不清楚|不了解|没接触|没做过|不太懂|答不上来)/.test(normalized)) {
+    return "可以诚实说明不熟，但别停在“不会”。补一段你的理解、排查思路、可验证假设和后续学习路径。";
+  }
+  if (/(可能|大概|应该|也许|好像|不确定)/.test(normalized) && normalized.length < 120) {
+    return "这段回答不确定性偏高。建议补一个你亲自验证过的事实、指标或项目经历来托住判断。";
+  }
+  return "";
+}
+
+function buildAnswerCoverageItems(answer: string) {
+  const normalized = answer.trim();
+  return [
+    {
+      label: "背景目标",
+      matched: /(背景|目标|业务|场景|需求|问题|痛点)/.test(normalized),
+    },
+    {
+      label: "个人职责",
+      matched: /(我|本人|负责|主导|参与|推进|落地)/.test(normalized),
+    },
+    {
+      label: "方案取舍",
+      matched: /(方案|设计|架构|选型|取舍|权衡|因为|所以|考虑)/.test(normalized),
+    },
+    {
+      label: "量化结果",
+      matched: /(\d|%|\b(qps|rt|ms|sla|p95|p99)\b|秒|分钟|提升|降低|减少|增长|成本|耗时)/i.test(normalized),
+    },
+    {
+      label: "复盘风险",
+      matched: /(复盘|优化|改进|风险|异常|降级|监控|告警|如果重来)/.test(normalized),
+    },
+  ];
+}
+
+function buildFallbackChecklist(questionStyle?: string) {
+  const style = questionStyle || "";
+  if (/(架构|设计|扩展)/.test(style)) {
+    return ["澄清目标、约束和量级", "拆核心模块、数据流和接口", "补瓶颈、降级、监控和成本"];
+  }
+  if (/(行为|压力|协作|动机|规划)/.test(style)) {
+    return ["用具体事件回答", "交代行动、冲突和推进方式", "补结果、反思和下一步"];
+  }
+  if (/原理/.test(style)) {
+    return ["讲核心概念和适用场景", "补关键机制、边界和常见坑", "结合一次真实项目经验"];
+  }
+  return ["背景目标和职责边界", "技术方案和关键取舍", "量化结果、复盘和优化"];
+}
+
 function safeParseJson<T>(value?: string | null): T | null {
   if (!value) {
     return null;
@@ -183,6 +242,11 @@ function formatTime(timestamp?: number) {
     hour: "2-digit",
     minute: "2-digit",
   });
+}
+
+function formatDuration(seconds?: number) {
+  const safeSeconds = Math.max(0, Math.floor(seconds || 0));
+  return `${Math.floor(safeSeconds / 60)}:${String(safeSeconds % 60).padStart(2, "0")}`;
 }
 
 function hydrateInterviewDetail(rawData?: API.MockInterview): MockInterviewDetail | undefined {
@@ -875,9 +939,26 @@ export default function InterviewRoomPage({ params }: { params: { mockInterviewI
   const currentFocus = report?.currentFocus || latestRoundRecord?.focus || "开始面试后这里会显示当前考察重点";
   const currentQuestionStyle = report?.currentQuestionStyle || latestRoundRecord?.questionStyle || "真实面试追问";
   const currentActionHint = report?.nextActionHint || "建议用背景、方案、结果和复盘的结构组织回答。";
+  const liveAnswerChecklist = (report?.answerChecklist || []).length
+    ? report?.answerChecklist || []
+    : buildFallbackChecklist(currentQuestionStyle);
+  const latestQuestionText = latestQuestionMessage?.content || "面试官会在这里给出当前问题。";
+  const answerTimePercent = Math.min(
+    100,
+    Math.round((questionElapsedSeconds / Math.max(1, recommendedAnswerSeconds)) * 100),
+  );
+  const answerOvertime = questionElapsedSeconds > recommendedAnswerSeconds;
   const canAnswer = isStarted && !isEnded;
   const isStreaming = submitting && Boolean(streamAbortControllerRef.current);
   const answerCoachHints = useMemo(() => buildAnswerCoachHints(inputMessage), [inputMessage]);
+  const answerRecoveryHint = useMemo(() => buildAnswerRecoveryHint(inputMessage), [inputMessage]);
+  const answerCoverageItems = useMemo(() => buildAnswerCoverageItems(inputMessage), [inputMessage]);
+  const answerCoverageCount = answerCoverageItems.filter((item) => item.matched).length;
+  const canSendAnswer = canAnswer
+    && Boolean(inputMessage.trim())
+    && !submitting
+    && !isRecording
+    && !isTranscribing;
 
   const appendAnswerTemplate = (template: string) => {
     stopSpeaking();
@@ -1056,6 +1137,32 @@ export default function InterviewRoomPage({ params }: { params: { mockInterviewI
             </div>
 
             <div className="input-area">
+              {canAnswer && latestQuestionMessage ? (
+                <div className="active-question-panel">
+                  <div className="active-question-head">
+                    <div>
+                      <span className="active-question-kicker">Current Question</span>
+                      <strong>第 {activeAgendaRound} 轮 · {currentQuestionStyle}</strong>
+                    </div>
+                    <span className={`active-question-timer ${answerOvertime ? "over" : ""}`}>
+                      <Clock3 size={14} />
+                      {formatDuration(questionElapsedSeconds)} / {formatDuration(recommendedAnswerSeconds)}
+                    </span>
+                  </div>
+                  <div className="active-question-text">{latestQuestionText}</div>
+                  <Progress
+                    percent={answerTimePercent}
+                    showInfo={false}
+                    strokeColor={answerOvertime ? "#f59e0b" : "#1677ff"}
+                    trailColor="rgba(203, 213, 225, 0.8)"
+                  />
+                  <div className="active-question-footer">
+                    {liveAnswerChecklist.map((item) => (
+                      <span key={item}>{item}</span>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
               <Input.TextArea
                 value={inputMessage}
                 onChange={(e) => {
@@ -1100,6 +1207,39 @@ export default function InterviewRoomPage({ params }: { params: { mockInterviewI
                   插入 STAR 模板
                 </Button>
               </div>
+              {answerRecoveryHint ? (
+                <div className="answer-risk-card">
+                  <div>
+                    <div className="answer-risk-title">回答风险提示</div>
+                    <div className="answer-risk-text">{answerRecoveryHint}</div>
+                  </div>
+                  <Button
+                    className="template-button compact"
+                    onClick={() => appendAnswerTemplate("我对这个点不是最熟，但我的理解是：\n我会先验证：\n如果落到项目里，我会关注：\n后续我会补齐：")}
+                    disabled={!canAnswer}
+                  >
+                    插入补救结构
+                  </Button>
+                </div>
+              ) : null}
+              {canAnswer ? (
+                <div className="answer-coverage-card">
+                  <div className="answer-coverage-head">
+                    <span>作答覆盖度</span>
+                    <strong>{answerCoverageCount}/{answerCoverageItems.length}</strong>
+                  </div>
+                  <div className="coverage-list">
+                    {answerCoverageItems.map((item) => (
+                      <span className={`coverage-item ${item.matched ? "done" : ""}`} key={item.label}>
+                        {item.label}
+                      </span>
+                    ))}
+                  </div>
+                  {inputMessage.trim() && answerCoverageCount < 3 ? (
+                    <div className="coverage-tip">建议至少补齐 3 项后再发送，回答会更像真实面试里的有效信息。</div>
+                  ) : null}
+                </div>
+              ) : null}
               {answerCoachHints.length ? (
                 <div className="answer-coach-card">
                   <div className="answer-coach-title">发出前再补一口</div>
@@ -1192,8 +1332,8 @@ export default function InterviewRoomPage({ params }: { params: { mockInterviewI
                   type="primary"
                   onClick={() => void sendMessage()}
                   loading={submitting}
-                  disabled={!canAnswer || isRecording || isTranscribing}
-                  className="send-button"
+                  disabled={!canSendAnswer}
+                  className={`send-button ${answerCoverageCount < 3 && inputMessage.trim() ? "needs-more" : ""}`}
                 >
                   发送回答
                 </Button>
@@ -1246,13 +1386,19 @@ export default function InterviewRoomPage({ params }: { params: { mockInterviewI
                 </Title>
               </div>
               <span className="score-pill subtle">
-                {Math.floor(questionElapsedSeconds / 60)}:{String(questionElapsedSeconds % 60).padStart(2, "0")}
+                {formatDuration(questionElapsedSeconds)}
               </span>
             </div>
             <div className="live-cue-panel">
               <div className="cue-tag">{currentQuestionStyle}</div>
               <div className="cue-focus">{currentFocus}</div>
               <div className="cue-hint">{currentActionHint}</div>
+              <div className="cue-checklist">
+                <div className="cue-checklist-title">本轮回答抓手</div>
+                {liveAnswerChecklist.map((item) => (
+                  <div className="cue-checklist-item" key={item}>{item}</div>
+                ))}
+              </div>
               {isPaused ? (
                 <div className="cue-paused-banner">面试已暂停，继续后会从当前考察点接着追问。</div>
               ) : null}
@@ -1293,10 +1439,29 @@ export default function InterviewRoomPage({ params }: { params: { mockInterviewI
                     ))}
                   </div>
                 ) : null}
+                {(latestRoundRecord.missingPoints || []).length ? (
+                  <div className="missing-point-list">
+                    {(latestRoundRecord.missingPoints || []).map((item) => (
+                      <span className="missing-point" key={item}>{item}</span>
+                    ))}
+                  </div>
+                ) : null}
                 <div className="feedback-focus">
                   <div className="focus-label">{isEnded ? "这一轮主要问题：" : "面试官观察重点："}</div>
                   <div className="focus-text">{latestRoundRecord.focus || "继续补充项目细节和设计取舍。"}</div>
                 </div>
+                {latestRoundRecord.followUpReason ? (
+                  <div className="feedback-focus neutral">
+                    <div className="focus-label">追问理由</div>
+                    <div className="focus-text">{latestRoundRecord.followUpReason}</div>
+                  </div>
+                ) : null}
+                {latestRoundRecord.answerRewriteSuggestion ? (
+                  <div className="rewrite-suggestion">
+                    <div className="focus-label">改进版回答骨架</div>
+                    <div>{latestRoundRecord.answerRewriteSuggestion}</div>
+                  </div>
+                ) : null}
               </div>
             ) : (
               <Empty description="回答第一轮后，这里会显示本轮反馈" image={Empty.PRESENTED_IMAGE_SIMPLE} />
@@ -1415,6 +1580,19 @@ export default function InterviewRoomPage({ params }: { params: { mockInterviewI
                   </div>
                 </div>
               </div>
+              {(report.practicePlan || []).length ? (
+                <div className="practice-plan-panel">
+                  <div className="block-title">下一步训练计划</div>
+                  <div className="practice-plan-list">
+                    {(report.practicePlan || []).map((item, index) => (
+                      <div className="practice-plan-item" key={`${index}-${item}`}>
+                        <span>{index + 1}</span>
+                        <div>{item}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
 
               {(report?.roundRecords || []).length ? (
                 <div className="review-round-section">
@@ -1455,6 +1633,25 @@ export default function InterviewRoomPage({ params }: { params: { mockInterviewI
                             {(item.improvementTags || []).map((tag) => (
                               <span className="feedback-tag" key={`${item.round}-${tag}`}>{tag}</span>
                             ))}
+                          </div>
+                        ) : null}
+                        {(item.missingPoints || []).length ? (
+                          <div className="record-tags">
+                            {(item.missingPoints || []).map((point) => (
+                              <span className="missing-point" key={`${item.round}-${point}`}>{point}</span>
+                            ))}
+                          </div>
+                        ) : null}
+                        {item.followUpReason ? (
+                          <div className="review-round-block">
+                            <div className="focus-label">追问理由</div>
+                            <div className="focus-text">{item.followUpReason}</div>
+                          </div>
+                        ) : null}
+                        {item.answerRewriteSuggestion ? (
+                          <div className="review-round-block">
+                            <div className="focus-label">改进版回答骨架</div>
+                            <div className="record-answer">{item.answerRewriteSuggestion}</div>
                           </div>
                         ) : null}
                       </div>

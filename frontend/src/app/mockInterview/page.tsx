@@ -9,6 +9,7 @@ import {
   List,
   Pagination,
   Popconfirm,
+  Progress,
   Segmented,
   Spin,
   Tag,
@@ -52,6 +53,16 @@ const statusFilterOptions = [
 
 type StatusFilterValue = (typeof statusFilterOptions)[number]["value"];
 
+interface InterviewReportPreview {
+  overallScore?: number;
+  readinessLevel?: string;
+  currentFocus?: string;
+  nextActionHint?: string;
+  summary?: string;
+  improvements?: string[];
+  practicePlan?: string[];
+}
+
 function safeParseJson<T>(value?: string | null): T | null {
   if (!value) {
     return null;
@@ -61,6 +72,14 @@ function safeParseJson<T>(value?: string | null): T | null {
   } catch {
     return null;
   }
+}
+
+function abbreviateText(text?: string, maxLength = 96) {
+  const normalized = (text || "").replace(/\s+/g, " ").trim();
+  if (normalized.length <= maxLength) {
+    return normalized;
+  }
+  return `${normalized.slice(0, Math.max(0, maxLength - 1)).trim()}…`;
 }
 
 export default function MockInterviewHomePage() {
@@ -209,16 +228,18 @@ export default function MockInterviewHomePage() {
               split={false}
               renderItem={(item) => {
                 const status = statusMap[item.status ?? 0] || statusMap[0];
-                const report = safeParseJson<{
-                  readinessLevel?: string;
-                  currentFocus?: string;
-                  summary?: string;
-                }>(item.report);
+                const report = safeParseJson<InterviewReportPreview>(item.report);
+                const progressPercent = Math.min(
+                  100,
+                  Math.round(((item.currentRound || 0) / Math.max(1, item.expectedRounds || 5)) * 100),
+                );
+                const practicePlan = (report?.practicePlan || []).slice(0, 2);
+                const improvementTags = (report?.improvements || []).slice(0, 3);
                 return (
                   <List.Item className="!px-0">
                     <Card className="w-full rounded-2xl border border-slate-100 shadow-sm">
                       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-                        <div className="space-y-3">
+                        <div className="min-w-0 flex-1 space-y-3">
                           <div className="flex flex-wrap items-center gap-3">
                             <Title level={4} className="!mb-0 !text-slate-900">
                               {item.jobPosition || "未命名模拟面试"}
@@ -243,6 +264,13 @@ export default function MockInterviewHomePage() {
                               轮次：{item.currentRound || 0}/{item.expectedRounds || 5}
                             </span>
                           </div>
+                          <div className="max-w-xl">
+                            <div className="mb-1 flex items-center justify-between gap-3 text-xs font-bold text-slate-400">
+                              <span>轮次进度</span>
+                              <span>{progressPercent}%</span>
+                            </div>
+                            <Progress percent={progressPercent} showInfo={false} strokeColor="#1677ff" />
+                          </div>
                           {report?.readinessLevel ? (
                             <div className="inline-flex items-center rounded-full bg-primary/10 px-3 py-1 text-xs font-bold text-primary">
                               当前就绪度：{report.readinessLevel}
@@ -250,13 +278,49 @@ export default function MockInterviewHomePage() {
                           ) : null}
                           {report?.currentFocus && item.status !== 2 ? (
                             <Text className="block text-slate-500">
-                              当前停留重点：{report.currentFocus}
+                              当前停留重点：{abbreviateText(report.currentFocus, 88)}
+                            </Text>
+                          ) : null}
+                          {report?.nextActionHint && item.status !== 2 ? (
+                            <Text className="block text-slate-500">
+                              下一步回答抓手：{abbreviateText(report.nextActionHint, 96)}
                             </Text>
                           ) : null}
                           {report?.summary && item.status === 2 ? (
                             <Text className="block text-slate-500">
-                              复盘摘要：{report.summary}
+                              复盘摘要：{abbreviateText(report.summary, 120)}
                             </Text>
+                          ) : null}
+                          {item.status === 2 && (practicePlan.length || improvementTags.length || report?.overallScore) ? (
+                            <div className="grid gap-3 rounded-2xl bg-slate-50 p-3 md:grid-cols-[96px_minmax(0,1fr)]">
+                              <div className="flex items-center gap-3 md:block">
+                                <div className="text-xs font-black uppercase tracking-widest text-slate-400">Score</div>
+                                <div className="text-2xl font-black text-slate-900">{report?.overallScore || 0}</div>
+                              </div>
+                              <div className="min-w-0 space-y-2">
+                                {improvementTags.length ? (
+                                  <div className="flex flex-wrap gap-2">
+                                    {improvementTags.map((tag) => (
+                                      <span
+                                        className="rounded-full bg-amber-50 px-3 py-1 text-xs font-bold text-amber-700"
+                                        key={tag}
+                                      >
+                                        {abbreviateText(tag, 28)}
+                                      </span>
+                                    ))}
+                                  </div>
+                                ) : null}
+                                {practicePlan.length ? (
+                                  <div className="space-y-1 text-xs font-semibold leading-6 text-slate-500">
+                                    {practicePlan.map((plan, index) => (
+                                      <div key={`${index}-${plan}`}>
+                                        训练 {index + 1}：{abbreviateText(plan, 72)}
+                                      </div>
+                                    ))}
+                                  </div>
+                                ) : null}
+                              </div>
+                            </div>
                           ) : null}
                           <Text className="text-slate-400">
                             最近更新时间：{item.updateTime ? new Date(item.updateTime).toLocaleString() : "-"}

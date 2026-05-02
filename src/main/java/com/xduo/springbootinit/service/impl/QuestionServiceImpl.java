@@ -758,6 +758,7 @@ public class QuestionServiceImpl extends ServiceImpl<QuestionMapper, Question> i
 
         result.setJobDirection(profile.getJobDirection());
         result.setExtractedTags(profile.getExtractedTags());
+        result.setResumeText(trimmedResumeText);
         result.setAnalysisSummary(profile.getAnalysisSummary());
         result.setRecommendFocus(profile.getRecommendFocus());
         result.setAnalysisSource(profile.getAnalysisSource());

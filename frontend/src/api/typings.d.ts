@@ -1109,6 +1109,7 @@ declare namespace API {
     jobDirection?: string;
     questionList?: QuestionVO[];
     recommendFocus?: string;
+    resumeText?: string;
   };
 
   type SecurityAlertHandleRequest = {

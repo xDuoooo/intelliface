@@ -190,6 +190,7 @@ public class MockInterviewServiceImpl extends ServiceImpl<MockInterviewMapper, M
                         roundAnalysis.getVerdict(),
                         roundAnalysis.getImprovementTags(),
                         roundAnalysis.getMissingPoints(),
+                        roundAnalysis.getAnswerQualitySignals(),
                         roundAnalysis.getAnswerRewriteSuggestion(),
                         roundAnalysis.getFollowUpReason()
                 ), probeAnswer);
@@ -378,6 +379,9 @@ public class MockInterviewServiceImpl extends ServiceImpl<MockInterviewMapper, M
                 }
                 if (roundRecord.getMissingPoints() != null && !roundRecord.getMissingPoints().isEmpty()) {
                     appendMarkdownBullet(markdownBuilder, "本轮缺口", String.join("、", roundRecord.getMissingPoints()));
+                }
+                if (roundRecord.getAnswerQualitySignals() != null && !roundRecord.getAnswerQualitySignals().isEmpty()) {
+                    appendMarkdownBullet(markdownBuilder, "诊断信号", String.join("、", roundRecord.getAnswerQualitySignals()));
                 }
                 if (StringUtils.isNotBlank(roundRecord.getFollowUpReason())) {
                     appendMarkdownBullet(markdownBuilder, "追问理由", roundRecord.getFollowUpReason());
@@ -575,6 +579,10 @@ public class MockInterviewServiceImpl extends ServiceImpl<MockInterviewMapper, M
                     mergeStringList(existingRecord.getMissingPoints(), nextRecord.getMissingPoints()),
                     MAX_LIST_ITEMS,
                     MAX_LIST_ITEM_CHARS));
+            existingRecord.setAnswerQualitySignals(limitStringList(
+                    mergeStringList(existingRecord.getAnswerQualitySignals(), nextRecord.getAnswerQualitySignals()),
+                    MAX_LIST_ITEMS,
+                    MAX_LIST_ITEM_CHARS));
             existingRecord.setAnswerRewriteSuggestion(mergeLabeledText(existingRecord.getAnswerRewriteSuggestion(),
                     "补充改法", nextRecord.getAnswerRewriteSuggestion()));
             existingRecord.setFollowUpReason(nextRecord.getFollowUpReason());
@@ -626,8 +634,15 @@ public class MockInterviewServiceImpl extends ServiceImpl<MockInterviewMapper, M
             checklist.add("说明瓶颈、降级、监控和成本取舍");
             return checklist;
         }
+        if (questionStyle.contains("数据") || questionStyle.contains("性能") || questionStyle.contains("稳定性")
+                || questionStyle.contains("安全") || questionStyle.contains("成本")) {
+            checklist.add("先说清目标指标、现状基线和约束");
+            checklist.add("说明定位过程、关键动作和技术取舍");
+            checklist.add("补充风险兜底、监控验证和最终效果");
+            return checklist;
+        }
         if (questionStyle.contains("行为") || questionStyle.contains("压力") || questionStyle.contains("协作")
-                || questionStyle.contains("动机") || questionStyle.contains("规划")) {
+                || questionStyle.contains("冲突") || questionStyle.contains("动机") || questionStyle.contains("规划")) {
             checklist.add("用一个具体事件回答，避免只讲观点");
             checklist.add("说清当时背景、你的行动和冲突处理");
             checklist.add("补充结果、反思和下一次会怎么做");
@@ -637,6 +652,12 @@ public class MockInterviewServiceImpl extends ServiceImpl<MockInterviewMapper, M
             checklist.add("先给出核心概念和适用场景");
             checklist.add("补充关键机制、边界条件和常见坑");
             checklist.add("结合项目里一次真实使用或排障经验");
+            return checklist;
+        }
+        if (questionStyle.contains("结果") || questionStyle.contains("复盘") || questionStyle.contains("压测")) {
+            checklist.add("给出目标指标、基线和最终变化");
+            checklist.add("说清你的动作、问题定位和关键取舍");
+            checklist.add("补充失败风险、复盘结论和后续优化");
             return checklist;
         }
         checklist.add("讲清业务背景、目标和你的职责边界");
@@ -860,10 +881,10 @@ public class MockInterviewServiceImpl extends ServiceImpl<MockInterviewMapper, M
         return String.join("；", questions.subList(startIndex, questions.size()));
     }
 
-    private String buildAnswerQualitySignals(String answer) {
+    private List<String> buildAnswerQualitySignalList(String answer) {
         String normalizedAnswer = StringUtils.trimToEmpty(answer);
         if (StringUtils.isBlank(normalizedAnswer)) {
-            return "空回答";
+            return new ArrayList<>(List.of("空回答"));
         }
         List<String> signals = new ArrayList<>();
         if (looksLikeNonAnswer(normalizedAnswer)) {
@@ -884,6 +905,11 @@ public class MockInterviewServiceImpl extends ServiceImpl<MockInterviewMapper, M
         if (!hasReviewSignal(normalizedAnswer)) {
             signals.add("缺少复盘或风险意识");
         }
+        return signals;
+    }
+
+    private String buildAnswerQualitySignals(String answer) {
+        List<String> signals = buildAnswerQualitySignalList(answer);
         return signals.isEmpty() ? "回答信息相对完整，可继续按计划深挖" : String.join("；", signals);
     }
 
@@ -1093,6 +1119,7 @@ public class MockInterviewServiceImpl extends ServiceImpl<MockInterviewMapper, M
         roundAnalysis.setVerdict(completedRounds <= 2 ? "回答方向基本正确，但深度还不够" : "回答较稳，但还缺更强的量化和取舍表达");
         roundAnalysis.setImprovementTags(new ArrayList<>(List.of("补量化结果", "补设计取舍", "补异常场景")));
         roundAnalysis.setMissingPoints(new ArrayList<>(List.of("缺少可验证指标", "技术取舍理由不够明确", "异常和边界场景覆盖不足")));
+        roundAnalysis.setAnswerQualitySignals(new ArrayList<>(List.of("缺少可验证指标", "技术取舍或推理链不足")));
         roundAnalysis.setAnswerRewriteSuggestion("可以按“背景目标 -> 我的职责 -> 关键方案和取舍 -> 量化结果 -> 复盘改进”的顺序重答一遍。");
         roundAnalysis.setFollowUpReason("继续确认候选人是否能把方案落到真实业务指标和边界场景。");
         roundAnalysis.setNextQuestion(buildFallbackNextQuestion(mockInterview, currentPlan, nextPlan));
@@ -1104,14 +1131,22 @@ public class MockInterviewServiceImpl extends ServiceImpl<MockInterviewMapper, M
     private SummaryResult buildSummaryFallback(InterviewReport interviewReport) {
         SummaryResult summaryResult = new SummaryResult();
         int completedRounds = Math.max(1, interviewReport.getCompletedRounds());
-        summaryResult.setOverallScore(averageRoundScore(interviewReport, RoundRecord::getScore, 78));
+        int fallbackCommunicationScore = Math.max(60, Math.min(90, 68 + completedRounds * 2));
+        int fallbackTechnicalScore = Math.max(62, Math.min(92, 70 + completedRounds * 2));
+        int fallbackProblemSolvingScore = Math.max(60, Math.min(90, 67 + completedRounds * 2));
+        int communicationScore = averageRoundScore(interviewReport, RoundRecord::getCommunicationScore, fallbackCommunicationScore);
+        int technicalScore = averageRoundScore(interviewReport, RoundRecord::getTechnicalScore, fallbackTechnicalScore);
+        int problemSolvingScore = averageRoundScore(interviewReport, RoundRecord::getProblemSolvingScore, fallbackProblemSolvingScore);
+        summaryResult.setOverallScore(averageRoundScore(interviewReport,
+                RoundRecord::getScore,
+                (communicationScore + technicalScore + problemSolvingScore) / 3));
         summaryResult.setSummary("整体表现较稳，具备一定项目经验和表达基础，但在量化结果、系统设计取舍与边界场景分析上还有提升空间。");
         summaryResult.setStrengths(new ArrayList<>(List.of("能够围绕问题作答", "具备一定项目实践经验", "回答结构相对完整")));
         summaryResult.setImprovements(new ArrayList<>(List.of("补充更多量化结果", "进一步说明设计取舍与稳定性策略", "回答时增加边界场景和异常处理说明")));
         summaryResult.setSuggestedTopics(new ArrayList<>(List.of("高并发场景设计", "数据库与缓存优化", "异常处理与稳定性治理")));
-        summaryResult.setCommunicationScore(Math.max(60, Math.min(90, 68 + completedRounds * 2)));
-        summaryResult.setTechnicalScore(Math.max(62, Math.min(92, 70 + completedRounds * 2)));
-        summaryResult.setProblemSolvingScore(Math.max(60, Math.min(90, 67 + completedRounds * 2)));
+        summaryResult.setCommunicationScore(communicationScore);
+        summaryResult.setTechnicalScore(technicalScore);
+        summaryResult.setProblemSolvingScore(problemSolvingScore);
         summaryResult.setReadinessLevel("具备一轮技术面试基础，建议继续冲刺表达和系统设计");
         summaryResult.setRecommendedNextAction("优先复盘回答太短的轮次，并围绕量化结果、技术选型理由和稳定性方案做二次演练。");
         summaryResult.setPracticePlan(new ArrayList<>(List.of(
@@ -1170,7 +1205,9 @@ public class MockInterviewServiceImpl extends ServiceImpl<MockInterviewMapper, M
             applyAnswerQualityGuardrails(roundAnalysis, mockInterview, latestAnswer);
             return roundAnalysis;
         } catch (Exception e) {
-            return buildRoundFallback(mockInterview, completedRounds, currentPlan, nextPlan);
+            RoundAnalysis fallback = buildRoundFallback(mockInterview, completedRounds, currentPlan, nextPlan);
+            applyAnswerQualityGuardrails(fallback, mockInterview, latestAnswer);
+            return fallback;
         }
     }
 
@@ -1319,6 +1356,11 @@ public class MockInterviewServiceImpl extends ServiceImpl<MockInterviewMapper, M
         }
 
         capRoundScores(roundAnalysis, scoreCap);
+        List<String> answerQualitySignals = buildAnswerQualitySignalList(answer);
+        if (answerQualitySignals.isEmpty()) {
+            answerQualitySignals = new ArrayList<>(List.of("回答结构相对完整"));
+        }
+        roundAnalysis.setAnswerQualitySignals(limitStringList(answerQualitySignals, MAX_LIST_ITEMS, MAX_LIST_ITEM_CHARS));
         roundAnalysis.setImprovementTags(limitStringList(improvementTags, MAX_LIST_ITEMS, 32));
         roundAnalysis.setMissingPoints(limitStringList(missingPoints, MAX_LIST_ITEMS, MAX_LIST_ITEM_CHARS));
     }
@@ -1366,6 +1408,7 @@ public class MockInterviewServiceImpl extends ServiceImpl<MockInterviewMapper, M
         roundAnalysis.setMissingPoints(nonAnswer
                 ? new ArrayList<>(List.of("没有说明已有理解", "缺少推理或排查路径", "没有给出如何验证", "缺少补齐计划"))
                 : new ArrayList<>(List.of("业务背景不清楚", "个人职责边界不清楚", "缺少量化结果", "缺少复盘")));
+        roundAnalysis.setAnswerQualitySignals(limitStringList(buildAnswerQualitySignalList(userAnswer), MAX_LIST_ITEMS, MAX_LIST_ITEM_CHARS));
         roundAnalysis.setAnswerRewriteSuggestion(nonAnswer
                 ? "可以按“这个点我不完全熟 -> 我的初步理解是 -> 我会先验证哪些假设 -> 落到项目会关注哪些风险 -> 后续怎么补齐”来回答。"
                 : "请按“当时要解决什么问题 -> 我负责什么 -> 我怎么做 -> 最后指标变化 -> 复盘得到什么”补一版。");
@@ -1877,6 +1920,7 @@ public class MockInterviewServiceImpl extends ServiceImpl<MockInterviewMapper, M
         private String verdict;
         private List<String> improvementTags;
         private List<String> missingPoints;
+        private List<String> answerQualitySignals;
         private String answerRewriteSuggestion;
         private String followUpReason;
         private String nextQuestion;
@@ -1903,6 +1947,7 @@ public class MockInterviewServiceImpl extends ServiceImpl<MockInterviewMapper, M
         private String verdict;
         private List<String> improvementTags;
         private List<String> missingPoints;
+        private List<String> answerQualitySignals;
         private String answerRewriteSuggestion;
         private String followUpReason;
     }

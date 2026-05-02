@@ -55,6 +55,7 @@ interface RoundRecord {
   verdict?: string;
   improvementTags?: string[];
   missingPoints?: string[];
+  answerQualitySignals?: string[];
   answerRewriteSuggestion?: string;
   followUpReason?: string;
 }
@@ -183,8 +184,60 @@ function buildAnswerRecoveryHint(answer: string) {
   return "";
 }
 
-function buildAnswerCoverageItems(answer: string) {
+function buildAnswerCoverageItems(answer: string, questionStyle?: string) {
   const normalized = answer.trim();
+  const style = questionStyle || "";
+  if (/(架构|设计|扩展|数据|性能|稳定性|安全|成本)/.test(style)) {
+    return [
+      {
+        label: "需求约束",
+        matched: /(需求|目标|约束|边界|量级|容量|qps|并发|sla)/i.test(normalized),
+      },
+      {
+        label: "模块数据流",
+        matched: /(模块|服务|接口|数据流|链路|表|缓存|队列|消息|存储)/.test(normalized),
+      },
+      {
+        label: "关键取舍",
+        matched: /(取舍|权衡|因为|所以|一致性|可用性|延迟|吞吐|成本|复杂度)/.test(normalized),
+      },
+      {
+        label: "风险兜底",
+        matched: /(风险|异常|降级|限流|熔断|容灾|监控|告警|回滚)/.test(normalized),
+      },
+      {
+        label: "指标验证",
+        matched: /(\d|%|\b(qps|rt|ms|sla|p95|p99)\b|秒|分钟|提升|降低|成本|耗时)/i.test(normalized),
+      },
+    ];
+  }
+  if (/(行为|压力|协作|冲突|动机|规划)/.test(style)) {
+    return [
+      { label: "具体事件", matched: /(有一次|当时|背景|项目|场景|情况|situation)/i.test(normalized) },
+      { label: "目标任务", matched: /(目标|任务|问题|挑战|task|需要|希望)/i.test(normalized) },
+      { label: "我的行动", matched: /(我|本人|负责|推进|协调|沟通|action|做了)/i.test(normalized) },
+      { label: "结果影响", matched: /(结果|最终|影响|收益|提升|降低|完成|result|\d|%)/i.test(normalized) },
+      { label: "反思复盘", matched: /(反思|复盘|学到|改进|下次|reflection|如果重来)/i.test(normalized) },
+    ];
+  }
+  if (/原理/.test(style)) {
+    return [
+      { label: "核心概念", matched: /(概念|本质|核心|原理|机制|是什么)/.test(normalized) },
+      { label: "适用场景", matched: /(场景|适用|用于|什么时候|业务|项目)/.test(normalized) },
+      { label: "关键机制", matched: /(流程|机制|过程|实现|底层|源码|协议|算法)/.test(normalized) },
+      { label: "边界坑点", matched: /(边界|缺点|问题|坑|风险|异常|限制|不适合)/.test(normalized) },
+      { label: "项目经验", matched: /(我|项目|线上|排查|实践|使用|落地|优化)/.test(normalized) },
+    ];
+  }
+  if (/(结果|复盘|压测)/.test(style)) {
+    return [
+      { label: "目标指标", matched: /(目标|指标|基线|qps|rt|p95|p99|成本|耗时|错误率)/i.test(normalized) },
+      { label: "我的动作", matched: /(我|负责|推进|优化|调整|改造|压测|定位)/.test(normalized) },
+      { label: "最终结果", matched: /(结果|最终|提升|降低|减少|增长|稳定|\d|%)/.test(normalized) },
+      { label: "问题风险", matched: /(问题|风险|异常|瓶颈|失败|回滚|降级)/.test(normalized) },
+      { label: "复盘改进", matched: /(复盘|改进|如果重来|下次|后续|优化)/.test(normalized) },
+    ];
+  }
   return [
     {
       label: "背景目标",
@@ -214,11 +267,17 @@ function buildFallbackChecklist(questionStyle?: string) {
   if (/(架构|设计|扩展)/.test(style)) {
     return ["澄清目标、约束和量级", "拆核心模块、数据流和接口", "补瓶颈、降级、监控和成本"];
   }
+  if (/(数据|性能|稳定性|安全|成本)/.test(style)) {
+    return ["先说目标指标和现状基线", "补定位过程、动作和取舍", "说明兜底、监控和最终效果"];
+  }
   if (/(行为|压力|协作|动机|规划)/.test(style)) {
     return ["用具体事件回答", "交代行动、冲突和推进方式", "补结果、反思和下一步"];
   }
   if (/原理/.test(style)) {
     return ["讲核心概念和适用场景", "补关键机制、边界和常见坑", "结合一次真实项目经验"];
+  }
+  if (/(结果|复盘|压测)/.test(style)) {
+    return ["给目标指标、基线和变化", "讲你的动作和关键取舍", "补风险、复盘和后续优化"];
   }
   return ["背景目标和职责边界", "技术方案和关键取舍", "量化结果、复盘和优化"];
 }
@@ -265,6 +324,14 @@ function formatTime(timestamp?: number) {
 function formatDuration(seconds?: number) {
   const safeSeconds = Math.max(0, Math.floor(seconds || 0));
   return `${Math.floor(safeSeconds / 60)}:${String(safeSeconds % 60).padStart(2, "0")}`;
+}
+
+function buildRoundScoreItems(record?: RoundRecord | null) {
+  return [
+    { label: "表达", value: record?.communicationScore || 0 },
+    { label: "技术", value: record?.technicalScore || 0 },
+    { label: "分析", value: record?.problemSolvingScore || 0 },
+  ];
 }
 
 function hydrateInterviewDetail(rawData?: API.MockInterview): MockInterviewDetail | undefined {
@@ -970,12 +1037,16 @@ export default function InterviewRoomPage({ params }: { params: { mockInterviewI
   const isStreaming = submitting && Boolean(streamAbortControllerRef.current);
   const answerCoachHints = useMemo(() => buildAnswerCoachHints(inputMessage), [inputMessage]);
   const answerRecoveryHint = useMemo(() => buildAnswerRecoveryHint(inputMessage), [inputMessage]);
-  const answerCoverageItems = useMemo(() => buildAnswerCoverageItems(inputMessage), [inputMessage]);
+  const answerCoverageItems = useMemo(
+    () => buildAnswerCoverageItems(inputMessage, currentQuestionStyle),
+    [currentQuestionStyle, inputMessage],
+  );
   const answerCoverageCount = answerCoverageItems.filter((item) => item.matched).length;
   const contextualAnswerTemplate = useMemo(
     () => buildContextualAnswerTemplate(currentQuestionStyle, currentFocus),
     [currentFocus, currentQuestionStyle],
   );
+  const latestRoundScoreItems = buildRoundScoreItems(latestRoundRecord);
   const canSendAnswer = canAnswer
     && Boolean(inputMessage.trim())
     && !submitting
@@ -1461,6 +1532,19 @@ export default function InterviewRoomPage({ params }: { params: { mockInterviewI
                 {latestRoundRecord.responseSeconds ? (
                   <div className="feedback-meta">本轮作答用时 {latestRoundRecord.responseSeconds}s</div>
                 ) : null}
+                {latestRoundScoreItems.some((item) => item.value > 0) ? (
+                  <div className="round-score-mini-grid">
+                    {latestRoundScoreItems.map((item) => (
+                      <div className="round-score-mini" key={item.label}>
+                        <div className="round-score-mini-head">
+                          <span>{item.label}</span>
+                          <strong>{item.value}</strong>
+                        </div>
+                        <Progress percent={item.value} showInfo={false} strokeColor="#1677ff" />
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
                 {(latestRoundRecord.improvementTags || []).length ? (
                   <div className="feedback-tags">
                     {(latestRoundRecord.improvementTags || []).map((tag) => (
@@ -1473,6 +1557,16 @@ export default function InterviewRoomPage({ params }: { params: { mockInterviewI
                     {(latestRoundRecord.missingPoints || []).map((item) => (
                       <span className="missing-point" key={item}>{item}</span>
                     ))}
+                  </div>
+                ) : null}
+                {(latestRoundRecord.answerQualitySignals || []).length ? (
+                  <div className="diagnostic-signal-panel">
+                    <div className="focus-label">诊断信号</div>
+                    <div className="diagnostic-signal-list">
+                      {(latestRoundRecord.answerQualitySignals || []).map((item) => (
+                        <span className="diagnostic-signal" key={item}>{item}</span>
+                      ))}
+                    </div>
                   </div>
                 ) : null}
                 <div className="feedback-focus">
@@ -1641,6 +1735,17 @@ export default function InterviewRoomPage({ params }: { params: { mockInterviewI
                         {item.responseSeconds ? (
                           <div className="record-meta">实际作答 {item.responseSeconds}s</div>
                         ) : null}
+                        <div className="round-score-mini-grid compact">
+                          {buildRoundScoreItems(item).map((scoreItem) => (
+                            <div className="round-score-mini" key={`${item.round}-${scoreItem.label}`}>
+                              <div className="round-score-mini-head">
+                                <span>{scoreItem.label}</span>
+                                <strong>{scoreItem.value}</strong>
+                              </div>
+                              <Progress percent={scoreItem.value} showInfo={false} strokeColor="#1677ff" />
+                            </div>
+                          ))}
+                        </div>
                         {item.verdict ? <div className="record-verdict">{item.verdict}</div> : null}
                         <div className="review-round-block">
                           <div className="focus-label">面试问题</div>
@@ -1669,6 +1774,16 @@ export default function InterviewRoomPage({ params }: { params: { mockInterviewI
                             {(item.missingPoints || []).map((point) => (
                               <span className="missing-point" key={`${item.round}-${point}`}>{point}</span>
                             ))}
+                          </div>
+                        ) : null}
+                        {(item.answerQualitySignals || []).length ? (
+                          <div className="review-round-block">
+                            <div className="focus-label">诊断信号</div>
+                            <div className="diagnostic-signal-list">
+                              {(item.answerQualitySignals || []).map((signal) => (
+                                <span className="diagnostic-signal" key={`${item.round}-${signal}`}>{signal}</span>
+                              ))}
+                            </div>
                           </div>
                         ) : null}
                         {item.followUpReason ? (

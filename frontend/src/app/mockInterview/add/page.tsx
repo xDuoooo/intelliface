@@ -1,17 +1,28 @@
 "use client";
-import { Button, Form, Input, InputNumber, Progress, Select, Tag, message } from "antd";
+import { Button, Form, Input, InputNumber, Progress, Select, Tag, Upload, message } from "antd";
+import type { UploadProps } from "antd";
 import React, { useEffect, useMemo, useState } from "react";
 import {
   addMockInterviewUsingPost,
   getMockInterviewByIdUsingGet,
 } from "@/api/mockInterviewController";
+import { recommendQuestionsByResumeFileUsingPost } from "@/api/questionController";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ClipboardCheck, Sparkles } from "lucide-react";
+import { ClipboardCheck, FileSearch, Paperclip, Sparkles, UploadCloud, X } from "lucide-react";
 import "./index.css";
 
 interface Props {}
 
 const CREATE_DRAFT_STORAGE_KEY = "mockInterview:createDraft:v1";
+
+const workExperienceOptions = [
+  { label: "应届 / 在校", value: "应届 / 在校" },
+  { label: "1 年以内", value: "1 年以内" },
+  { label: "1 - 3 年", value: "1 - 3 年" },
+  { label: "3 - 5 年", value: "3 - 5 年" },
+  { label: "5 - 10 年", value: "5 - 10 年" },
+  { label: "10 年以上", value: "10 年以上" },
+];
 
 function buildBackgroundTemplate(values?: Partial<API.MockInterviewAddRequest>) {
   const position = values?.jobPosition || "目标岗位";
@@ -70,6 +81,28 @@ function buildInterviewPreview(values?: Partial<API.MockInterviewAddRequest>) {
   return ["自我介绍与代表性项目", `${techStack} 的原理和场景落地`, "性能、稳定性、边界条件和综合追问"];
 }
 
+function mergeTechStack(currentTechStack?: string, tags?: string[]) {
+  const currentList = (currentTechStack || "")
+    .split(/[、,，/\s]+/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+  const tagList = (tags || []).map((item) => item?.trim()).filter(Boolean) as string[];
+  return Array.from(new Set([...currentList, ...tagList])).slice(0, 12).join("、").slice(0, 256);
+}
+
+function buildImportedResumeText(result?: API.ResumeQuestionRecommendVO) {
+  const parsedText = result?.resumeText?.trim();
+  if (parsedText) {
+    return parsedText.slice(0, 4000);
+  }
+  return [
+    result?.jobDirection ? `岗位方向：${result.jobDirection}` : "",
+    result?.extractedTags?.length ? `技能标签：${result.extractedTags.join("、")}` : "",
+    result?.analysisSummary ? `分析摘要：${result.analysisSummary}` : "",
+    result?.recommendFocus ? `建议补强：${result.recommendFocus}` : "",
+  ].filter(Boolean).join("\n").slice(0, 4000);
+}
+
 /**
  * 创建 AI 模拟面试页面
  * @param props
@@ -80,6 +113,9 @@ const CreateMockInterviewPage: React.FC<Props> = (props) => {
   const formValues = Form.useWatch([], form);
   const [loading, setLoading] = useState(false);
   const [prefillLoading, setPrefillLoading] = useState(false);
+  const [resumeFile, setResumeFile] = useState<File | null>(null);
+  const [resumeParsing, setResumeParsing] = useState(false);
+  const [resumeParseResult, setResumeParseResult] = useState<API.ResumeQuestionRecommendVO>();
   const router = useRouter();
   const searchParams = useSearchParams();
   const fromInterviewId = useMemo(() => searchParams?.get("from") || "", [searchParams]);

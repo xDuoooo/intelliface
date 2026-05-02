@@ -27,6 +27,11 @@ public class ResumeQuestionRecommendVO implements Serializable {
     private String analysisSummary;
 
     /**
+     * 解析后的简历文本
+     */
+    private String resumeText;
+
+    /**
      * 推荐补强方向
      */
     private String recommendFocus;

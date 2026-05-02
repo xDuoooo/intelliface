@@ -27,7 +27,9 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import java.util.Map;
 
 /**
  * 帖子评论接口
@@ -62,6 +64,14 @@ public class PostCommentController {
         }
         User loginUser = userService.getLoginUser(httpRequest);
         return ResultUtils.success(postCommentService.deleteComment(deleteRequest.getId(), loginUser));
+    }
+
+    @PostMapping("/like")
+    public BaseResponse<Map<String, Object>> likeComment(@RequestParam Long commentId,
+                                                         HttpServletRequest httpRequest) {
+        ThrowUtils.throwIf(commentId == null || commentId <= 0, ErrorCode.PARAMS_ERROR);
+        User loginUser = userService.getLoginUser(httpRequest);
+        return ResultUtils.success(postCommentService.likeComment(commentId, loginUser));
     }
 
     @PostMapping("/list/page/vo")

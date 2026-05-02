@@ -14,6 +14,7 @@ import com.xduo.springbootinit.model.vo.PostCommentSubmitResultVO;
 import com.xduo.springbootinit.model.vo.PostCommentVO;
 import jakarta.servlet.http.HttpServletRequest;
 import java.util.List;
+import java.util.Map;
 
 /**
  * 帖子评论服务
@@ -23,6 +24,8 @@ public interface PostCommentService extends IService<PostComment> {
     PostCommentSubmitResultVO addComment(PostCommentAddRequest request, User loginUser, HttpServletRequest httpRequest);
 
     boolean deleteComment(Long commentId, User loginUser);
+
+    Map<String, Object> likeComment(Long commentId, User loginUser);
 
     Page<PostCommentVO> listCommentVOByPage(PostCommentQueryRequest request, HttpServletRequest httpRequest);
 

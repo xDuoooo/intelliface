@@ -260,6 +260,7 @@ create table if not exists post_comment
     replyToId     bigint                             null comment '回复的具体评论 id',
     content       text                               not null comment '内容',
     ipLocation    varchar(64)                        null comment '发布时 IP 归属地',
+    likeNum       int      default 0                 not null comment '点赞数',
     status        tinyint  default 0                 not null comment '状态：0正常 1待审核 2已驳回',
     reviewMessage varchar(512)                       null comment '审核意见',
     reviewUserId  bigint                             null comment '审核人 id',
@@ -272,9 +273,21 @@ create table if not exists post_comment
     index idx_parentId (parentId),
     index idx_userId (userId),
     index idx_createTime (createTime),
+    index idx_likeNum (likeNum),
     index idx_post_parent_status_createTime (postId, parentId, status, createTime),
     index idx_parent_status_createTime (parentId, status, createTime)
 ) comment '帖子评论' collate = utf8mb4_unicode_ci;
+
+-- 帖子评论点赞表
+create table if not exists post_comment_like
+(
+    id         bigint auto_increment comment 'id' primary key,
+    commentId  bigint                             not null comment '评论 id',
+    userId     bigint                             not null comment '点赞用户 id',
+    createTime datetime default CURRENT_TIMESTAMP not null comment '点赞时间',
+    unique key uk_comment_user (commentId, userId),
+    index idx_user_createTime (userId, createTime)
+) comment '帖子评论点赞' collate = utf8mb4_unicode_ci;
 
 -- 题目评论表
 create table if not exists question_comment

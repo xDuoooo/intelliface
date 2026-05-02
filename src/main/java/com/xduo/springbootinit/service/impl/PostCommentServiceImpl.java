@@ -5,10 +5,12 @@ import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.xduo.springbootinit.common.ErrorCode;
+import com.xduo.springbootinit.constant.CommonConstant;
 import com.xduo.springbootinit.exception.BusinessException;
 import com.xduo.springbootinit.exception.ThrowUtils;
 import com.xduo.springbootinit.manager.AiManager;
 import com.xduo.springbootinit.model.dto.comment.CommentActivityQueryRequest;
+import com.xduo.springbootinit.mapper.PostCommentLikeMapper;
 import com.xduo.springbootinit.mapper.PostCommentMapper;
 import com.xduo.springbootinit.mapper.PostMapper;
 import com.xduo.springbootinit.model.dto.postcomment.PostCommentAddRequest;
@@ -17,6 +19,7 @@ import com.xduo.springbootinit.model.dto.postcomment.PostCommentQueryRequest;
 import com.xduo.springbootinit.model.dto.postcomment.PostCommentReviewRequest;
 import com.xduo.springbootinit.model.entity.Post;
 import com.xduo.springbootinit.model.entity.PostComment;
+import com.xduo.springbootinit.model.entity.PostCommentLike;
 import com.xduo.springbootinit.model.entity.User;
 import com.xduo.springbootinit.model.vo.PostCommentActivityVO;
 import com.xduo.springbootinit.model.vo.PostCommentSubmitResultVO;
@@ -40,6 +43,7 @@ import java.util.Set;
 import java.util.stream.Collectors;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -57,6 +61,9 @@ public class PostCommentServiceImpl extends ServiceImpl<PostCommentMapper, PostC
 
     @Resource
     private PostMapper postMapper;
+
+    @Resource
+    private PostCommentLikeMapper postCommentLikeMapper;
 
     @Resource
     private UserService userService;
@@ -111,6 +118,7 @@ public class PostCommentServiceImpl extends ServiceImpl<PostCommentMapper, PostC
         comment.setReplyToId(request.getReplyToId());
         comment.setContent(content);
         comment.setIpLocation(resolveCommentIpLocation(httpRequest));
+        comment.setLikeNum(0);
         CommentAutoReviewResult autoReviewResult = autoReviewComment(content);
         comment.setStatus(autoReviewResult.status());
         comment.setReviewMessage(autoReviewResult.reviewMessage());
@@ -154,12 +162,75 @@ public class PostCommentServiceImpl extends ServiceImpl<PostCommentMapper, PostC
     }
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
+    public Map<String, Object> likeComment(Long commentId, User loginUser) {
+        ThrowUtils.throwIf(commentId == null || commentId <= 0, ErrorCode.PARAMS_ERROR);
+        PostComment comment = getById(commentId);
+        ThrowUtils.throwIf(comment == null || Objects.equals(comment.getIsDelete(), 1), ErrorCode.NOT_FOUND_ERROR, "回复不存在");
+        ThrowUtils.throwIf(!Objects.equals(comment.getStatus(), COMMENT_STATUS_APPROVED),
+                ErrorCode.OPERATION_ERROR, "当前回复审核通过后才能点赞");
+
+        Long userId = loginUser.getId();
+        LambdaQueryWrapper<PostCommentLike> likeWrapper = new LambdaQueryWrapper<>();
+        likeWrapper.eq(PostCommentLike::getCommentId, commentId)
+                .eq(PostCommentLike::getUserId, userId);
+        PostCommentLike existingLike = postCommentLikeMapper.selectOne(likeWrapper);
+
+        boolean liked;
+        int delta;
+        if (existingLike != null) {
+            postCommentLikeMapper.deleteById(existingLike.getId());
+            liked = false;
+            delta = -1;
+        } else {
+            PostCommentLike like = new PostCommentLike();
+            like.setCommentId(commentId);
+            like.setUserId(userId);
+            try {
+                postCommentLikeMapper.insert(like);
+                liked = true;
+                delta = 1;
+            } catch (DuplicateKeyException duplicateKeyException) {
+                liked = true;
+                delta = 0;
+            }
+            if (delta > 0 && !Objects.equals(comment.getUserId(), loginUser.getId())) {
+                notificationService.sendNotification(
+                        comment.getUserId(),
+                        "有人给你的社区回复点赞",
+                        loginUser.getUserName() + " 点赞了你的社区回复：" + StringUtils.abbreviate(comment.getContent(), 20),
+                        "post_comment_like",
+                        comment.getPostId()
+                );
+            }
+        }
+
+        if (delta != 0) {
+            LambdaUpdateWrapper<PostComment> updateWrapper = new LambdaUpdateWrapper<>();
+            updateWrapper.eq(PostComment::getId, commentId)
+                    .setSql("likeNum = GREATEST(0, IFNULL(likeNum, 0) + " + delta + ")");
+            update(updateWrapper);
+        }
+
+        PostComment latestComment = getById(commentId);
+        int newLikeNum = latestComment == null || latestComment.getLikeNum() == null
+                ? 0
+                : Math.max(0, latestComment.getLikeNum());
+        Map<String, Object> result = new HashMap<>();
+        result.put("liked", liked);
+        result.put("likeNum", newLikeNum);
+        return result;
+    }
+
+    @Override
     public Page<PostCommentVO> listCommentVOByPage(PostCommentQueryRequest request, HttpServletRequest httpRequest) {
         ThrowUtils.throwIf(request == null || request.getPostId() == null, ErrorCode.PARAMS_ERROR);
         long current = request.getCurrent();
         long pageSize = Math.min(request.getPageSize(), 20);
         ThrowUtils.throwIf(current <= 0 || pageSize <= 0, ErrorCode.PARAMS_ERROR, "分页参数不合法");
         User loginUser = userService.getLoginUserPermitNull(httpRequest);
+        String sortField = StringUtils.defaultIfBlank(request.getSortField(), "createTime");
+        String sortOrder = StringUtils.defaultIfBlank(request.getSortOrder(), CommonConstant.SORT_ORDER_DESC);
 
         LambdaQueryWrapper<PostComment> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(PostComment::getPostId, request.getPostId())
@@ -170,8 +241,20 @@ public class PostCommentServiceImpl extends ServiceImpl<PostCommentMapper, PostC
                         qw.or(inner -> inner.eq(PostComment::getUserId, loginUser.getId())
                                 .in(PostComment::getStatus, COMMENT_STATUS_PENDING, COMMENT_STATUS_REJECTED));
                     }
-                })
-                .orderByDesc(PostComment::getCreateTime);
+                });
+        if ("likeNum".equals(sortField)) {
+            if (CommonConstant.SORT_ORDER_ASC.equals(sortOrder)) {
+                wrapper.orderByAsc(PostComment::getLikeNum);
+            } else {
+                wrapper.orderByDesc(PostComment::getLikeNum);
+            }
+        } else {
+            if (CommonConstant.SORT_ORDER_ASC.equals(sortOrder)) {
+                wrapper.orderByAsc(PostComment::getCreateTime);
+            } else {
+                wrapper.orderByDesc(PostComment::getCreateTime);
+            }
+        }
 
         Page<PostComment> commentPage = page(new Page<>(current, pageSize), wrapper);
         Page<PostCommentVO> resultPage = new Page<>(current, pageSize, commentPage.getTotal());
@@ -231,8 +314,24 @@ public class PostCommentServiceImpl extends ServiceImpl<PostCommentMapper, PostC
                 : userService.listByIds(userIds).stream()
                 .collect(Collectors.toMap(User::getId, user -> user, (a, b) -> a));
 
+        Set<Long> likedIds = new HashSet<>();
+        if (loginUser != null && loginUser.getId() != null) {
+            List<Long> allCommentIds = new ArrayList<>(parentIds);
+            childComments.stream()
+                    .map(PostComment::getId)
+                    .filter(Objects::nonNull)
+                    .forEach(allCommentIds::add);
+            if (!allCommentIds.isEmpty()) {
+                LambdaQueryWrapper<PostCommentLike> likeWrapper = new LambdaQueryWrapper<>();
+                likeWrapper.eq(PostCommentLike::getUserId, loginUser.getId())
+                        .in(PostCommentLike::getCommentId, allCommentIds);
+                postCommentLikeMapper.selectList(likeWrapper)
+                        .forEach(like -> likedIds.add(like.getCommentId()));
+            }
+        }
+
         return topComments.stream()
-                .map(comment -> toVO(comment, userMap, replyToMap, childrenMap))
+                .map(comment -> toVO(comment, userMap, replyToMap, childrenMap, likedIds))
                 .collect(Collectors.toList());
     }
 
@@ -356,11 +455,12 @@ public class PostCommentServiceImpl extends ServiceImpl<PostCommentMapper, PostC
     private PostCommentVO toVO(PostComment comment,
                                Map<Long, User> userMap,
                                Map<Long, PostComment> replyToMap,
-                               Map<Long, List<PostComment>> childrenMap) {
-        PostCommentVO vo = baseVO(comment, userMap, replyToMap);
+                               Map<Long, List<PostComment>> childrenMap,
+                               Set<Long> likedIds) {
+        PostCommentVO vo = baseVO(comment, userMap, replyToMap, likedIds);
         List<PostCommentVO> replyVOList = childrenMap.getOrDefault(comment.getId(), Collections.emptyList()).stream()
                 .map(child -> {
-                    PostCommentVO childVO = baseVO(child, userMap, replyToMap);
+                    PostCommentVO childVO = baseVO(child, userMap, replyToMap, likedIds);
                     childVO.setReplies(Collections.emptyList());
                     return childVO;
                 })
@@ -372,14 +472,15 @@ public class PostCommentServiceImpl extends ServiceImpl<PostCommentMapper, PostC
     private PostCommentVO toFlatVO(PostComment comment,
                                    Map<Long, User> userMap,
                                    Map<Long, PostComment> replyToMap) {
-        PostCommentVO vo = baseVO(comment, userMap, replyToMap);
+        PostCommentVO vo = baseVO(comment, userMap, replyToMap, Collections.emptySet());
         vo.setReplies(Collections.emptyList());
         return vo;
     }
 
     private PostCommentVO baseVO(PostComment comment,
                                  Map<Long, User> userMap,
-                                 Map<Long, PostComment> replyToMap) {
+                                 Map<Long, PostComment> replyToMap,
+                                 Set<Long> likedIds) {
         PostCommentVO vo = new PostCommentVO();
         vo.setId(comment.getId());
         vo.setPostId(comment.getPostId());
@@ -387,6 +488,8 @@ public class PostCommentServiceImpl extends ServiceImpl<PostCommentMapper, PostC
         vo.setReplyToId(comment.getReplyToId());
         vo.setContent(comment.getContent());
         vo.setIpLocation(comment.getIpLocation());
+        vo.setLikeNum(comment.getLikeNum() == null ? 0 : Math.max(0, comment.getLikeNum()));
+        vo.setHasLiked(likedIds != null && likedIds.contains(comment.getId()));
         vo.setStatus(comment.getStatus());
         vo.setReviewMessage(comment.getReviewMessage());
         vo.setCreateTime(comment.getCreateTime());

@@ -48,6 +48,11 @@ public class PostComment {
     private String ipLocation;
 
     /**
+     * 点赞数（冗余字段）
+     */
+    private Integer likeNum;
+
+    /**
      * 状态：0正常 1待审核 2已驳回
      */
     private Integer status;

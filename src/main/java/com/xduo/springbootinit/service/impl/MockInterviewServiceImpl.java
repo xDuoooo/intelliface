@@ -184,6 +184,7 @@ public class MockInterviewServiceImpl extends ServiceImpl<MockInterviewMapper, M
                         roundAnalysis.getCommunicationScore(),
                         roundAnalysis.getTechnicalScore(),
                         roundAnalysis.getProblemSolvingScore(),
+                        roundAnalysis.getScoreReasons(),
                         roundAnalysis.getQuestionStyle(),
                         roundAnalysis.getRecommendedAnswerSeconds(),
                         responseSeconds,
@@ -380,6 +381,9 @@ public class MockInterviewServiceImpl extends ServiceImpl<MockInterviewMapper, M
                 if (roundRecord.getMissingPoints() != null && !roundRecord.getMissingPoints().isEmpty()) {
                     appendMarkdownBullet(markdownBuilder, "本轮缺口", String.join("、", roundRecord.getMissingPoints()));
                 }
+                if (roundRecord.getScoreReasons() != null && !roundRecord.getScoreReasons().isEmpty()) {
+                    appendMarkdownBullet(markdownBuilder, "评分依据", String.join("；", roundRecord.getScoreReasons()));
+                }
                 if (roundRecord.getAnswerQualitySignals() != null && !roundRecord.getAnswerQualitySignals().isEmpty()) {
                     appendMarkdownBullet(markdownBuilder, "诊断信号", String.join("、", roundRecord.getAnswerQualitySignals()));
                 }
@@ -567,6 +571,10 @@ public class MockInterviewServiceImpl extends ServiceImpl<MockInterviewMapper, M
             existingRecord.setCommunicationScore(nextRecord.getCommunicationScore());
             existingRecord.setTechnicalScore(nextRecord.getTechnicalScore());
             existingRecord.setProblemSolvingScore(nextRecord.getProblemSolvingScore());
+            existingRecord.setScoreReasons(limitStringList(
+                    mergeStringList(existingRecord.getScoreReasons(), nextRecord.getScoreReasons()),
+                    3,
+                    MAX_LIST_ITEM_CHARS));
             existingRecord.setQuestionStyle(nextRecord.getQuestionStyle());
             existingRecord.setRecommendedAnswerSeconds(nextRecord.getRecommendedAnswerSeconds());
             existingRecord.setResponseSeconds(nextRecord.getResponseSeconds());
@@ -770,8 +778,9 @@ public class MockInterviewServiceImpl extends ServiceImpl<MockInterviewMapper, M
                 + buildQuestionPolicy(mockInterview)
                 + buildScoringPolicy(mockInterview)
                 + "请严格输出 JSON 对象，不要输出 markdown。"
-                + "字段必须包含：shortComment、focus、score、communicationScore、technicalScore、problemSolvingScore、questionStyle、recommendedAnswerSeconds、verdict、improvementTags、missingPoints、answerRewriteSuggestion、followUpReason、nextActionHint、nextQuestion、shouldFinish、probe。"
+                + "字段必须包含：shortComment、focus、score、communicationScore、technicalScore、problemSolvingScore、scoreReasons、questionStyle、recommendedAnswerSeconds、verdict、improvementTags、missingPoints、answerRewriteSuggestion、followUpReason、nextActionHint、nextQuestion、shouldFinish、probe。"
                 + "shortComment 必须引用候选人回答里的具体表现或缺失信息；missingPoints 输出 2 到 4 个本轮缺口；answerRewriteSuggestion 给出一段可直接照着练的改进版回答骨架。"
+                + "scoreReasons 必须输出 3 条，分别解释表达能力、技术深度、问题分析为什么得到当前分数，每条必须有证据，不能只写结论。"
                 + "nextQuestion 必须只包含一个口语化问题，长度不超过 100 个中文字符，要结合候选人最新回答追问具体细节，不要机械复述题纲，不要连续问多个问题。"
                 + "followUpReason 用一句话说明为什么问下一题，方便前端展示面试官意图。"
                 + "下一问不能重复已问过问题的表达和考察角度；如果需要继续深挖，必须换一个更具体的证据点。"
@@ -1113,6 +1122,11 @@ public class MockInterviewServiceImpl extends ServiceImpl<MockInterviewMapper, M
         roundAnalysis.setCommunicationScore(Math.max(50, Math.min(86, 64 + completedRounds * 3 + difficultyBias)));
         roundAnalysis.setTechnicalScore(Math.max(50, Math.min(90, 65 + completedRounds * 4 + difficultyBias)));
         roundAnalysis.setProblemSolvingScore(Math.max(50, Math.min(88, 63 + completedRounds * 4 + difficultyBias)));
+        roundAnalysis.setScoreReasons(new ArrayList<>(List.of(
+                "表达：回答能够围绕问题展开，但结构和重点还可以更清晰",
+                "技术：有一定技术相关信息，但缺少更具体的实现细节或边界说明",
+                "分析：能继续讨论方案，但量化验证、风险判断和取舍依据还不够充分"
+        )));
         roundAnalysis.setQuestionStyle(nextPlan == null ? "总结收束" : nextPlan.getQuestionStyle());
         roundAnalysis.setRecommendedAnswerSeconds(nextPlan == null ? 90 : nextPlan.getRecommendedAnswerSeconds());
         roundAnalysis.setNextActionHint(buildNextActionHint(nextPlan));
@@ -1176,6 +1190,8 @@ public class MockInterviewServiceImpl extends ServiceImpl<MockInterviewMapper, M
             roundAnalysis.setCommunicationScore(normalizeScore(result.get("communicationScore"), fallback.getCommunicationScore()));
             roundAnalysis.setTechnicalScore(normalizeScore(result.get("technicalScore"), fallback.getTechnicalScore()));
             roundAnalysis.setProblemSolvingScore(normalizeScore(result.get("problemSolvingScore"), fallback.getProblemSolvingScore()));
+            roundAnalysis.setScoreReasons(getLimitedStringList(result.get("scoreReasons"),
+                    fallback.getScoreReasons(), 3, MAX_LIST_ITEM_CHARS));
             roundAnalysis.setQuestionStyle(getLimitedString(result.get("questionStyle"), fallback.getQuestionStyle(), 40));
             roundAnalysis.setRecommendedAnswerSeconds(normalizeRecommendedAnswerSeconds(result.get("recommendedAnswerSeconds"),
                     fallback.getRecommendedAnswerSeconds()));
@@ -1360,9 +1376,24 @@ public class MockInterviewServiceImpl extends ServiceImpl<MockInterviewMapper, M
         if (answerQualitySignals.isEmpty()) {
             answerQualitySignals = new ArrayList<>(List.of("回答结构相对完整"));
         }
+        if (roundAnalysis.getScoreReasons() == null || roundAnalysis.getScoreReasons().isEmpty()) {
+            roundAnalysis.setScoreReasons(buildScoreReasonFallback(roundAnalysis, answerQualitySignals));
+        }
         roundAnalysis.setAnswerQualitySignals(limitStringList(answerQualitySignals, MAX_LIST_ITEMS, MAX_LIST_ITEM_CHARS));
         roundAnalysis.setImprovementTags(limitStringList(improvementTags, MAX_LIST_ITEMS, 32));
         roundAnalysis.setMissingPoints(limitStringList(missingPoints, MAX_LIST_ITEMS, MAX_LIST_ITEM_CHARS));
+    }
+
+    private List<String> buildScoreReasonFallback(RoundAnalysis roundAnalysis, List<String> answerQualitySignals) {
+        String signals = String.join("；", answerQualitySignals == null ? Collections.emptyList() : answerQualitySignals);
+        if (StringUtils.isBlank(signals)) {
+            signals = "回答结构相对完整";
+        }
+        return new ArrayList<>(List.of(
+                "表达：" + (roundAnalysis.getCommunicationScore() == null ? "-" : roundAnalysis.getCommunicationScore()) + " 分，依据是" + signals,
+                "技术：" + (roundAnalysis.getTechnicalScore() == null ? "-" : roundAnalysis.getTechnicalScore()) + " 分，重点看技术细节、边界和实践证据",
+                "分析：" + (roundAnalysis.getProblemSolvingScore() == null ? "-" : roundAnalysis.getProblemSolvingScore()) + " 分，重点看推理链、取舍和验证方式"
+        ));
     }
 
     private void capRoundScores(RoundAnalysis roundAnalysis, int scoreCap) {
@@ -1394,6 +1425,15 @@ public class MockInterviewServiceImpl extends ServiceImpl<MockInterviewMapper, M
         roundAnalysis.setCommunicationScore(Math.min(baseAnalysis.getCommunicationScore(), 60));
         roundAnalysis.setTechnicalScore(Math.min(baseAnalysis.getTechnicalScore(), 62));
         roundAnalysis.setProblemSolvingScore(Math.min(baseAnalysis.getProblemSolvingScore(), 60));
+        roundAnalysis.setScoreReasons(nonAnswer
+                ? new ArrayList<>(List.of(
+                "表达：回答停留在不熟悉表达，缺少可继续判断的信息",
+                "技术：没有给出概念理解、实现细节或项目证据",
+                "分析：需要补充拆解思路、验证方法和学习补齐计划"))
+                : new ArrayList<>(List.of(
+                "表达：回答偏短，背景、职责和结果没有展开",
+                "技术：关键方案、实现细节和边界条件不足",
+                "分析：缺少为什么这样做、怎么验证和如何复盘的说明")));
         roundAnalysis.setQuestionStyle("追问补充");
         roundAnalysis.setRecommendedAnswerSeconds(Math.max(90, currentPlan == null ? 90 : currentPlan.getRecommendedAnswerSeconds()));
         roundAnalysis.setNextActionHint(nonAnswer
@@ -1914,6 +1954,7 @@ public class MockInterviewServiceImpl extends ServiceImpl<MockInterviewMapper, M
         private Integer communicationScore;
         private Integer technicalScore;
         private Integer problemSolvingScore;
+        private List<String> scoreReasons;
         private String questionStyle;
         private Integer recommendedAnswerSeconds;
         private String nextActionHint;
@@ -1941,6 +1982,7 @@ public class MockInterviewServiceImpl extends ServiceImpl<MockInterviewMapper, M
         private Integer communicationScore;
         private Integer technicalScore;
         private Integer problemSolvingScore;
+        private List<String> scoreReasons;
         private String questionStyle;
         private Integer recommendedAnswerSeconds;
         private Integer responseSeconds;

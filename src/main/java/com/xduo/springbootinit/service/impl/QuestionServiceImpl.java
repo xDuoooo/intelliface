@@ -709,6 +709,7 @@ public class QuestionServiceImpl extends ServiceImpl<QuestionMapper, Question> i
         if (CollUtil.isEmpty(allQuestionList)) {
             result.setJobDirection("待识别");
             result.setExtractedTags(Collections.emptyList());
+            result.setResumeText(trimmedResumeText);
             result.setAnalysisSummary("当前题库为空，暂时无法给出题目推荐。");
             result.setRecommendFocus("请先补充题目数据");
             result.setAnalysisSource("系统规则分析");

@@ -213,6 +213,57 @@ const CreateMockInterviewPage: React.FC<Props> = (props) => {
     window.localStorage.setItem(CREATE_DRAFT_STORAGE_KEY, JSON.stringify(nextDraft));
   }, [formValues, fromInterviewId, prefillLoading]);
 
+  const applyResumeParseResult = (result?: API.ResumeQuestionRecommendVO) => {
+    if (!result) {
+      return;
+    }
+    const currentValues = form.getFieldsValue() as API.MockInterviewAddRequest;
+    const importedResumeText = buildImportedResumeText(result);
+    form.setFieldsValue({
+      jobPosition: currentValues.jobPosition || result.jobDirection,
+      techStack: mergeTechStack(currentValues.techStack, result.extractedTags),
+      resumeText: importedResumeText || currentValues.resumeText,
+    });
+  };
+
+  const handleParseResumeFile = async () => {
+    if (!resumeFile) {
+      message.warning("请先选择简历文件");
+      return;
+    }
+    setResumeParsing(true);
+    try {
+      const res = await recommendQuestionsByResumeFileUsingPost(resumeFile, 4);
+      setResumeParseResult(res.data);
+      applyResumeParseResult(res.data);
+      message.success("简历解析完成，已回填到面试配置");
+    } catch (error: any) {
+      message.error("简历解析失败：" + (error?.message || "请稍后重试"));
+    } finally {
+      setResumeParsing(false);
+    }
+  };
+
+  const resumeUploadProps: UploadProps = {
+    accept: ".txt,.md,.markdown,.docx,.pdf",
+    maxCount: 1,
+    showUploadList: false,
+    beforeUpload: (file) => {
+      const suffix = file.name.split(".").pop()?.toLowerCase();
+      if (!suffix || !["txt", "md", "markdown", "docx", "pdf"].includes(suffix)) {
+        message.warning("仅支持 txt、md、docx、pdf 简历文件");
+        return Upload.LIST_IGNORE;
+      }
+      if (file.size > 2 * 1024 * 1024) {
+        message.warning("简历文件不能超过 2MB");
+        return Upload.LIST_IGNORE;
+      }
+      setResumeFile(file as File);
+      setResumeParseResult(undefined);
+      return false;
+    },
+  };
+
   /**
    * 提交表单
    *
@@ -285,7 +336,11 @@ const CreateMockInterviewPage: React.FC<Props> = (props) => {
           name="workExperience"
           rules={[{ max: 40, message: "工作年限描述不能超过 40 个字符" }]}
         >
-          <Input maxLength={40} showCount placeholder="请输入工作年限，例如：3 年" />
+          <Select
+            allowClear
+            options={workExperienceOptions}
+            placeholder="请选择工作年限"
+          />
         </Form.Item>
 
         <div className="create-grid">
@@ -313,6 +368,69 @@ const CreateMockInterviewPage: React.FC<Props> = (props) => {
             placeholder="例如：Java、Spring Boot、MySQL、Redis、消息队列"
           />
         </Form.Item>
+
+        <div className="resume-import-card">
+          <div className="resume-import-head">
+            <div>
+              <div className="resume-import-title">
+                <FileSearch size={16} />
+                导入简历并解析
+              </div>
+              <div className="resume-import-desc">
+                支持 txt、md、docx、pdf，解析后会回填岗位方向、技术栈和项目背景。
+              </div>
+            </div>
+            <Tag color={resumeParseResult ? "green" : "blue"}>
+              {resumeParseResult ? "已解析" : "可选"}
+            </Tag>
+          </div>
+          <div className="resume-import-actions">
+            <Upload {...resumeUploadProps}>
+              <Button icon={<UploadCloud size={16} />} disabled={resumeParsing || loading}>
+                选择简历文件
+              </Button>
+            </Upload>
+            <Button
+              type="primary"
+              loading={resumeParsing}
+              disabled={!resumeFile || loading}
+              onClick={() => void handleParseResumeFile()}
+            >
+              解析并回填
+            </Button>
+            {resumeFile ? (
+              <Button
+                icon={<X size={16} />}
+                disabled={resumeParsing}
+                onClick={() => {
+                  setResumeFile(null);
+                  setResumeParseResult(undefined);
+                }}
+              >
+                移除
+              </Button>
+            ) : null}
+          </div>
+          {resumeFile ? (
+            <div className="resume-file-line">
+              <Paperclip size={14} />
+              <span>{resumeFile.name}</span>
+              <em>{(resumeFile.size / 1024).toFixed(1)} KB</em>
+            </div>
+          ) : null}
+          {resumeParseResult ? (
+            <div className="resume-parse-result">
+              <div>{resumeParseResult.analysisSummary || "简历解析完成，已生成面试背景信息。"}</div>
+              {(resumeParseResult.extractedTags || []).length ? (
+                <div className="resume-tag-list">
+                  {(resumeParseResult.extractedTags || []).slice(0, 8).map((tag) => (
+                    <span key={tag}>{tag}</span>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+        </div>
 
         <Form.Item
           label="简历 / 项目背景"

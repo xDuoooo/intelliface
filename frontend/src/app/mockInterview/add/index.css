@@ -62,6 +62,102 @@
     gap: 16px;
 }
 
+#createMockInterviewPage .resume-import-card {
+    border-radius: 22px;
+    background: #f8fafc;
+    border: 1px dashed rgba(148, 163, 184, 0.55);
+    padding: 16px;
+    margin-bottom: 18px;
+}
+
+#createMockInterviewPage .resume-import-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 14px;
+}
+
+#createMockInterviewPage .resume-import-title {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    color: #0f172a;
+    font-size: 14px;
+    font-weight: 900;
+}
+
+#createMockInterviewPage .resume-import-desc {
+    margin-top: 6px;
+    color: #64748b;
+    font-size: 12px;
+    line-height: 1.7;
+}
+
+#createMockInterviewPage .resume-import-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 14px;
+}
+
+#createMockInterviewPage .resume-import-actions .ant-btn {
+    border-radius: 14px;
+    font-weight: 700;
+}
+
+#createMockInterviewPage .resume-file-line {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    margin-top: 12px;
+    color: #334155;
+    font-size: 12px;
+    font-weight: 700;
+}
+
+#createMockInterviewPage .resume-file-line span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+#createMockInterviewPage .resume-file-line em {
+    color: #94a3b8;
+    font-style: normal;
+    flex-shrink: 0;
+}
+
+#createMockInterviewPage .resume-parse-result {
+    margin-top: 12px;
+    border-radius: 18px;
+    background: #fff;
+    color: #475569;
+    font-size: 13px;
+    font-weight: 600;
+    line-height: 1.8;
+    padding: 12px;
+}
+
+#createMockInterviewPage .resume-tag-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 10px;
+}
+
+#createMockInterviewPage .resume-tag-list span {
+    display: inline-flex;
+    align-items: center;
+    border-radius: 999px;
+    background: rgba(22, 119, 255, 0.08);
+    color: #1677ff;
+    font-size: 12px;
+    font-weight: 800;
+    padding: 5px 9px;
+}
+
 #createMockInterviewPage .create-preview-panel {
     position: sticky;
     top: 88px;

@@ -637,6 +637,26 @@
     font-size: 13px;
 }
 
+.score-reason-list {
+    display: grid;
+    gap: 8px;
+    margin-top: 12px;
+}
+
+.score-reason-list.compact {
+    margin-top: 14px;
+}
+
+.score-reason {
+    border-radius: 14px;
+    background: rgba(15, 23, 42, 0.04);
+    color: #475569;
+    font-size: 12px;
+    font-weight: 700;
+    line-height: 1.7;
+    padding: 9px 11px;
+}
+
 .feedback-tags,
 .record-tags {
     display: flex;

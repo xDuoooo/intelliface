@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Button, Card, Empty, Input, List, Progress, Skeleton, Tag, Typography, message } from "antd";
+import { Button, Card, Empty, Input, List, Popconfirm, Progress, Skeleton, Tag, Typography, message } from "antd";
 import {
   Briefcase,
   BrainCircuit,
@@ -49,6 +49,7 @@ interface RoundRecord {
   communicationScore?: number;
   technicalScore?: number;
   problemSolvingScore?: number;
+  scoreReasons?: string[];
   questionStyle?: string;
   recommendedAnswerSeconds?: number;
   responseSeconds?: number;
@@ -1147,15 +1148,28 @@ export default function InterviewRoomPage({ params }: { params: { mockInterviewI
               >
                 继续面试
               </Button>
-              <Button
-                danger
-                onClick={() => void handleEvent("end")}
-                disabled={(!isStarted && !isPaused) || isEnded}
-                loading={submitting}
-                className="action-button"
+              <Popconfirm
+                title={currentRound < expectedRounds ? "还没完成计划轮次，确定结束吗？" : "确定结束并生成报告？"}
+                description={
+                  currentRound < expectedRounds
+                    ? `当前只完成 ${currentRound}/${expectedRounds} 轮，报告可信度会受影响。`
+                    : "结束后会生成最终复盘，当前会话将不能继续作答。"
+                }
+                okText="确认结束"
+                cancelText="继续面试"
+                okButtonProps={{ danger: true }}
+                disabled={(!isStarted && !isPaused) || isEnded || submitting}
+                onConfirm={() => void handleEvent("end")}
               >
-                结束并生成报告
-              </Button>
+                <Button
+                  danger
+                  disabled={(!isStarted && !isPaused) || isEnded}
+                  loading={submitting}
+                  className="action-button"
+                >
+                  结束并生成报告
+                </Button>
+              </Popconfirm>
               <Button
                 onClick={handleExportReview}
                 disabled={!isEnded}
@@ -1545,6 +1559,13 @@ export default function InterviewRoomPage({ params }: { params: { mockInterviewI
                     ))}
                   </div>
                 ) : null}
+                {(latestRoundRecord.scoreReasons || []).length ? (
+                  <div className="score-reason-list">
+                    {(latestRoundRecord.scoreReasons || []).map((item) => (
+                      <div className="score-reason" key={item}>{item}</div>
+                    ))}
+                  </div>
+                ) : null}
                 {(latestRoundRecord.improvementTags || []).length ? (
                   <div className="feedback-tags">
                     {(latestRoundRecord.improvementTags || []).map((tag) => (
@@ -1746,6 +1767,13 @@ export default function InterviewRoomPage({ params }: { params: { mockInterviewI
                             </div>
                           ))}
                         </div>
+                        {(item.scoreReasons || []).length ? (
+                          <div className="score-reason-list compact">
+                            {(item.scoreReasons || []).map((reason) => (
+                              <div className="score-reason" key={`${item.round}-${reason}`}>{reason}</div>
+                            ))}
+                          </div>
+                        ) : null}
                         {item.verdict ? <div className="record-verdict">{item.verdict}</div> : null}
                         <div className="review-round-block">
                           <div className="focus-label">面试问题</div>

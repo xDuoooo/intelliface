@@ -1201,10 +1201,66 @@ public class MockInterviewServiceImpl extends ServiceImpl<MockInterviewMapper, M
             if (!summaryResult.getDisplayText().startsWith("【面试结束】")) {
                 summaryResult.setDisplayText("【面试结束】" + summaryResult.getDisplayText());
             }
+            applySummaryCompletenessGuardrails(summaryResult, interviewReport);
             return summaryResult;
         } catch (Exception e) {
-            return buildSummaryFallback(interviewReport);
+            SummaryResult fallback = buildSummaryFallback(interviewReport);
+            applySummaryCompletenessGuardrails(fallback, interviewReport);
+            return fallback;
         }
+    }
+
+    private void applySummaryCompletenessGuardrails(SummaryResult summaryResult, InterviewReport interviewReport) {
+        if (summaryResult == null || interviewReport == null) {
+            return;
+        }
+        int completedRounds = Math.max(0, interviewReport.getCompletedRounds() == null ? 0 : interviewReport.getCompletedRounds());
+        int expectedRounds = Math.max(1, interviewReport.getExpectedRounds() == null ? DEFAULT_ROUNDS : interviewReport.getExpectedRounds());
+        int minimumReliableRounds = Math.min(MIN_ROUNDS, expectedRounds);
+        if (completedRounds <= 0) {
+            summaryResult.setOverallScore(0);
+            summaryResult.setCommunicationScore(0);
+            summaryResult.setTechnicalScore(0);
+            summaryResult.setProblemSolvingScore(0);
+            summaryResult.setSummary("本次面试尚未产生有效作答，无法给出可信能力判断。建议至少完成 3 轮后再查看综合评分。");
+            summaryResult.setStrengths(new ArrayList<>());
+            summaryResult.setImprovements(new ArrayList<>(List.of("先完成至少 3 轮有效作答", "回答时补充职责、方案、指标和复盘")));
+            summaryResult.setSuggestedTopics(new ArrayList<>(List.of("代表性项目介绍", "核心技术原理", "项目结果与复盘")));
+            summaryResult.setReadinessLevel("尚未完成有效作答");
+            summaryResult.setRecommendedNextAction("重新开始一场面试，至少完成 3 轮后再结束，这样复盘才有参考价值。");
+            summaryResult.setPracticePlan(new ArrayList<>(List.of(
+                    "先准备一个 2 分钟项目介绍，覆盖背景、职责、方案、结果和复盘",
+                    "选择 3 个核心技术点，各准备一个项目里的真实使用案例",
+                    "完成至少 3 轮模拟面试后再查看综合评分"
+            )));
+            summaryResult.setDisplayText("【面试结束】本次尚未完成有效作答，无法给出可信评分。建议重新开始并至少完成 3 轮回答。");
+            return;
+        }
+
+        if (completedRounds < minimumReliableRounds) {
+            capSummaryScores(summaryResult, 60);
+            summaryResult.setSummary("本次面试完成轮次偏少，当前评分只适合作为早期参考。建议继续完成更多轮次后再判断稳定水平。"
+                    + StringUtils.defaultString(summaryResult.getSummary()));
+            summaryResult.setReadinessLevel("样本偏少，建议继续完成更多轮次");
+            summaryResult.setRecommendedNextAction("建议至少完成 " + minimumReliableRounds + " 轮有效作答后再看综合评分，并优先补齐回答里的量化结果和技术取舍。");
+            summaryResult.setImprovements(limitStringList(mergeStringList(
+                    summaryResult.getImprovements(),
+                    List.of("完成更多轮次以获得更可信评分")), MAX_LIST_ITEMS, MAX_LIST_ITEM_CHARS));
+            summaryResult.setPracticePlan(limitStringList(mergeStringList(
+                    summaryResult.getPracticePlan(),
+                    List.of("补完至少 " + minimumReliableRounds + " 轮模拟面试，并复盘每轮是否包含背景、职责、方案、结果")), MAX_PRACTICE_PLAN_ITEMS, MAX_PRACTICE_PLAN_ITEM_CHARS));
+        } else if (completedRounds * 1.0 / expectedRounds < 0.6) {
+            capSummaryScores(summaryResult, 75);
+            summaryResult.setRecommendedNextAction("当前完成度不足六成，建议继续完成计划轮次，让评分覆盖更多题型和追问场景。");
+        }
+    }
+
+    private void capSummaryScores(SummaryResult summaryResult, int scoreCap) {
+        int safeCap = Math.max(0, Math.min(100, scoreCap));
+        summaryResult.setOverallScore(Math.min(summaryResult.getOverallScore() == null ? safeCap : summaryResult.getOverallScore(), safeCap));
+        summaryResult.setCommunicationScore(Math.min(summaryResult.getCommunicationScore() == null ? safeCap : summaryResult.getCommunicationScore(), safeCap));
+        summaryResult.setTechnicalScore(Math.min(summaryResult.getTechnicalScore() == null ? safeCap : summaryResult.getTechnicalScore(), safeCap));
+        summaryResult.setProblemSolvingScore(Math.min(summaryResult.getProblemSolvingScore() == null ? safeCap : summaryResult.getProblemSolvingScore(), safeCap));
     }
 
     private void applyAnswerQualityGuardrails(RoundAnalysis roundAnalysis,

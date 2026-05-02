@@ -223,6 +223,24 @@ function buildFallbackChecklist(questionStyle?: string) {
   return ["背景目标和职责边界", "技术方案和关键取舍", "量化结果、复盘和优化"];
 }
 
+function buildContextualAnswerTemplate(questionStyle?: string, currentFocus?: string) {
+  const style = questionStyle || "";
+  const focus = currentFocus || "当前问题";
+  if (/(架构|设计|扩展|数据|性能|稳定性|安全|成本)/.test(style)) {
+    return `${focus}\n需求和约束：\n核心模块：\n数据流 / 接口：\n容量、性能或一致性：\n风险、降级和取舍：`;
+  }
+  if (/(行为|压力|协作|冲突|动机|规划)/.test(style)) {
+    return `Situation：\nTask：\nAction：\nResult：\nReflection：`;
+  }
+  if (/原理/.test(style)) {
+    return `${focus}\n核心概念：\n适用场景：\n关键机制：\n边界条件 / 常见坑：\n项目里的使用或排障经验：`;
+  }
+  if (/(结果|复盘|压测)/.test(style)) {
+    return `${focus}\n目标指标：\n我的动作：\n最终结果：\n问题和风险：\n如果重来会怎么优化：`;
+  }
+  return `${focus}\n背景目标：\n我的职责：\n方案和取舍：\n量化结果：\n复盘改进：`;
+}
+
 function safeParseJson<T>(value?: string | null): T | null {
   if (!value) {
     return null;
@@ -954,6 +972,10 @@ export default function InterviewRoomPage({ params }: { params: { mockInterviewI
   const answerRecoveryHint = useMemo(() => buildAnswerRecoveryHint(inputMessage), [inputMessage]);
   const answerCoverageItems = useMemo(() => buildAnswerCoverageItems(inputMessage), [inputMessage]);
   const answerCoverageCount = answerCoverageItems.filter((item) => item.matched).length;
+  const contextualAnswerTemplate = useMemo(
+    () => buildContextualAnswerTemplate(currentQuestionStyle, currentFocus),
+    [currentFocus, currentQuestionStyle],
+  );
   const canSendAnswer = canAnswer
     && Boolean(inputMessage.trim())
     && !submitting
@@ -1192,6 +1214,13 @@ export default function InterviewRoomPage({ params }: { params: { mockInterviewI
                 }}
               />
               <div className="template-row">
+                <Button
+                  className="template-button"
+                  onClick={() => appendAnswerTemplate(contextualAnswerTemplate)}
+                  disabled={!canAnswer}
+                >
+                  插入本轮回答骨架
+                </Button>
                 <Button
                   className="template-button"
                   onClick={() => appendAnswerTemplate("背景：\n职责：\n方案：\n结果：\n复盘：")}

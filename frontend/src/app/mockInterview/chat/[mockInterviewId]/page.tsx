@@ -44,6 +44,7 @@ interface RoundRecord {
   question?: string;
   answer?: string;
   shortComment?: string;
+  interviewerObservation?: string;
   focus?: string;
   score?: number;
   communicationScore?: number;
@@ -85,6 +86,9 @@ interface InterviewReport {
   improvements?: string[];
   suggestedTopics?: string[];
   practicePlan?: string[];
+  hiringRecommendation?: string;
+  riskPoints?: string[];
+  nextInterviewFocus?: string[];
   roundRecords?: RoundRecord[];
   agenda?: InterviewAgendaItem[];
   answerChecklist?: string[];
@@ -333,6 +337,27 @@ function buildRoundScoreItems(record?: RoundRecord | null) {
     { label: "技术", value: record?.technicalScore || 0 },
     { label: "分析", value: record?.problemSolvingScore || 0 },
   ];
+}
+
+function formatMessageStage(stage?: string) {
+  switch (stage) {
+    case "opening":
+      return "开场";
+    case "question":
+      return "提问";
+    case "probe":
+      return "追问";
+    case "answer":
+      return "回答";
+    case "pause":
+      return "暂停";
+    case "resume":
+      return "继续";
+    case "summary":
+      return "总结";
+    default:
+      return "";
+  }
 }
 
 function hydrateInterviewDetail(rawData?: API.MockInterview): MockInterviewDetail | undefined {
@@ -1025,6 +1050,12 @@ export default function InterviewRoomPage({ params }: { params: { mockInterviewI
   const currentFocus = report?.currentFocus || latestRoundRecord?.focus || "开始面试后这里会显示当前考察重点";
   const currentQuestionStyle = report?.currentQuestionStyle || latestRoundRecord?.questionStyle || "真实面试追问";
   const currentActionHint = report?.nextActionHint || "建议用背景、方案、结果和复盘的结构组织回答。";
+  const latestInterviewerObservation = latestRoundRecord?.interviewerObservation
+    || latestRoundRecord?.followUpReason
+    || "面试开始后，这里会沉淀面试官对你上一轮回答的观察。";
+  const hiringRecommendation = report?.hiringRecommendation || "";
+  const riskPoints = report?.riskPoints || [];
+  const nextInterviewFocus = report?.nextInterviewFocus || [];
   const liveAnswerChecklist = (report?.answerChecklist || []).length
     ? report?.answerChecklist || []
     : buildFallbackChecklist(currentQuestionStyle);
@@ -1208,6 +1239,9 @@ export default function InterviewRoomPage({ params }: { params: { mockInterviewI
                         <div className={`message-bubble ${item.isAI ? "ai" : "user"}`}>
                           <div className="message-head">
                             <span className="speaker">{item.isAI ? "面试官" : "候选人"}</span>
+                            {formatMessageStage(item.stage) ? (
+                              <span className={`stage-tag ${item.stage || ""}`}>{formatMessageStage(item.stage)}</span>
+                            ) : null}
                             {item.round ? <span className="round-tag">第 {item.round} 轮</span> : null}
                           </div>
                           <div className="message-content">{item.content}</div>
@@ -1221,6 +1255,9 @@ export default function InterviewRoomPage({ params }: { params: { mockInterviewI
                       <div className="message-bubble ai streaming">
                         <div className="message-head">
                           <span className="speaker">面试官输入中</span>
+                          {formatMessageStage(streamingReply.stage) ? (
+                            <span className={`stage-tag ${streamingReply.stage || ""}`}>{formatMessageStage(streamingReply.stage)}</span>
+                          ) : null}
                           {streamingReply.round ? (
                             <span className="round-tag">第 {streamingReply.round} 轮</span>
                           ) : null}
@@ -1507,6 +1544,10 @@ export default function InterviewRoomPage({ params }: { params: { mockInterviewI
               <div className="cue-tag">{currentQuestionStyle}</div>
               <div className="cue-focus">{currentFocus}</div>
               <div className="cue-hint">{currentActionHint}</div>
+              <div className="cue-observation">
+                <div className="cue-checklist-title">面试官观察</div>
+                <div>{latestInterviewerObservation}</div>
+              </div>
               <div className="cue-checklist">
                 <div className="cue-checklist-title">本轮回答抓手</div>
                 {liveAnswerChecklist.map((item) => (
@@ -1590,8 +1631,14 @@ export default function InterviewRoomPage({ params }: { params: { mockInterviewI
                     </div>
                   </div>
                 ) : null}
+                {latestRoundRecord.interviewerObservation ? (
+                  <div className="feedback-focus neutral">
+                    <div className="focus-label">面试官观察</div>
+                    <div className="focus-text">{latestRoundRecord.interviewerObservation}</div>
+                  </div>
+                ) : null}
                 <div className="feedback-focus">
-                  <div className="focus-label">{isEnded ? "这一轮主要问题：" : "面试官观察重点："}</div>
+                  <div className="focus-label">{isEnded ? "这一轮主要问题：" : "当前考察重点："}</div>
                   <div className="focus-text">{latestRoundRecord.focus || "继续补充项目细节和设计取舍。"}</div>
                 </div>
                 {latestRoundRecord.followUpReason ? (
@@ -1696,6 +1743,40 @@ export default function InterviewRoomPage({ params }: { params: { mockInterviewI
                 ))}
               </div>
 
+              {hiringRecommendation ? (
+                <div className="review-decision-panel">
+                  <div className="review-decision-title">面试官结论</div>
+                  <div className="review-decision-text">{hiringRecommendation}</div>
+                </div>
+              ) : null}
+
+              {riskPoints.length || nextInterviewFocus.length ? (
+                <div className="review-extra-grid">
+                  {riskPoints.length ? (
+                    <div className="review-extra-panel risk">
+                      <div className="block-title">主要风险点</div>
+                      <ul>
+                        {riskPoints.map((item) => (
+                          <li key={item}>{item}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  ) : null}
+                  {nextInterviewFocus.length ? (
+                    <div className="review-extra-panel focus">
+                      <div className="block-title">下一场面试重点</div>
+                      <div className="topic-list">
+                        {nextInterviewFocus.map((item) => (
+                          <span className="topic-tag strong" key={item}>
+                            {item}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
+
               <div className="review-detail-grid">
                 <div className="review-detail-panel">
                   <div className="block-title">亮点</div>
@@ -1790,6 +1871,12 @@ export default function InterviewRoomPage({ params }: { params: { mockInterviewI
                             <ChevronRight size={14} />
                           </div>
                         </div>
+                        {item.interviewerObservation ? (
+                          <div className="review-round-block">
+                            <div className="focus-label">面试官观察</div>
+                            <div className="focus-text">{item.interviewerObservation}</div>
+                          </div>
+                        ) : null}
                         {(item.improvementTags || []).length ? (
                           <div className="record-tags">
                             {(item.improvementTags || []).map((tag) => (

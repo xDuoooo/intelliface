@@ -1594,109 +1594,104 @@ export default function InterviewRoomPage({ params }: { params: { mockInterviewI
             </div>
           </Card>
 
-          <Card className="side-card">
-            <div className="section-heading compact">
-              <div>
-                <div className="section-eyebrow">Round Insight</div>
-                <Title level={5} className="!mb-0 !mt-2">
-                  最近一轮反馈
-                </Title>
+          {isEnded ? (
+            <Card className="side-card">
+              <div className="section-heading compact">
+                <div>
+                  <div className="section-eyebrow">Round Insight</div>
+                  <Title level={5} className="!mb-0 !mt-2">
+                    最近一轮反馈
+                  </Title>
+                </div>
+                <ClipboardCheck size={18} className="text-primary" />
               </div>
-              <ClipboardCheck size={18} className="text-primary" />
-            </div>
-            {latestRoundRecord && (coachMode || isEnded) ? (
-              <div className="round-feedback">
-                {isEnded ? (
+              {latestRoundRecord ? (
+                <div className="round-feedback">
                   <div className="feedback-score">
                     <span>本轮评分</span>
                     <strong>{latestRoundRecord.score || 0}</strong>
                   </div>
-                ) : null}
-                {latestRoundRecord.verdict ? (
-                  <div className="feedback-verdict">{latestRoundRecord.verdict}</div>
-                ) : null}
-                <Paragraph className="!mb-3 text-slate-600">
-                  {latestRoundRecord.shortComment || "这一轮反馈将在你完成回答后显示。"}
-                </Paragraph>
-                {latestRoundRecord.responseSeconds ? (
-                  <div className="feedback-meta">本轮作答用时 {latestRoundRecord.responseSeconds}s</div>
-                ) : null}
-                {latestRoundScoreItems.some((item) => item.value > 0) ? (
-                  <div className="round-score-mini-grid">
-                    {latestRoundScoreItems.map((item) => (
-                      <div className="round-score-mini" key={item.label}>
-                        <div className="round-score-mini-head">
-                          <span>{item.label}</span>
-                          <strong>{item.value}</strong>
+                  {latestRoundRecord.verdict ? (
+                    <div className="feedback-verdict">{latestRoundRecord.verdict}</div>
+                  ) : null}
+                  <Paragraph className="!mb-3 text-slate-600">
+                    {latestRoundRecord.shortComment || "这一轮重点反馈会显示在这里。"}
+                  </Paragraph>
+                  {latestRoundRecord.responseSeconds ? (
+                    <div className="feedback-meta">本轮作答用时 {latestRoundRecord.responseSeconds}s</div>
+                  ) : null}
+                  {latestRoundScoreItems.some((item) => item.value > 0) ? (
+                    <div className="round-score-mini-grid">
+                      {latestRoundScoreItems.map((item) => (
+                        <div className="round-score-mini" key={item.label}>
+                          <div className="round-score-mini-head">
+                            <span>{item.label}</span>
+                            <strong>{item.value}</strong>
+                          </div>
+                          <Progress percent={item.value} showInfo={false} strokeColor="#1677ff" />
                         </div>
-                        <Progress percent={item.value} showInfo={false} strokeColor="#1677ff" />
-                      </div>
-                    ))}
-                  </div>
-                ) : null}
-                {(latestRoundRecord.scoreReasons || []).length ? (
-                  <div className="score-reason-list">
-                    {(latestRoundRecord.scoreReasons || []).map((item) => (
-                      <div className="score-reason" key={item}>{item}</div>
-                    ))}
-                  </div>
-                ) : null}
-                {(latestRoundRecord.improvementTags || []).length ? (
-                  <div className="feedback-tags">
-                    {(latestRoundRecord.improvementTags || []).map((tag) => (
-                      <span className="feedback-tag" key={tag}>{tag}</span>
-                    ))}
-                  </div>
-                ) : null}
-                {(latestRoundRecord.missingPoints || []).length ? (
-                  <div className="missing-point-list">
-                    {(latestRoundRecord.missingPoints || []).map((item) => (
-                      <span className="missing-point" key={item}>{item}</span>
-                    ))}
-                  </div>
-                ) : null}
-                {(latestRoundRecord.answerQualitySignals || []).length ? (
-                  <div className="diagnostic-signal-panel">
-                    <div className="focus-label">诊断信号</div>
-                    <div className="diagnostic-signal-list">
-                      {(latestRoundRecord.answerQualitySignals || []).map((item) => (
-                        <span className="diagnostic-signal" key={item}>{item}</span>
                       ))}
                     </div>
+                  ) : null}
+                  {(latestRoundRecord.scoreReasons || []).length ? (
+                    <div className="score-reason-list">
+                      {(latestRoundRecord.scoreReasons || []).map((item) => (
+                        <div className="score-reason" key={item}>{item}</div>
+                      ))}
+                    </div>
+                  ) : null}
+                  {(latestRoundRecord.improvementTags || []).length ? (
+                    <div className="feedback-tags">
+                      {(latestRoundRecord.improvementTags || []).map((tag) => (
+                        <span className="feedback-tag" key={tag}>{tag}</span>
+                      ))}
+                    </div>
+                  ) : null}
+                  {(latestRoundRecord.missingPoints || []).length ? (
+                    <div className="missing-point-list">
+                      {(latestRoundRecord.missingPoints || []).map((item) => (
+                        <span className="missing-point" key={item}>{item}</span>
+                      ))}
+                    </div>
+                  ) : null}
+                  {(latestRoundRecord.answerQualitySignals || []).length ? (
+                    <div className="diagnostic-signal-panel">
+                      <div className="focus-label">诊断信号</div>
+                      <div className="diagnostic-signal-list">
+                        {(latestRoundRecord.answerQualitySignals || []).map((item) => (
+                          <span className="diagnostic-signal" key={item}>{item}</span>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
+                  {latestRoundRecord.interviewerObservation ? (
+                    <div className="feedback-focus neutral">
+                      <div className="focus-label">面试官观察</div>
+                      <div className="focus-text">{latestRoundRecord.interviewerObservation}</div>
+                    </div>
+                  ) : null}
+                  <div className="feedback-focus">
+                    <div className="focus-label">这一轮主要问题：</div>
+                    <div className="focus-text">{latestRoundRecord.focus || "继续补充项目细节和设计取舍。"}</div>
                   </div>
-                ) : null}
-                {latestRoundRecord.interviewerObservation ? (
-                  <div className="feedback-focus neutral">
-                    <div className="focus-label">面试官观察</div>
-                    <div className="focus-text">{latestRoundRecord.interviewerObservation}</div>
-                  </div>
-                ) : null}
-                <div className="feedback-focus">
-                  <div className="focus-label">{isEnded ? "这一轮主要问题：" : "当前考察重点："}</div>
-                  <div className="focus-text">{latestRoundRecord.focus || "继续补充项目细节和设计取舍。"}</div>
+                  {latestRoundRecord.followUpReason ? (
+                    <div className="feedback-focus neutral">
+                      <div className="focus-label">追问理由</div>
+                      <div className="focus-text">{latestRoundRecord.followUpReason}</div>
+                    </div>
+                  ) : null}
+                  {latestRoundRecord.answerRewriteSuggestion ? (
+                    <div className="rewrite-suggestion">
+                      <div className="focus-label">改进版回答骨架</div>
+                      <div>{latestRoundRecord.answerRewriteSuggestion}</div>
+                    </div>
+                  ) : null}
                 </div>
-                {latestRoundRecord.followUpReason ? (
-                  <div className="feedback-focus neutral">
-                    <div className="focus-label">追问理由</div>
-                    <div className="focus-text">{latestRoundRecord.followUpReason}</div>
-                  </div>
-                ) : null}
-                {latestRoundRecord.answerRewriteSuggestion ? (
-                  <div className="rewrite-suggestion">
-                    <div className="focus-label">改进版回答骨架</div>
-                    <div>{latestRoundRecord.answerRewriteSuggestion}</div>
-                  </div>
-                ) : null}
-              </div>
-            ) : coachMode || isEnded ? (
-              <Empty description="回答第一轮后，这里会显示本轮反馈" image={Empty.PRESENTED_IMAGE_SIMPLE} />
-            ) : (
-              <div className="feedback-held-panel">
-                <div className="feedback-held-title">反馈暂存中</div>
-                <div className="feedback-held-text">面试结束后统一展示完整复盘。</div>
-              </div>
-            )}
-          </Card>
+              ) : (
+                <Empty description="报告生成后，这里会显示最后一轮重点反馈" image={Empty.PRESENTED_IMAGE_SIMPLE} />
+              )}
+            </Card>
+          ) : null}
 
           {(report?.agenda || []).length ? (
             <Card className="side-card">
@@ -1961,7 +1956,7 @@ export default function InterviewRoomPage({ params }: { params: { mockInterviewI
           ) : (
             <div className="report-placeholder wide">
               <Paragraph className="!mb-0 text-slate-500">
-                面试结束后，这里会展示完整的结构化复盘和逐轮记录。现在右侧会先聚焦当前进度、考察点和最近一轮反馈，避免你在会话进行中被大段报告打断。
+                面试结束后，这里会展示完整的结构化复盘和逐轮记录。现在右侧会先聚焦当前进度和考察点，避免你在会话进行中被大段反馈打断。
               </Paragraph>
             </div>
           )}

@@ -11,7 +11,7 @@ import { useAuthInitialized } from "@/contexts/AuthInitContext";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ClipboardCheck, FileSearch, Paperclip, Sparkles, UploadCloud, X } from "lucide-react";
 import { useSelector } from "react-redux";
-import { INTERVIEW_DEPTH_PRESETS, getInterviewDepthMeta, normalizeInterviewDepthPresetRounds } from "@/lib/mockInterview";
+import { INTERVIEW_DEPTH_PRESETS, normalizeInterviewDepthPresetRounds } from "@/lib/mockInterview";
 import { RootState } from "@/stores";
 import "./index.css";
 
@@ -181,11 +181,6 @@ const CreateMockInterviewPage: React.FC<Props> = (props) => {
     : techStackOptions.length
       ? "下拉建议来自你的个人资料兴趣标签，也可以继续自由补充技术栈。"
       : "你的个人资料里还没有兴趣标签，当前仍然可以直接输入技术方向。";
-  const selectedDepthMeta = useMemo(
-    () => getInterviewDepthMeta(formValues?.expectedRounds),
-    [formValues?.expectedRounds],
-  );
-
   const interviewTypeOptions = [
     { label: "技术深挖", value: "技术深挖" },
     { label: "项目拷打", value: "项目拷打" },
@@ -425,11 +420,7 @@ const CreateMockInterviewPage: React.FC<Props> = (props) => {
             <Select options={difficultyOptions} placeholder="请选择面试难度" />
           </Form.Item>
 
-          <Form.Item
-            label="面试深度"
-            name="expectedRounds"
-            extra={`${selectedDepthMeta.description} ${selectedDepthMeta.durationText}`}
-          >
+          <Form.Item label="面试深度" name="expectedRounds">
             <Select
               options={INTERVIEW_DEPTH_PRESETS.map((item) => ({
                 label: `${item.label} · ${item.durationText}`,

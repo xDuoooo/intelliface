@@ -18,6 +18,9 @@ import "./index.css";
 interface Props {}
 
 const CREATE_DRAFT_STORAGE_KEY = "mockInterview:createDraft:v1";
+type MockInterviewFormValues = Omit<API.MockInterviewAddRequest, "techStack"> & {
+  techStack?: string[] | string;
+};
 
 const workExperienceOptions = [
   { label: "应届 / 在校", value: "应届 / 在校" },
@@ -28,7 +31,16 @@ const workExperienceOptions = [
   { label: "10 年以上", value: "10 年以上" },
 ];
 
-function splitCandidateValues(value?: string, delimiters = /[、,，/|\n]+/) {
+function splitCandidateValues(value?: string | string[], delimiters = /[、,，/|\n]+/) {
+  if (Array.isArray(value)) {
+    return Array.from(
+      new Set(
+        value
+          .map((item) => String(item || "").trim())
+          .filter(Boolean),
+      ),
+    );
+  }
   return Array.from(
     new Set(
       String(value || "")
@@ -46,13 +58,19 @@ function buildAutoCompleteOptions(values: string[]) {
   }));
 }
 
-function buildBackgroundTemplate(values?: Partial<API.MockInterviewAddRequest>) {
+function serializeTechStackValue(value?: string | string[]) {
+  return splitCandidateValues(value, /[、,，/]+/)
+    .join("、")
+    .slice(0, 256);
+}
+
+function buildBackgroundTemplate(values?: Partial<MockInterviewFormValues>) {
   const position = values?.jobPosition || "目标岗位";
-  const techStack = values?.techStack || "核心技术栈";
+  const techStack = serializeTechStackValue(values?.techStack) || "核心技术栈";
   return `项目背景：我在一个面向 ${position} 的项目中，主要解决了什么业务问题。\n我的职责：我具体负责的模块、接口、数据流或协作范围。\n技术方案：使用 ${techStack} 做了哪些关键设计，为什么这样选。\n难点取舍：遇到的性能、稳定性、成本、复杂度或协作问题，以及我的处理方式。\n量化结果：上线后 QPS、耗时、错误率、成本、转化率或人效有什么变化。\n复盘改进：如果重新做一次，我会优先优化什么。`;
 }
 
-function buildQualityItems(values?: Partial<API.MockInterviewAddRequest>) {
+function buildQualityItems(values?: Partial<MockInterviewFormValues>) {
   const resumeText = values?.resumeText?.trim() || "";
   return [
     {
@@ -62,7 +80,7 @@ function buildQualityItems(values?: Partial<API.MockInterviewAddRequest>) {
     },
     {
       label: "技术方向",
-      matched: Boolean(values?.techStack?.trim()),
+      matched: Boolean(splitCandidateValues(values?.techStack, /[、,，/]+/).length),
       hint: "补技术栈后，AI 才能围绕具体技术点追问。",
     },
     {
@@ -88,9 +106,9 @@ function buildQualityItems(values?: Partial<API.MockInterviewAddRequest>) {
   ];
 }
 
-function buildInterviewPreview(values?: Partial<API.MockInterviewAddRequest>) {
+function buildInterviewPreview(values?: Partial<MockInterviewFormValues>) {
   const interviewType = values?.interviewType || "技术深挖";
-  const techStack = values?.techStack || values?.jobPosition || "你的核心项目";
+  const techStack = serializeTechStackValue(values?.techStack) || values?.jobPosition || "你的核心项目";
   if (interviewType === "项目拷打") {
     return ["项目背景与职责边界", `${techStack} 的方案拆解和技术取舍`, "难点、量化结果和复盘改进"];
   }
@@ -103,13 +121,10 @@ function buildInterviewPreview(values?: Partial<API.MockInterviewAddRequest>) {
   return ["自我介绍与代表性项目", `${techStack} 的原理和场景落地`, "性能、稳定性、边界条件和综合追问"];
 }
 
-function mergeTechStack(currentTechStack?: string, tags?: string[]) {
-  const currentList = (currentTechStack || "")
-    .split(/[、,，/\s]+/)
-    .map((item) => item.trim())
-    .filter(Boolean);
+function mergeTechStack(currentTechStack?: string | string[], tags?: string[]) {
+  const currentList = splitCandidateValues(currentTechStack, /[、,，/\s]+/);
   const tagList = (tags || []).map((item) => item?.trim()).filter(Boolean) as string[];
-  return Array.from(new Set([...currentList, ...tagList])).slice(0, 12).join("、").slice(0, 256);
+  return Array.from(new Set([...currentList, ...tagList])).slice(0, 12);
 }
 
 function buildImportedResumeText(result?: API.ResumeQuestionRecommendVO) {
@@ -132,7 +147,7 @@ function buildImportedResumeText(result?: API.ResumeQuestionRecommendVO) {
  */
 const CreateMockInterviewPage: React.FC<Props> = (props) => {
   const [form] = Form.useForm();
-  const formValues = Form.useWatch([], form);
+  const formValues = Form.useWatch([], form) as MockInterviewFormValues | undefined;
   const loginUser = useSelector((state: RootState) => state.loginUser);
   const authInitialized = useAuthInitialized();
   const [loading, setLoading] = useState(false);
@@ -179,8 +194,8 @@ const CreateMockInterviewPage: React.FC<Props> = (props) => {
   const techStackExtra = !authInitialized
     ? "正在读取你的个人资料建议..."
     : techStackOptions.length
-      ? "下拉建议来自你的个人资料兴趣标签，也可以继续自由补充技术栈。"
-      : "你的个人资料里还没有兴趣标签，当前仍然可以直接输入技术方向。";
+      ? "建议来自你的个人资料兴趣标签，可多选，也可以直接输入新的技术栈。"
+      : "你的个人资料里还没有兴趣标签，当前仍然可以直接输入并添加多个技术方向。";
   const interviewTypeOptions = [
     { label: "技术深挖", value: "技术深挖" },
     { label: "项目拷打", value: "项目拷打" },
@@ -206,6 +221,7 @@ const CreateMockInterviewPage: React.FC<Props> = (props) => {
       const parsedDraft = JSON.parse(savedDraft);
       form.setFieldsValue({
         ...parsedDraft,
+        techStack: splitCandidateValues(parsedDraft?.techStack, /[、,，/\s]+/),
         expectedRounds: normalizeInterviewDepthPresetRounds(Number(parsedDraft?.expectedRounds || 5)),
       });
       message.success("已恢复你上次未完成的面试配置");
@@ -229,7 +245,7 @@ const CreateMockInterviewPage: React.FC<Props> = (props) => {
           jobPosition: res.data.jobPosition,
           workExperience: res.data.workExperience,
           interviewType: res.data.interviewType,
-          techStack: res.data.techStack,
+          techStack: splitCandidateValues(res.data.techStack, /[、,，/\s]+/),
           resumeText: res.data.resumeText,
           difficulty: res.data.difficulty,
           expectedRounds: normalizeInterviewDepthPresetRounds(Number(res.data.expectedRounds || 5)),
@@ -255,7 +271,7 @@ const CreateMockInterviewPage: React.FC<Props> = (props) => {
       jobPosition: formValues?.jobPosition,
       workExperience: formValues?.workExperience,
       interviewType: formValues?.interviewType,
-      techStack: formValues?.techStack,
+      techStack: splitCandidateValues(formValues?.techStack, /[、,，/\s]+/),
       resumeText: formValues?.resumeText,
       difficulty: formValues?.difficulty,
       expectedRounds: formValues?.expectedRounds,
@@ -277,7 +293,7 @@ const CreateMockInterviewPage: React.FC<Props> = (props) => {
     if (!result) {
       return;
     }
-    const currentValues = form.getFieldsValue() as API.MockInterviewAddRequest;
+    const currentValues = form.getFieldsValue() as MockInterviewFormValues;
     const importedResumeText = buildImportedResumeText(result);
     form.setFieldsValue({
       jobPosition: currentValues.jobPosition || result.jobDirection,
@@ -333,7 +349,11 @@ const CreateMockInterviewPage: React.FC<Props> = (props) => {
     const hide = message.loading("正在创建模拟面试...");
     setLoading(true);
     try {
-      const res = await addMockInterviewUsingPost(values);
+      const submitValues: API.MockInterviewAddRequest = {
+        ...values,
+        techStack: serializeTechStackValue((values as MockInterviewFormValues).techStack),
+      };
+      const res = await addMockInterviewUsingPost(submitValues);
       hide();
       message.success("模拟面试创建成功");
       if (typeof window !== "undefined") {
@@ -435,20 +455,27 @@ const CreateMockInterviewPage: React.FC<Props> = (props) => {
           label="技术方向 / 技术栈"
           name="techStack"
           extra={techStackExtra}
-          rules={[{ max: 256, message: "技术方向不能超过 256 个字符" }]}
+          rules={[
+            {
+              validator: (_, value) =>
+                serializeTechStackValue(value).length <= 256
+                  ? Promise.resolve()
+                  : Promise.reject(new Error("技术方向不能超过 256 个字符")),
+            },
+          ]}
         >
-          <AutoComplete
+          <Select
+            mode="tags"
+            allowClear
             options={techStackOptions}
+            maxTagCount="responsive"
+            tokenSeparators={[",", "，", "、", "/"]}
+            optionFilterProp="label"
             filterOption={(inputValue, option) =>
-              String(option?.value || "").toLowerCase().includes(inputValue.toLowerCase())
+              String(option?.label || option?.value || "").toLowerCase().includes(inputValue.toLowerCase())
             }
-          >
-            <Input
-              maxLength={256}
-              showCount
-              placeholder="例如：Java、Spring Boot、MySQL、Redis、消息队列"
-            />
-          </AutoComplete>
+            placeholder="可选择多个技术方向，也可直接输入后回车添加"
+          />
         </Form.Item>
 
         <div className="resume-import-card">

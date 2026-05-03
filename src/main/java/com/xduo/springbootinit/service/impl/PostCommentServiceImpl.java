@@ -195,10 +195,11 @@ public class PostCommentServiceImpl extends ServiceImpl<PostCommentMapper, PostC
                 delta = 0;
             }
             if (delta > 0 && !Objects.equals(comment.getUserId(), loginUser.getId())) {
+                String displayName = StringUtils.defaultIfBlank(loginUser.getUserName(), "有用户");
                 notificationService.sendNotification(
                         comment.getUserId(),
                         "有人给你的社区回复点赞",
-                        loginUser.getUserName() + " 点赞了你的社区回复：" + StringUtils.abbreviate(comment.getContent(), 20),
+                        displayName + " 点赞了你的社区回复：" + StringUtils.abbreviate(comment.getContent(), 20),
                         "post_comment_like",
                         comment.getPostId()
                 );
@@ -630,13 +631,14 @@ public class PostCommentServiceImpl extends ServiceImpl<PostCommentMapper, PostC
     }
 
     private void sendReplyNotificationIfNeeded(PostComment comment, User authorUser, Post post) {
+        String displayName = StringUtils.defaultIfBlank(authorUser.getUserName(), "有用户");
         if (comment.getReplyToId() != null) {
             PostComment replyToComment = getById(comment.getReplyToId());
             if (replyToComment != null && !Objects.equals(replyToComment.getUserId(), comment.getUserId())) {
                 notificationService.sendNotification(
                         replyToComment.getUserId(),
                         "有人回复了你的社区回复",
-                        authorUser.getUserName() + " 回复了你：" + StringUtils.abbreviate(comment.getContent(), 20),
+                        displayName + " 回复了你：" + StringUtils.abbreviate(comment.getContent(), 20),
                         "post_reply",
                         comment.getPostId()
                 );
@@ -649,7 +651,7 @@ public class PostCommentServiceImpl extends ServiceImpl<PostCommentMapper, PostC
                 notificationService.sendNotification(
                         parentComment.getUserId(),
                         "你的社区回复有了新回复",
-                        authorUser.getUserName() + " 回复了你：" + StringUtils.abbreviate(comment.getContent(), 20),
+                        displayName + " 回复了你：" + StringUtils.abbreviate(comment.getContent(), 20),
                         "post_reply",
                         comment.getPostId()
                 );
@@ -660,7 +662,7 @@ public class PostCommentServiceImpl extends ServiceImpl<PostCommentMapper, PostC
             notificationService.sendNotification(
                     post.getUserId(),
                     "你的帖子有了新回复",
-                    authorUser.getUserName() + " 评论了你的帖子：" + StringUtils.abbreviate(comment.getContent(), 20),
+                    displayName + " 评论了你的帖子：" + StringUtils.abbreviate(comment.getContent(), 20),
                     "post_reply",
                     comment.getPostId()
             );

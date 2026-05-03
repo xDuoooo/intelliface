@@ -33,6 +33,9 @@ public class QuestionComment {
     /** 内容（纯文本，最长 2000 字） */
     private String content;
 
+    /** 发布时 IP 归属地 */
+    private String ipLocation;
+
     /** 点赞数（冗余字段） */
     private Integer likeNum;
 

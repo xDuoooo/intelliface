@@ -7,12 +7,19 @@ services:
     container_name: intelligent-interview-backend
     restart: unless-stopped
     environment:
-      JAVA_TOOL_OPTIONS: "-Dnacos.remote.client.grpc.channel.capability.negotiation.timeout=10000 -Dnacos.remote.client.grpc.timeout=10000 -Dnacos.remote.client.grpc.server.check.timeout=10000"
+      JAVA_TOOL_OPTIONS: "-Dnacos.remote.client.grpc.channel.capability.negotiation.timeout=30000 -Dnacos.remote.client.grpc.timeout=30000 -Dnacos.remote.client.grpc.server.check.timeout=30000 -Dnacos.remote.client.grpc.health.timeout=30000"
       SPRING_PROFILES_ACTIVE: prod
       NACOS_DISCOVERY_SERVER_ADDR: ${NACOS_DISCOVERY_SERVER_ADDR}
       NACOS_DISCOVERY_USERNAME: ${NACOS_DISCOVERY_USERNAME:-}
       NACOS_DISCOVERY_PASSWORD: ${NACOS_DISCOVERY_PASSWORD:-}
       NACOS_CONFIG_SERVER_ADDR: ${NACOS_CONFIG_SERVER_ADDR}
+      NACOS_CONFIG_TIMEOUT: ${NACOS_CONFIG_TIMEOUT:-30000}
+      NACOS_CONFIG_REFRESH_ENABLED: ${NACOS_CONFIG_REFRESH_ENABLED:-false}
+      NACOS_SHARED_CONFIG_REFRESH_ENABLED: ${NACOS_SHARED_CONFIG_REFRESH_ENABLED:-false}
+      NACOS_LISTENER_TIMEOUT: ${NACOS_LISTENER_TIMEOUT:-30000}
+      NACOS_BLACK_IP_SYNC_ENABLED: ${NACOS_BLACK_IP_SYNC_ENABLED:-false}
+      NACOS_BLACK_IP_POLL_FIXED_DELAY_MS: ${NACOS_BLACK_IP_POLL_FIXED_DELAY_MS:-30000}
+      NACOS_BLACK_IP_POLL_INITIAL_DELAY_MS: ${NACOS_BLACK_IP_POLL_INITIAL_DELAY_MS:-30000}
       NACOS_CONFIG_USERNAME: ${NACOS_CONFIG_USERNAME:-}
       NACOS_CONFIG_PASSWORD: ${NACOS_CONFIG_PASSWORD:-}
       SENTINEL_DASHBOARD: ${SENTINEL_DASHBOARD:-}

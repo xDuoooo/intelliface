@@ -2,18 +2,20 @@
 
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
-import { AlertCircle, ChevronDown, Loader2, MessageCircle, Send, Trash2 } from "lucide-react";
+import { AlertCircle, ChevronDown, Loader2, MessageCircle, Send, ThumbsUp, Trash2 } from "lucide-react";
 import { Modal, message } from "antd";
 import { useSelector } from "react-redux";
 import { RootState } from "@/stores";
 import {
   addPostComment,
   deletePostComment,
+  likePostComment,
   listPostCommentsByPage,
   PostCommentVO,
 } from "@/api/postCommentController";
 import UserAvatar from "@/components/UserAvatar";
 import UserProfileHoverCard from "@/components/UserProfileHoverCard";
+import { formatIpLocation } from "@/lib/location";
 import { cn } from "@/lib/utils";
 import { formatDistanceToNow } from "date-fns";
 import { zhCN } from "date-fns/locale";
@@ -21,6 +23,8 @@ import { zhCN } from "date-fns/locale";
 interface Props {
   postId: number | string;
 }
+
+type SortField = "createTime" | "likeNum";
 
 function timeAgo(dateStr?: string) {
   if (!dateStr) {
@@ -31,6 +35,20 @@ function timeAgo(dateStr?: string) {
   } catch {
     return dateStr;
   }
+}
+
+function mapCommentTree(
+  list: PostCommentVO[] = [],
+  updater: (comment: PostCommentVO) => PostCommentVO,
+): PostCommentVO[] {
+  return list.map((comment) => {
+    const nextComment = updater(comment);
+    const replies = nextComment.replies ?? [];
+    return {
+      ...nextComment,
+      replies: replies.length ? mapCommentTree(replies, updater) : [],
+    };
+  });
 }
 
 interface CommentInputProps {
@@ -110,12 +128,13 @@ function CommentInput({ placeholder, onSubmit, onCancel, autoFocus }: CommentInp
 interface CommentCardProps {
   comment: PostCommentVO;
   loginUser: any;
+  onLike: (id: number | string) => void;
   onDelete: (id: number | string) => void;
   onReply: (parentId: number | string, replyToId: number | string, replyToName: string) => void;
   depth?: number;
 }
 
-function PostCommentCard({ comment, loginUser, onDelete, onReply, depth = 0 }: CommentCardProps) {
+function PostCommentCard({ comment, loginUser, onLike, onDelete, onReply, depth = 0 }: CommentCardProps) {
   const isOwner = loginUser?.id === comment.user?.id;
   const isAdmin = loginUser?.userRole === "admin";
   const isApproved = Number(comment.status ?? 0) === 0;
@@ -160,6 +179,9 @@ function PostCommentCard({ comment, loginUser, onDelete, onReply, depth = 0 }: C
             {isRejected ? (
               <span className="rounded-md bg-red-100 px-1.5 py-0.5 text-[10px] font-bold text-red-600">已驳回</span>
             ) : null}
+            {comment.ipLocation ? (
+              <span className="text-xs font-medium text-slate-400">{formatIpLocation(comment.ipLocation)}</span>
+            ) : null}
             <span className="ml-auto text-xs font-medium text-slate-400">{timeAgo(comment.createTime)}</span>
           </div>
 
@@ -192,20 +214,36 @@ function PostCommentCard({ comment, loginUser, onDelete, onReply, depth = 0 }: C
           </div>
 
           <div className="flex items-center gap-4">
-            {isApproved && loginUser?.id ? (
-              <button
-                onClick={() =>
-                  onReply(
-                    depth === 0 ? comment.id : (comment.parentId ?? comment.id),
-                    comment.id,
-                    comment.user?.userName || "匿名",
-                  )
-                }
-                className="flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-bold text-slate-400 transition-all hover:bg-slate-100 hover:text-primary"
-              >
-                <MessageCircle className="h-3.5 w-3.5" />
-                回复
-              </button>
+            {isApproved ? (
+              <>
+                <button
+                  onClick={() => onLike(comment.id)}
+                  className={cn(
+                    "flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-bold transition-all",
+                    comment.hasLiked
+                      ? "bg-primary/10 text-primary hover:bg-primary/20"
+                      : "text-slate-400 hover:bg-slate-100 hover:text-primary",
+                  )}
+                >
+                  <ThumbsUp className={cn("h-3.5 w-3.5", comment.hasLiked && "fill-current")} />
+                  {Number(comment.likeNum || 0) > 0 ? comment.likeNum : "点赞"}
+                </button>
+                {loginUser?.id ? (
+                  <button
+                    onClick={() =>
+                      onReply(
+                        depth === 0 ? comment.id : (comment.parentId ?? comment.id),
+                        comment.id,
+                        comment.user?.userName || "匿名",
+                      )
+                    }
+                    className="flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-bold text-slate-400 transition-all hover:bg-slate-100 hover:text-primary"
+                  >
+                    <MessageCircle className="h-3.5 w-3.5" />
+                    回复
+                  </button>
+                ) : null}
+              </>
             ) : !isApproved ? (
               <div className="flex items-center gap-1.5 text-xs font-bold text-slate-400">
                 <AlertCircle className="h-3.5 w-3.5" />
@@ -232,6 +270,7 @@ function PostCommentCard({ comment, loginUser, onDelete, onReply, depth = 0 }: C
               key={String(reply.id)}
               comment={reply}
               loginUser={loginUser}
+              onLike={onLike}
               onDelete={onDelete}
               onReply={onReply}
               depth={depth + 1}
@@ -251,6 +290,7 @@ export default function PostCommentSection({ postId }: Props) {
   const [total, setTotal] = useState(0);
   const [current, setCurrent] = useState(1);
   const [loading, setLoading] = useState(false);
+  const [sortField, setSortField] = useState<SortField>("createTime");
   const [replyState, setReplyState] = useState<{
     parentId: number | string;
     replyToId: number | string;
@@ -270,13 +310,15 @@ export default function PostCommentSection({ postId }: Props) {
   };
 
   const fetchComments = useCallback(
-    async (page = 1, append = false) => {
+    async (page = 1, sort = sortField, append = false) => {
       setLoading(true);
       try {
         const data = await listPostCommentsByPage({
           postId,
           current: page,
           pageSize: PAGE_SIZE,
+          sortField: sort,
+          sortOrder: "descend",
         });
         if (append) {
           setComments((prev) => [...prev, ...data.records]);
@@ -292,21 +334,21 @@ export default function PostCommentSection({ postId }: Props) {
         setLoading(false);
       }
     },
-    [postId],
+    [postId, sortField],
   );
 
   useEffect(() => {
-    void fetchComments(1, false);
-  }, [fetchComments]);
+    void fetchComments(1, sortField, false);
+  }, [fetchComments, sortField]);
 
   const handleAddComment = async (content: string) => {
     const result = await addPostComment({ postId, content });
     if (result.status === 0) {
       message.success("回复发布成功");
-      await fetchComments(1, false);
+      await fetchComments(1, sortField, false);
     } else {
       message.success(`回复已提交审核${result.reviewMessage ? `：${result.reviewMessage}` : ""}`);
-      await fetchComments(1, false);
+      await fetchComments(1, sortField, false);
     }
   };
 
@@ -326,7 +368,39 @@ export default function PostCommentSection({ postId }: Props) {
     } else {
       message.success(`回复已提交审核${result.reviewMessage ? `：${result.reviewMessage}` : ""}`);
     }
-    await fetchComments(1, false);
+    await fetchComments(1, sortField, false);
+  };
+
+  const handleLike = async (commentId: number | string) => {
+    if (!loginUser?.id) {
+      message.warning("请先登录后再点赞");
+      return;
+    }
+    let previousComments: PostCommentVO[] = [];
+    setComments((prev) => {
+      previousComments = prev;
+      return mapCommentTree(prev, (comment) => {
+        if (comment.id !== commentId) {
+          return comment;
+        }
+        const liked = !comment.hasLiked;
+        const nextLikeNum = Math.max(0, Number(comment.likeNum || 0) + (liked ? 1 : -1));
+        return { ...comment, hasLiked: liked, likeNum: nextLikeNum };
+      });
+    });
+    try {
+      const result = await likePostComment(commentId);
+      setComments((prev) =>
+        mapCommentTree(prev, (comment) =>
+          comment.id === commentId
+            ? { ...comment, hasLiked: result.liked, likeNum: Math.max(0, Number(result.likeNum || 0)) }
+            : comment,
+        ),
+      );
+    } catch {
+      setComments(previousComments);
+      message.error("点赞失败，请稍后重试");
+    }
   };
 
   const handleDelete = (commentId: number | string) => {
@@ -342,7 +416,7 @@ export default function PostCommentSection({ postId }: Props) {
         try {
           await deletePostComment(commentId);
           message.success("回复已删除");
-          await fetchComments(1, false);
+          await fetchComments(1, sortField, false);
         } catch (error) {
           message.error("删除失败，请稍后重试");
         }
@@ -350,12 +424,17 @@ export default function PostCommentSection({ postId }: Props) {
     });
   };
 
+  const SORT_OPTIONS = [
+    { label: "最新", value: "createTime" as SortField },
+    { label: "最热", value: "likeNum" as SortField },
+  ];
+
   return (
     <section
       id="post-comment-section"
       className="space-y-10 rounded-[2.5rem] border border-slate-100 bg-white p-8 shadow-2xl shadow-slate-200/50 sm:p-12"
     >
-      <div className="border-b border-slate-100 pb-8">
+      <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-100 pb-8">
         <div className="flex items-center gap-3">
           <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-blue-100 bg-blue-50">
             <MessageCircle className="h-6 w-6 text-blue-500" />
@@ -364,6 +443,26 @@ export default function PostCommentSection({ postId }: Props) {
             <h2 className="text-2xl font-black tracking-tight text-slate-900">交流与回复</h2>
             <p className="mt-0.5 text-xs font-medium text-slate-400">{total} 条社区回复</p>
           </div>
+        </div>
+        <div className="flex rounded-2xl bg-slate-100 p-1">
+          {SORT_OPTIONS.map((option) => (
+            <button
+              key={option.value}
+              onClick={() => {
+                if (sortField !== option.value) {
+                  setSortField(option.value);
+                }
+              }}
+              className={cn(
+                "rounded-xl px-4 py-1.5 text-xs font-black transition-all",
+                sortField === option.value
+                  ? "bg-white text-slate-900 shadow-sm"
+                  : "text-slate-400 hover:text-slate-600",
+              )}
+            >
+              {option.label}
+            </button>
+          ))}
         </div>
       </div>
 
@@ -419,6 +518,7 @@ export default function PostCommentSection({ postId }: Props) {
               key={String(comment.id)}
               comment={comment}
               loginUser={loginUser}
+              onLike={handleLike}
               onDelete={handleDelete}
               onReply={(parentId, replyToId, replyToName) =>
                 setReplyState({ parentId, replyToId, replyToName })
@@ -431,7 +531,7 @@ export default function PostCommentSection({ postId }: Props) {
       {hasMore ? (
         <div className="flex justify-center pt-4">
           <button
-            onClick={() => void fetchComments(current + 1, true)}
+            onClick={() => void fetchComments(current + 1, sortField, true)}
             disabled={loading}
             className="flex h-11 items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-8 text-sm font-bold text-slate-500 shadow-sm transition-all hover:border-primary hover:text-primary disabled:opacity-40"
           >

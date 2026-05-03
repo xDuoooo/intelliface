@@ -7,7 +7,7 @@ import QuestionCard from "@/components/QuestionCard";
 import QuestionOwnerPanel from "@/app/question/[questionId]/QuestionOwnerPanel";
 import { cn } from "@/lib/utils";
 import { ChevronLeft, ListFilter, Bookmark, Sparkles } from "lucide-react";
-import { headers } from "next/headers";
+import { buildServerRequestOptions } from "@/libs/serverRequestOptions";
 
 export const dynamic = "force-dynamic";
 
@@ -17,11 +17,7 @@ export const dynamic = "force-dynamic";
  */
 export default async function BankQuestionPage({ params }: { params: { questionBankId: string, questionId: string } }) {
   const { questionBankId, questionId } = params;
-  const requestOptions = {
-    headers: {
-      cookie: headers().get("cookie") || "",
-    },
-  };
+  const requestOptions = buildServerRequestOptions();
 
   // 获取题库详情
   let bank: API.QuestionBankVO | undefined = undefined;

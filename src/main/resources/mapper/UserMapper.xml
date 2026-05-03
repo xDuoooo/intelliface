@@ -18,6 +18,7 @@
         <result property="city" column="city" jdbcType="VARCHAR"/>
         <result property="careerDirection" column="careerDirection" jdbcType="VARCHAR"/>
         <result property="interestTags" column="interestTags" jdbcType="VARCHAR"/>
+        <result property="profileVisibleFields" column="profileVisibleFields" jdbcType="VARCHAR"/>
         <result property="userRole" column="userRole" jdbcType="VARCHAR"/>
         <result property="githubId" column="githubId" jdbcType="VARCHAR"/>
         <result property="giteeId" column="giteeId" jdbcType="VARCHAR"/>
@@ -30,7 +31,7 @@
 
     <sql id="Base_Column_List">
         id,userAccount,userPassword,passwordConfigured,
-        userName,userAvatar,userProfile,mpOpenId,phone,email,city,careerDirection,interestTags,
+        userName,userAvatar,userProfile,mpOpenId,phone,email,city,careerDirection,interestTags,profileVisibleFields,
         userRole,githubId,giteeId,googleId,editTime,createTime,updateTime,isDelete
     </sql>
 </mapper>

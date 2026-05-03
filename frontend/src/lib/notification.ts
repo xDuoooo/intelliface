@@ -4,9 +4,14 @@ export const NOTIFICATION_TYPE_OPTIONS = [
   { label: "评论审核", value: "comment_review" },
   { label: "评论回复", value: "reply" },
   { label: "点赞提醒", value: "like" },
+  { label: "题目评论", value: "question_comment" },
+  { label: "题目收藏", value: "question_favour" },
   { label: "关注提醒", value: "user_follow" },
   { label: "帖子审核", value: "post_review" },
   { label: "帖子回复", value: "post_reply" },
+  { label: "帖子点赞", value: "post_thumb" },
+  { label: "帖子收藏", value: "post_favour" },
+  { label: "社区回复点赞", value: "post_comment_like" },
   { label: "社区回复审核", value: "post_comment_review" },
   { label: "学习提醒", value: "learning_goal_reminder" },
   { label: "系统公告", value: "system_announcement" },
@@ -26,9 +31,14 @@ export const NOTIFICATION_TYPE_COLOR_MAP: Record<string, string> = {
   comment_review: "purple",
   reply: "cyan",
   like: "magenta",
+  question_comment: "cyan",
+  question_favour: "gold",
   user_follow: "gold",
   post_review: "geekblue",
   post_reply: "lime",
+  post_thumb: "magenta",
+  post_favour: "gold",
+  post_comment_like: "magenta",
   post_comment_review: "purple",
   learning_goal_reminder: "green",
   system_announcement: "processing",
@@ -76,8 +86,12 @@ export function getNotificationTargetUrl(item?: {
       }
       return hasTargetId ? `/post/${targetId}` : "/user/center?tab=posts";
     case "post_reply":
+    case "post_comment_like":
     case "post_comment_review":
       return hasTargetId ? `/post/${targetId}#post-comment-section` : "/user/notifications";
+    case "post_thumb":
+    case "post_favour":
+      return hasTargetId ? `/post/${targetId}` : "/user/notifications";
     case "question_review":
       if (title.includes("未通过") || content.includes("未通过")) {
         return "/user/center?tab=submission";
@@ -85,8 +99,11 @@ export function getNotificationTargetUrl(item?: {
       return hasTargetId ? `/question/${targetId}` : "/user/center?tab=submission";
     case "reply":
     case "like":
+    case "question_comment":
     case "comment_review":
       return hasTargetId ? `/question/${targetId}#comment-section` : "/user/notifications";
+    case "question_favour":
+      return hasTargetId ? `/question/${targetId}` : "/user/notifications";
     case "user_follow":
       return hasTargetId ? `/user/${targetId}` : "/user/notifications";
     case "learning_goal_reminder":

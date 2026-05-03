@@ -51,8 +51,4 @@ public interface WxMpService {
      */
     LoginUserVO bindByCode(WxMpCodeLoginRequest request, HttpServletRequest httpServletRequest);
 
-    /**
-     * 同步公众号自定义菜单
-     */
-    void syncMenu();
 }

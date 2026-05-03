@@ -9,8 +9,11 @@ import com.xduo.springbootinit.mapper.QuestionFavourMapper;
 import com.xduo.springbootinit.model.entity.Question;
 import com.xduo.springbootinit.model.entity.QuestionFavour;
 import com.xduo.springbootinit.model.entity.User;
+import com.xduo.springbootinit.service.NotificationService;
 import com.xduo.springbootinit.service.QuestionRecommendLogService;
 import com.xduo.springbootinit.service.QuestionFavourService;
+import com.xduo.springbootinit.service.UserService;
+import org.apache.commons.lang3.StringUtils;
 import org.springframework.aop.framework.AopContext;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -29,6 +32,12 @@ public class QuestionFavourServiceImpl extends ServiceImpl<QuestionFavourMapper,
 
     @Resource
     private QuestionRecommendLogService questionRecommendLogService;
+
+    @Resource
+    private NotificationService notificationService;
+
+    @Resource
+    private UserService userService;
 
     /**
      * 题目收藏
@@ -84,11 +93,29 @@ public class QuestionFavourServiceImpl extends ServiceImpl<QuestionFavourMapper,
             result = this.save(questionFavour);
             if (result) {
                 questionRecommendLogService.logActionByRecentSource(userId, questionId, "favour");
+                sendQuestionFavourNotificationIfNeeded(userId, questionId);
                 // 题目收藏数 +1
                 return 1;
             } else {
                 throw new BusinessException(ErrorCode.SYSTEM_ERROR);
             }
         }
+    }
+
+    private void sendQuestionFavourNotificationIfNeeded(long userId, long questionId) {
+        Question question = questionMapper.selectById(questionId);
+        if (question == null || question.getUserId() == null || question.getUserId().equals(userId)) {
+            return;
+        }
+        User user = userService.getById(userId);
+        String displayName = user == null ? "有用户" : StringUtils.defaultIfBlank(user.getUserName(), "有用户");
+        String questionTitle = StringUtils.defaultIfBlank(question.getTitle(), "这道题目");
+        notificationService.sendNotification(
+                question.getUserId(),
+                "有人收藏了你的题目",
+                displayName + " 收藏了你的题目：" + StringUtils.abbreviate(questionTitle, 30),
+                "question_favour",
+                questionId
+        );
     }
 }

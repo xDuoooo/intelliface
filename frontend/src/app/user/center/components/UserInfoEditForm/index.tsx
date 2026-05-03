@@ -9,8 +9,10 @@ import { useDispatch } from "react-redux";
 import { AppDispatch } from "@/stores";
 import { setLoginUser } from "@/stores/loginUser";
 import { User, FileText, ArrowRight, Camera, Loader2, MapPin } from "lucide-react";
+import { formatIpLocation } from "@/lib/location";
 import { validateImageSrc } from "@/lib/utils";
 import { buildApiUrl } from "@/libs/request";
+import TagSearchSelect from "@/components/TagSearchSelect";
 
 const { Text } = Typography;
 const CAREER_DIRECTION_OPTIONS = [
@@ -206,24 +208,24 @@ const UserInfoEditForm = (props: Props) => {
             name="interestTags"
             extra="最多 8 个标签，用于个性化推荐和公开主页展示。"
           >
-            <Select
-              mode="tags"
+            <TagSearchSelect
+              scene="interest"
               placeholder="输入你关注的技术方向，例如：MySQL、Redis、并发"
               tokenSeparators={[",", " "]}
+              maxCount={8}
               maxTagCount="responsive"
-              size="large"
             />
           </Form.Item>
 
           <div className="rounded-[1.75rem] border border-emerald-100 bg-emerald-50/70 px-5 py-4">
             <div className="font-bold text-slate-700 flex items-center gap-2 text-sm">
-              <MapPin size={16} className="text-emerald-600"/> 最近登录城市
+              <MapPin size={16} className="text-emerald-600"/> IP 归属地
             </div>
             <div className="mt-2 text-sm text-slate-600">
-              {user.city || "暂未识别到城市信息"}
+              {formatIpLocation(user.city)}
             </div>
             <div className="mt-2 text-xs text-slate-400 leading-6">
-              城市由系统根据最近登录 IP 自动识别，用于地理热度统计与公开资料展示，普通用户不支持手动修改。
+              归属地由系统根据最近登录 IP 自动识别，用于地理热度统计与公开资料展示，普通用户不支持手动修改。
             </div>
           </div>
 
@@ -246,6 +248,7 @@ const UserInfoEditForm = (props: Props) => {
               className="rounded-2xl bg-slate-50 border-slate-100 hover:border-primary focus:border-primary transition-all shadow-sm py-4"
             />
           </Form.Item>
+
         </div>
 
         <div className="pt-8 flex justify-center border-t border-slate-50 mt-10">

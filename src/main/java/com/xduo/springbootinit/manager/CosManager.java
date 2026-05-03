@@ -107,6 +107,11 @@ public class CosManager {
             return rawUrl;
         }
 
+        // 本地静态资源（如前端 public 下的默认 logo）应直接返回，不能误当成 COS key 去签名。
+        if (isLocalStaticAsset(rawUrl)) {
+            return rawUrl;
+        }
+
         // 情况1：纯 COS key（以 / 开头但不以 http 开头）
         if (rawUrl.startsWith("/") && !rawUrl.startsWith("http")) {
             return getPresignedDownloadUrl(rawUrl, presignedExpireMinutes);
@@ -120,6 +125,12 @@ public class CosManager {
 
         // 情况3：外部 URL（GitHub、Gitee 头像等），原样返回
         return rawUrl;
+    }
+
+    private boolean isLocalStaticAsset(String rawUrl) {
+        return rawUrl.startsWith("/assets/")
+                || "/icon.png".equals(rawUrl)
+                || "/favicon.ico".equals(rawUrl);
     }
 
     /**

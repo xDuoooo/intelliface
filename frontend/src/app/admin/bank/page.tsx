@@ -4,7 +4,7 @@ import React, { useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import {
   deleteQuestionBankUsingPost,
-  listQuestionBankByPageUsingPost,
+  listQuestionBankVoByPageUsingPost,
   reviewQuestionBankUsingPost,
 } from "@/api/questionBankController";
 import { Plus, Trash2, Edit3, Briefcase } from "lucide-react";
@@ -20,6 +20,41 @@ import {
 
 const CreateModal = dynamic(() => import("./components/CreateModal"));
 const UpdateModal = dynamic(() => import("./components/UpdateModal"));
+
+const normalizeScalar = (value: unknown) => {
+  if (Array.isArray(value)) {
+    const firstValue = value[0];
+    if (firstValue === undefined || firstValue === null || firstValue === "") {
+      return undefined;
+    }
+    return firstValue;
+  }
+  if (value === undefined || value === null || value === "") {
+    return undefined;
+  }
+  return value;
+};
+
+const buildQuestionBankQueryRequest = (
+  params: Record<string, any>,
+  sort: Record<string, "ascend" | "descend" | null>,
+) => {
+  const sortField = Object.keys(sort)?.[0];
+  const sortOrder = sortField ? sort?.[sortField] ?? undefined : undefined;
+  const reviewStatus = normalizeScalar(params.reviewStatus);
+  const id = normalizeScalar(params.id);
+
+  return {
+    current: Number(params.current) || 1,
+    pageSize: Number(params.pageSize) || 10,
+    id,
+    title: typeof params.title === "string" ? params.title : undefined,
+    description: typeof params.description === "string" ? params.description : undefined,
+    reviewStatus: reviewStatus !== undefined ? Number(reviewStatus) : undefined,
+    sortField,
+    sortOrder,
+  } as API.QuestionBankQueryRequest;
+};
 
 /**
  * 题库管理页面
@@ -240,15 +275,16 @@ const QuestionBankAdminPage: React.FC = () => {
           }}
           request={async (params, sort, filter) => {
             try {
-              const sortField = Object.keys(sort)?.[0];
-              const sortOrder = sort?.[sortField] ?? undefined;
-              // @ts-ignore
-              const res = await listQuestionBankByPageUsingPost({
-                ...params,
-                sortField,
-                sortOrder,
-                ...filter,
-              } as API.QuestionBankQueryRequest) as unknown as API.BaseResponsePageQuestionBankVO_;
+              const queryRequest = buildQuestionBankQueryRequest(
+                {
+                  ...params,
+                  ...filter,
+                },
+                sort as Record<string, "ascend" | "descend" | null>,
+              );
+              const res = (await listQuestionBankVoByPageUsingPost(
+                queryRequest,
+              )) as unknown as API.BaseResponsePageQuestionBankVO_;
               return {
                 success: res.code === 0,
                 data: res.data?.records || [],
@@ -264,6 +300,10 @@ const QuestionBankAdminPage: React.FC = () => {
             }
           }}
           columns={columns}
+          pagination={{
+            pageSize: 10,
+            showSizeChanger: true,
+          }}
         />
       </div>
 

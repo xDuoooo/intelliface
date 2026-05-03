@@ -77,6 +77,11 @@ public class LoginUserVO implements Serializable {
     private java.util.List<String> interestTagList;
 
     /**
+     * 公开主页可见字段
+     */
+    private java.util.List<String> profileVisibleFieldList;
+
+    /**
      * GitHub 唯一标识
      */
     private String githubId;

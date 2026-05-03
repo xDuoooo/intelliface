@@ -83,6 +83,11 @@ public class User implements Serializable {
     private String interestTags;
 
     /**
+     * 公开主页可见字段（json 数组，空值默认全部公开）
+     */
+    private String profileVisibleFields;
+
+    /**
      * 用户角色：user/admin/ban
      */
     private String userRole;

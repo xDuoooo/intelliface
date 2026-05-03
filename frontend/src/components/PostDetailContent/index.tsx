@@ -3,7 +3,8 @@
 import Link from "next/link";
 import dynamic from "next/dynamic";
 import { Tag } from "antd";
-import { CalendarClock, Heart, ThumbsUp } from "lucide-react";
+import { CalendarClock } from "lucide-react";
+import { formatIpLocation } from "@/lib/location";
 import UserAvatar from "@/components/UserAvatar";
 import UserProfileHoverCard from "@/components/UserProfileHoverCard";
 
@@ -100,14 +101,18 @@ export default function PostDetailContent({ post, relatedPostList = [] }: Props)
                 <CalendarClock className="h-4 w-4" />
                 {post.createTime ? new Date(post.createTime).toLocaleString("zh-CN") : "刚刚"}
               </span>
-              <span className="inline-flex items-center gap-1">
-                <ThumbsUp className="h-4 w-4" />
-                {post.thumbNum || 0}
-              </span>
-              <span className="inline-flex items-center gap-1">
-                <Heart className="h-4 w-4" />
-                {post.favourNum || 0}
-              </span>
+              {post.ipLocation ? (
+                <span className="text-xs font-medium text-slate-400">{formatIpLocation(post.ipLocation)}</span>
+              ) : null}
+              <PostActionBar
+                postId={post.id ?? ""}
+                initialThumbNum={post.thumbNum || 0}
+                initialFavourNum={post.favourNum || 0}
+                initialHasThumb={!!post.hasThumb}
+                initialHasFavour={!!post.hasFavour}
+                variant="meta"
+                showReport={false}
+              />
             </div>
           </div>
 
@@ -117,11 +122,22 @@ export default function PostDetailContent({ post, relatedPostList = [] }: Props)
             initialFavourNum={post.favourNum || 0}
             initialHasThumb={!!post.hasThumb}
             initialHasFavour={!!post.hasFavour}
+            showThumbAndFavour={false}
+            showReport={false}
           />
 
           <div className="prose prose-slate max-w-none prose-headings:font-black prose-headings:text-slate-900">
             <MdViewer value={post.content} />
           </div>
+
+          <PostActionBar
+            postId={post.id ?? ""}
+            initialThumbNum={post.thumbNum || 0}
+            initialFavourNum={post.favourNum || 0}
+            initialHasThumb={!!post.hasThumb}
+            initialHasFavour={!!post.hasFavour}
+            showThumbAndFavour={false}
+          />
         </div>
       </section>
 

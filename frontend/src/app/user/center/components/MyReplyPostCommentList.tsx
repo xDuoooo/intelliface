@@ -6,6 +6,7 @@ import {
   listMyRepliedPostCommentsByPage,
   type PostCommentActivityVO,
 } from "@/api/postCommentController";
+import { formatIpLocation } from "@/lib/location";
 import RecordFilterToolbar from "./RecordFilterToolbar";
 
 type StatusFilter = "all" | 0 | 1 | 2;
@@ -120,6 +121,12 @@ export default function MyReplyPostCommentList() {
                     <MessageCircleReply size={14} />
                     社区回复
                   </span>
+                  {item.ipLocation ? (
+                    <span className="inline-flex items-center gap-1.5">
+                      <MessageCircleReply size={14} />
+                      {formatIpLocation(item.ipLocation)}
+                    </span>
+                  ) : null}
                   {typeof item.status === "number" && item.status !== 0 ? (
                     <Tag
                       className={`m-0 rounded-full px-3 py-1 text-xs font-bold ${

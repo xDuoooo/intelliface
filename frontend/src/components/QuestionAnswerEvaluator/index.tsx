@@ -19,12 +19,12 @@ function getPreferredAudioMimeType() {
     return "";
   }
   const candidates = [
-    "audio/webm;codecs=opus",
-    "audio/webm",
-    "audio/mp4",
-    "audio/mpeg",
     "audio/ogg;codecs=opus",
     "audio/ogg",
+    "audio/mpeg",
+    "audio/mp4",
+    "audio/webm;codecs=opus",
+    "audio/webm",
   ];
   return candidates.find((type) => MediaRecorder.isTypeSupported(type)) || "";
 }

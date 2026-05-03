@@ -119,14 +119,17 @@ public class UserQuestionHistoryController {
      * 获取我的刷题记录分页
      */
     @GetMapping("/my/history/list")
-    public BaseResponse<Page<UserQuestionHistoryVO>> listMyQuestionHistoryByPage(int current, int pageSize,
+    public BaseResponse<Page<UserQuestionHistoryVO>> listMyQuestionHistoryByPage(int current, int pageSize, Integer status,
                                                                       HttpServletRequest request) {
         if (current <= 0 || pageSize <= 0 || pageSize > 50) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR, "分页参数不合法");
         }
+        if (status != null && (status < 0 || status > 2)) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "刷题状态不合法");
+        }
         final User loginUser = userService.getLoginUser(request);
         Page<UserQuestionHistory> page = new Page<>(current, pageSize);
-        Page<UserQuestionHistoryVO> voPage = userQuestionHistoryService.listMyQuestionHistoryByPage(page, loginUser.getId(), request);
+        Page<UserQuestionHistoryVO> voPage = userQuestionHistoryService.listMyQuestionHistoryByPage(page, loginUser.getId(), status, request);
         return ResultUtils.success(voPage);
     }
 

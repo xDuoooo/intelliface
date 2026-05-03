@@ -217,6 +217,21 @@ export async function updateMyUserUsingPost(
   });
 }
 
+/** mergeMyInterestTags POST /api/user/interest_tags/merge */
+export async function mergeMyInterestTagsUsingPost(
+  body: API.UserInterestTagsMergeRequest,
+  options?: { [key: string]: any },
+) {
+  return request<API.BaseResponseLoginUserVO_>('/api/user/interest_tags/merge', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    data: body,
+    ...(options || {}),
+  });
+}
+
 /** changePassword POST /api/user/change_password */
 export async function changePasswordUsingPost(
   body: API.UserChangePasswordRequest,

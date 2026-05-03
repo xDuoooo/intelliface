@@ -18,6 +18,7 @@ import {
   pinComment,
   setOfficialAnswer,
 } from "@/api/commentController";
+import { formatIpLocation } from "@/lib/location";
 import { cn } from "@/lib/utils";
 import { formatDistanceToNow } from "date-fns";
 import { zhCN } from "date-fns/locale";
@@ -223,6 +224,9 @@ function CommentCard({ comment, loginUser, onLike, onDelete, onPin, onOfficial, 
                 <Pin className="h-3 w-3" /> 已置顶
               </span>
             )}
+            {comment.ipLocation ? (
+              <span className="text-xs font-medium text-slate-400">{formatIpLocation(comment.ipLocation)}</span>
+            ) : null}
             <span className="text-xs text-slate-400 font-medium ml-auto">{timeAgo(comment.createTime)}</span>
           </div>
 

@@ -74,6 +74,20 @@ function getRankBadgeBg(rank: number) {
   return "bg-slate-50 text-slate-400";
 }
 
+function getMetricText(boardKey: string | undefined, item: API.LeaderboardUserVO) {
+  if (item.metricText) {
+    return item.metricText;
+  }
+  const value = item.metricValue || 0;
+  if (boardKey === "overall") {
+    return `${value} 分`;
+  }
+  if (boardKey === "active" || boardKey === "streak") {
+    return `${value} 天`;
+  }
+  return String(value);
+}
+
 /**
  * 全站榜单展示区
  */
@@ -118,7 +132,7 @@ export default function LeaderboardSection({ leaderboard }: Props) {
 
                 <div className="flex-1 flex flex-col gap-2">
                   {/* Rankings List (Top 1-5) */}
-                  {rankingList.slice(0, 5).map((item: any, index: number) => {
+                  {rankingList.slice(0, 5).map((item: API.LeaderboardUserVO, index: number) => {
                     const rank = item.rank || index + 1;
                     const isChampion = rank === 1;
                     
@@ -148,7 +162,7 @@ export default function LeaderboardSection({ leaderboard }: Props) {
                             </div>
                           </div>
                           <div className={`shrink-0 font-bold pl-3 ${isChampion ? theme.accentText : 'text-slate-700'}`}>
-                            {item.metricValue || 0}
+                            {getMetricText(board.key, item)}
                           </div>
                         </div>
                       </UserProfileHoverCard>
@@ -187,7 +201,7 @@ export default function LeaderboardSection({ leaderboard }: Props) {
                             </div>
                           </div>
                           <div className={`shrink-0 font-bold pl-3 ${board.currentUserItem.rank === 1 ? theme.accentText : 'text-slate-700'}`}>
-                            {board.currentUserItem.metricValue || 0}
+                            {getMetricText(board.key, board.currentUserItem)}
                           </div>
                         </div>
                       </UserProfileHoverCard>

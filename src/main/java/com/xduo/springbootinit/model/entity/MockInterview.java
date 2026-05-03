@@ -70,7 +70,7 @@ public class MockInterview implements Serializable {
     private String report;
 
     /**
-     * 状态：0-待开始, 1-进行中, 2-已结束
+     * 状态：0-待开始, 1-进行中, 2-已结束, 3-已暂停
      */
     private Integer status;
 

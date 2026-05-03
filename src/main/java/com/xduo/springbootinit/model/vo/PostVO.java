@@ -31,6 +31,11 @@ public class PostVO implements Serializable {
     private String content;
 
     /**
+     * 发布时 IP 归属地
+     */
+    private String ipLocation;
+
+    /**
      * 点赞数
      */
     private Integer thumbNum;

@@ -21,6 +21,12 @@ public class PostCommentVO implements Serializable {
 
     private String content;
 
+    private String ipLocation;
+
+    private Integer likeNum;
+
+    private Boolean hasLiked;
+
     /**
      * 0正常 1待审核 2已驳回
      */

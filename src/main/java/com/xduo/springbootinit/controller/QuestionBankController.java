@@ -17,6 +17,7 @@ import com.xduo.springbootinit.constant.QuestionBankConstant;
 import com.xduo.springbootinit.constant.UserConstant;
 import com.xduo.springbootinit.exception.BusinessException;
 import com.xduo.springbootinit.exception.ThrowUtils;
+import com.xduo.springbootinit.manager.SystemAccessManager;
 import com.xduo.springbootinit.model.dto.question.QuestionQueryRequest;
 import com.xduo.springbootinit.model.dto.questionbank.QuestionBankAddRequest;
 import com.xduo.springbootinit.model.dto.questionbank.QuestionBankEditRequest;
@@ -58,6 +59,9 @@ public class QuestionBankController {
     private UserService userService;
     @Resource
     private NotificationService notificationService;
+
+    @Resource
+    private SystemAccessManager systemAccessManager;
 
     /**
      * 创建题库
@@ -195,13 +199,16 @@ public class QuestionBankController {
         // 是否要关联查询题库下的题目列表
         boolean needQueryQuestionList = questionBankQueryRequest.isNeedQueryQuestionList();
         if (needQueryQuestionList) {
+            systemAccessManager.ensureGuestQuestionAccessAllowed(request);
             QuestionQueryRequest questionQueryRequest = new QuestionQueryRequest();
             questionQueryRequest.setQuestionBankId(id);
             questionQueryRequest.setCurrent(questionBankQueryRequest.getCurrent());
             questionQueryRequest.setPageSize(questionBankQueryRequest.getPageSize());
             questionQueryRequest.setSortField(questionBankQueryRequest.getSortField());
             questionQueryRequest.setSortOrder(questionBankQueryRequest.getSortOrder());
-            if (loginUser == null || (!userService.isAdmin(loginUser) && !loginUser.getId().equals(questionBank.getUserId()))) {
+            if (isApprovedQuestionBank(questionBank)
+                    || loginUser == null
+                    || (!userService.isAdmin(loginUser) && !loginUser.getId().equals(questionBank.getUserId()))) {
                 questionQueryRequest.setReviewStatus(com.xduo.springbootinit.constant.QuestionConstant.REVIEW_STATUS_APPROVED);
             }
             Page<Question> questionPage = questionService.listQuestionByPage(questionQueryRequest);
@@ -252,9 +259,7 @@ public class QuestionBankController {
             entry = SphU.entry("listQuestionBankVOByPage", EntryType.IN, 1, remoteAddr);
             // 限制爬虫
             ThrowUtils.throwIf(current < 1 || size < 1 || size > 100, ErrorCode.PARAMS_ERROR, "分页参数不合法");
-            if (!userService.isAdmin(request)) {
-                questionBankQueryRequest.setReviewStatus(QuestionBankConstant.REVIEW_STATUS_APPROVED);
-            }
+            questionBankQueryRequest.setReviewStatus(QuestionBankConstant.REVIEW_STATUS_APPROVED);
             // 查询数据库
             Page<QuestionBank> questionBankPage = questionBankService.page(new Page<>(current, size),
                     questionBankService.getQueryWrapper(questionBankQueryRequest));
@@ -377,6 +382,12 @@ public class QuestionBankController {
 
     private int getQuestionBankReviewStatus(QuestionBank questionBank) {
         return questionBank.getReviewStatus() == null ? QuestionBankConstant.REVIEW_STATUS_APPROVED : questionBank.getReviewStatus();
+    }
+
+    private boolean isApprovedQuestionBank(QuestionBank questionBank) {
+        return questionBank != null
+                && (questionBank.getReviewStatus() == null
+                || QuestionBankConstant.REVIEW_STATUS_APPROVED == questionBank.getReviewStatus());
     }
 
     private String buildQuestionBankReviewNotificationContent(QuestionBank questionBank, Integer reviewStatus, String reviewMessage) {

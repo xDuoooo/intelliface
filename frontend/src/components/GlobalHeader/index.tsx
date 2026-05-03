@@ -15,7 +15,7 @@ import ACCESS_ENUM from "@/access/accessEnum";
 import getAccessibleMenus from "@/access/menuAccess";
 import { menus } from "../../../config/menu";
 import { cn, validateImageSrc } from "@/lib/utils";
-import { Search, Menu, X, LogOut, User, Crown, ChevronDown } from "lucide-react";
+import { Search, Menu, X, LogOut, User, Crown, ChevronDown, ExternalLink, Settings } from "lucide-react";
 
 const NotificationPopover = dynamic(() => import("../NotificationPopover"), {
   ssr: false,
@@ -111,6 +111,7 @@ export default function GlobalHeader() {
     const nextUrl = keyword ? `/questions?q=${encodeURIComponent(keyword)}` : "/questions";
     router.push(nextUrl);
     setIsMobileMenuOpen(false);
+    setIsUserDropdownOpen(false);
   };
 
   const handleLogout = async () => {
@@ -137,6 +138,16 @@ export default function GlobalHeader() {
     router.push(`/user/login?redirect=${encodeURIComponent(currentPath)}`);
   };
 
+  const handleUserDropdownToggle = () => {
+    setIsMobileMenuOpen(false);
+    setIsUserDropdownOpen((prev) => !prev);
+  };
+
+  const handleMobileMenuToggle = () => {
+    setIsUserDropdownOpen(false);
+    setIsMobileMenuOpen((prev) => !prev);
+  };
+
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-background/80 backdrop-blur-md transition-all">
       <div className="container mx-auto px-4 sm:px-6 lg:px-8">
@@ -160,14 +171,14 @@ export default function GlobalHeader() {
           </Link>
 
           {/* Nav Links - Desktop */}
-          <nav className="hidden md:flex items-center gap-1">
+          <nav className="hidden xl:flex flex-nowrap items-center gap-1">
             {accessibleMenus.map((menu) => (
               <Link
                 key={menu.path}
                 href={menu.path || "#"}
                 target={menu.target}
                 className={cn(
-                  "px-4 py-2 text-sm font-semibold rounded-full transition-all flex items-center gap-2",
+                  "shrink-0 whitespace-nowrap px-4 py-2 text-sm font-semibold rounded-full transition-all flex items-center gap-2",
                   isActiveMenu(menu.path, pathname)
                     ? "text-primary bg-primary/10"
                     : "text-muted-foreground hover:text-foreground hover:bg-muted"
@@ -182,7 +193,7 @@ export default function GlobalHeader() {
           {/* Right Actions */}
           <div className="flex items-center gap-2 sm:gap-4 ml-auto">
             {/* Search - Desktop */}
-            <div className="hidden lg:flex relative group items-center">
+            <div className="hidden xl:flex relative group items-center">
               <Search className="absolute left-3 h-4 w-4 text-muted-foreground group-focus-within:text-primary transition-colors" />
               <input
                 type="text"
@@ -205,9 +216,9 @@ export default function GlobalHeader() {
 
             {/* User Profile */}
             {loginUser.id ? (
-              <div className="relative">
+              <div className="relative z-[70]">
                 <button
-                  onClick={() => setIsUserDropdownOpen(!isUserDropdownOpen)}
+                  onClick={handleUserDropdownToggle}
                   onBlur={() => setTimeout(() => setIsUserDropdownOpen(false), 200)}
                   className="flex items-center gap-2 p-1 pl-2 hover:bg-muted rounded-full transition-all border border-transparent hover:border-border group"
                 >
@@ -227,15 +238,21 @@ export default function GlobalHeader() {
 
                 {/* Dropdown Menu */}
                 {isUserDropdownOpen && (
-                  <div className="absolute right-0 mt-2 w-56 rounded-2xl border bg-popover p-2 shadow-xl ring-1 ring-foreground/5 animate-in fade-in zoom-in-95 duration-150 origin-top-right">
+                  <div className="absolute right-0 z-[80] mt-2 w-56 rounded-2xl border border-slate-200 bg-white p-2 shadow-xl ring-1 ring-slate-200/80 animate-in fade-in zoom-in-95 duration-150 origin-top-right">
                     <div className="px-3 py-2 border-b mb-1">
                       <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest">我的账号</p>
                     </div>
-                    <Link href="/user/center" className="flex items-center gap-2 px-3 py-2.5 text-sm font-medium rounded-xl hover:bg-muted transition-colors">
+                    <Link href="/user/center" onClick={() => setIsUserDropdownOpen(false)} className="flex items-center gap-2 px-3 py-2.5 text-sm font-medium rounded-xl hover:bg-muted transition-colors">
                       <User className="h-4 w-4" /> 个人中心
                     </Link>
+                    <Link href={`/user/${loginUser.id}`} onClick={() => setIsUserDropdownOpen(false)} className="flex items-center gap-2 px-3 py-2.5 text-sm font-medium rounded-xl hover:bg-muted transition-colors">
+                      <ExternalLink className="h-4 w-4" /> 公开主页
+                    </Link>
+                    <Link href="/user/public-profile/settings" onClick={() => setIsUserDropdownOpen(false)} className="flex items-center gap-2 px-3 py-2.5 text-sm font-medium rounded-xl hover:bg-muted transition-colors">
+                      <Settings className="h-4 w-4" /> 主页设置
+                    </Link>
                     {loginUser.userRole === ACCESS_ENUM.ADMIN && (
-                      <Link href="/admin" className="flex items-center gap-2 px-3 py-2.5 text-sm font-medium rounded-xl hover:bg-muted text-primary transition-colors">
+                      <Link href="/admin" onClick={() => setIsUserDropdownOpen(false)} className="flex items-center gap-2 px-3 py-2.5 text-sm font-medium rounded-xl hover:bg-muted text-primary transition-colors">
                         <Crown className="h-4 w-4" /> 后台管理
                       </Link>
                     )}
@@ -261,8 +278,8 @@ export default function GlobalHeader() {
 
             {/* Mobile Menu Toggle */}
             <button
-              onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-              className="md:hidden h-9 w-9 rounded-full flex items-center justify-center hover:bg-muted transition-colors"
+              onClick={handleMobileMenuToggle}
+              className="xl:hidden h-9 w-9 rounded-full flex items-center justify-center hover:bg-muted transition-colors"
             >
               {isMobileMenuOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
             </button>
@@ -272,17 +289,17 @@ export default function GlobalHeader() {
 
       {/* Mobile Nav Overlay */}
       {isMobileMenuOpen && (
-        <div className="md:hidden border-t bg-background animate-in slide-in-from-top duration-300">
+        <div className="xl:hidden border-t bg-background animate-in slide-in-from-top duration-300">
           <div className="container mx-auto px-4 py-6 space-y-4">
             {/* Mobile Search */}
-            <div className="relative group items-center">
-              <Search className="absolute left-3 h-4 w-4 text-muted-foreground" />
+            <div className="relative group">
+              <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <input
                 type="text"
                 placeholder="搜索题目..."
                 value={questionSearchText}
                 onChange={(e) => setQuestionSearchText(e.target.value)}
-                className="h-11 w-full rounded-xl bg-muted/50 pl-10 pr-4 text-sm outline-none border-none"
+                className="h-11 w-full rounded-xl bg-muted/50 pl-11 pr-4 text-sm outline-none border-none"
                 onKeyDown={(e) => {
                   if (e.key === "Enter") {
                     handleQuestionSearch();

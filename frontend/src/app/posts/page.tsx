@@ -1,13 +1,14 @@
-import { headers } from "next/headers";
 import Link from "next/link";
 import {
   listMyPostVoByPageUsingPost,
   listPostVoByPageUsingPost,
   searchPostVoByPageUsingPost,
 } from "@/api/postController";
+import { getLoginUserUsingGet } from "@/api/userController";
 import PostList from "@/components/PostList";
 import PostSearchPanel from "@/components/PostSearchPanel";
 import { FilePlus2 } from "lucide-react";
+import { buildServerRequestOptions } from "@/libs/serverRequestOptions";
 
 export const dynamic = "force-dynamic";
 
@@ -37,10 +38,11 @@ export default async function PostsPage({
     page?: string | string[];
   };
 }) {
-  const cookie = headers().get("cookie") || "";
+  const requestOptions = buildServerRequestOptions();
   let postList: API.PostVO[] = [];
   let myPostList: API.PostVO[] = [];
   let total = 0;
+  let isLoggedIn = false;
 
   const keyword = getSingleParam(searchParams.q).trim();
   const activeTag = getSingleParam(searchParams.tag).trim();
@@ -61,31 +63,11 @@ export default async function PostsPage({
     isFeatured: activeFeatured ? 1 : undefined,
   };
 
-  const [postListResult, myPostListResult] = await Promise.allSettled([
-    (keyword || activeTag || activeFeatured
-      ? searchPostVoByPageUsingPost(postQueryRequest, {
-          headers: {
-            cookie,
-          },
-        })
-      : listPostVoByPageUsingPost(postQueryRequest, {
-          headers: {
-            cookie,
-          },
-        })),
-    listMyPostVoByPageUsingPost(
-      {
-        current: 1,
-        pageSize: 6,
-        sortField: "createTime",
-        sortOrder: "descend",
-      },
-      {
-        headers: {
-          cookie,
-        },
-      },
-    ),
+  const [postListResult, loginUserResult] = await Promise.allSettled([
+    keyword || activeTag || activeFeatured
+      ? searchPostVoByPageUsingPost(postQueryRequest, requestOptions)
+      : listPostVoByPageUsingPost(postQueryRequest, requestOptions),
+    getLoginUserUsingGet(requestOptions),
   ]);
 
   if (postListResult.status === "fulfilled") {
@@ -95,10 +77,21 @@ export default async function PostsPage({
     console.error("获取帖子列表失败", postListResult.reason);
   }
 
-  if (myPostListResult.status === "fulfilled") {
-    myPostList = myPostListResult.value.data?.records || [];
-  } else {
-    console.error("获取我的帖子失败", myPostListResult.reason);
+  if (loginUserResult.status === "fulfilled" && loginUserResult.value?.data?.id) {
+    isLoggedIn = true;
+    const myPostListResult = await listMyPostVoByPageUsingPost(
+      {
+        current: 1,
+        pageSize: 6,
+        sortField: "createTime",
+        sortOrder: "descend",
+      },
+      requestOptions,
+    ).catch((error) => {
+      console.error("获取我的帖子失败", error);
+      return undefined;
+    });
+    myPostList = myPostListResult?.data?.records || [];
   }
 
   const myPendingPostList = myPostList.filter((item) => Number(item.reviewStatus ?? 1) !== 1);
@@ -154,7 +147,7 @@ export default async function PostsPage({
 
       <PostSearchPanel suggestedTags={suggestedTagList} />
 
-      {myPendingPostList.length ? (
+      {isLoggedIn && myPendingPostList.length ? (
         <section className="space-y-6">
           <div className="flex items-end justify-between">
             <div>

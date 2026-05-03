@@ -86,6 +86,7 @@ mybatis-plus:
 # 本地黑名单配置来源
 nacos:
   config:
+    sync-enabled: false
     data-id: black-ip-list.yml
     group: DEFAULT_GROUP
 
@@ -185,18 +186,38 @@ wechat:
 
 # AI 模型本地配置
 ai:
-  # 本地开发使用的模型服务密钥
-  api-key: your_ai_api_key
-  # 模型服务地址
-  host: https://api.deepseek.com/v1
-  # 默认模型名称
-  model: deepseek-chat
-  # 语音转写模型（需兼容 OpenAI audio/transcriptions 协议）
-  speech-model: whisper-1
+  chat:
+    # 文本 AI：DeepSeek / 火山方舟等 OpenAI 兼容接口均可
+    api-key: your_deepseek_api_key
+    host: https://api.deepseek.com
+    model: deepseek-v4-flash
+  speech:
+    # 语音转写：openai / openai-compatible / volcengine / doubao
+    provider: volcengine
+    # 火山引擎豆包语音控制台中的 X-Api-Key
+    api-key: your_volcengine_speech_api_key
+    endpoint: https://openspeech.bytedance.com/api/v3/auc/bigmodel/recognize/flash
+    resource-id: volc.bigasr.auc_turbo
+    model-name: bigmodel
+    user-id: intelliface
+    timeout-seconds: 120
+  rate-limit:
+    enabled: true
+    chat:
+      max-per-minute: 10
+      max-per-day: 100
+    audio:
+      max-per-minute: 3
+      max-per-day: 30
 
 # 前端联调地址
 app:
   frontend-url: http://localhost:3000
+  elasticsearch:
+    # ES 不可用时快速降级到数据库，避免搜索接口卡 30 秒
+    connect-timeout-ms: 1000
+    socket-timeout-ms: 3000
+    connection-request-timeout-ms: 1000
   email:
     # 本地开发建议默认开启模拟发信，避免误发真实邮件
     mock-enabled: true
@@ -209,8 +230,16 @@ app:
   ip-location:
     # 本地调试“按 IP 自动识别城市”时，可临时指定一个模拟城市（需是系统支持的城市）
     dev-city: 杭州
-    # 是否在未命中 CDN / 网关城市请求头时，再按公网 IP 调第三方接口查询城市
-    lookup-enabled: true
+    ip2region:
+      # 是否启用 ip2region xdb 离线库查询；会优先于在线接口
+      enabled: true
+      # 默认读取项目内置 IPv4 离线库，也可改成 file:/app/data/ip2region_v4.xdb
+      v4-xdb-location: classpath:ip2region/ip2region_v4.xdb
+      # 如需要 IPv6，可额外放置 v6 xdb 后配置该路径
+      v6-xdb-location: ""
+      searchers: 20
+    # 是否在未命中 CDN / 网关城市请求头和 ip2region 离线库时，再按公网 IP 调第三方接口查询城市
+    lookup-enabled: false
     # {ip} 会自动替换为客户端公网 IP；如后续你切换为自建服务或别的供应商，只改这里即可
     lookup-url-template: https://whois.pconline.com.cn/ipJson.jsp?json=true&ip={ip}
     # 第三方 IP 城市查询超时时间（毫秒）
@@ -237,3 +266,6 @@ app:
       full-sync-on-start: false
       incremental-fixed-rate-ms: 60000
       incremental-lookback-minutes: 5
+    tag:
+      # 标签索引推荐保持开启；启动时会全量重建一次 tag 索引，后续再按题目 / 帖子 / 兴趣标签变更增量维护
+      full-sync-on-start: true

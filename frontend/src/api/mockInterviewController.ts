@@ -5,6 +5,32 @@ import request from '@/libs/request';
 
 type StreamEventCallback = (event: string, payload: any) => void | Promise<void>;
 
+function findSseDelimiter(buffer: string) {
+  const lfIndex = buffer.indexOf('\n\n');
+  const crlfIndex = buffer.indexOf('\r\n\r\n');
+  if (lfIndex < 0 && crlfIndex < 0) {
+    return null;
+  }
+  if (lfIndex >= 0 && (crlfIndex < 0 || lfIndex < crlfIndex)) {
+    return { index: lfIndex, length: 2 };
+  }
+  return { index: crlfIndex, length: 4 };
+}
+
+async function readResponseError(response: Response, fallbackMessage: string) {
+  const contentType = response.headers.get('content-type') || '';
+  try {
+    if (contentType.includes('application/json')) {
+      const json = await response.json();
+      return json?.message || fallbackMessage;
+    }
+    const text = await response.text();
+    return text || fallbackMessage;
+  } catch {
+    return fallbackMessage;
+  }
+}
+
 function parseSseBlock(block: string) {
   let event = 'message';
   const dataLines: string[] = [];
@@ -111,7 +137,10 @@ export async function streamMockInterviewEventUsingPost(
     body: JSON.stringify(body),
   });
   const contentType = response.headers.get('content-type') || '';
-  if (!response.ok || !response.body) {
+  if (!response.ok) {
+    throw new Error(await readResponseError(response, '流式面试连接失败'));
+  }
+  if (!response.body) {
     throw new Error('流式面试连接失败');
   }
   if (contentType.includes('application/json')) {
@@ -125,15 +154,15 @@ export async function streamMockInterviewEventUsingPost(
   while (true) {
     const { value, done } = await reader.read();
     buffer += decoder.decode(value || new Uint8Array(), { stream: !done });
-    let delimiterIndex = buffer.indexOf('\n\n');
-    while (delimiterIndex >= 0) {
-      const block = buffer.slice(0, delimiterIndex).replace(/\r/g, '');
-      buffer = buffer.slice(delimiterIndex + 2);
+    let delimiter = findSseDelimiter(buffer);
+    while (delimiter) {
+      const block = buffer.slice(0, delimiter.index).replace(/\r/g, '');
+      buffer = buffer.slice(delimiter.index + delimiter.length);
       if (block.trim()) {
         const parsed = parseSseBlock(block);
         await onEvent(parsed.event, parsed.payload);
       }
-      delimiterIndex = buffer.indexOf('\n\n');
+      delimiter = findSseDelimiter(buffer);
     }
     if (done) {
       break;
@@ -159,7 +188,12 @@ export async function transcribeMockInterviewAudioUsingPost(
     credentials: 'include',
     body: formData,
   });
-  const json = await response.json();
+  let json: any = {};
+  try {
+    json = await response.json();
+  } catch {
+    throw new Error('语音转写失败');
+  }
   if (!response.ok || json?.code !== 0) {
     throw new Error(json?.message || '语音转写失败');
   }
@@ -167,13 +201,13 @@ export async function transcribeMockInterviewAudioUsingPost(
 }
 
 export async function downloadMockInterviewReviewUsingGet(id: string | number) {
-  const response = await fetch(buildApiUrl(`/api/mockInterview/export?id=${id}`), {
+  const response = await fetch(buildApiUrl(`/api/mockInterview/export?id=${encodeURIComponent(String(id))}`), {
     method: 'GET',
     credentials: 'include',
   });
   const contentType = response.headers.get('content-type') || '';
   if (!response.ok) {
-    throw new Error('导出复盘失败');
+    throw new Error(await readResponseError(response, '导出复盘失败'));
   }
   if (contentType.includes('application/json')) {
     const json = await response.json();

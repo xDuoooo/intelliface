@@ -56,6 +56,11 @@ public class UserUpdateMyRequest implements Serializable {
     private java.util.List<String> interestTags;
 
     /**
+     * 公开主页可见字段
+     */
+    private java.util.List<String> profileVisibleFields;
+
+    /**
      * GitHub 唯一标识
      */
     private String githubId;

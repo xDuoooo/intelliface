@@ -1,11 +1,11 @@
-import { headers } from "next/headers";
 import { getMyPostVoByIdUsingGet, getPostVoByIdUsingGet, listRelatedPostUsingGet } from "@/api/postController";
 import PostDetailClient from "./PostDetailClient";
+import { buildServerRequestOptions } from "@/libs/serverRequestOptions";
 
 export const dynamic = "force-dynamic";
 
 export default async function PostDetailPage({ params }: { params: { postId: string } }) {
-  const cookie = headers().get("cookie") || "";
+  const requestOptions = buildServerRequestOptions();
   const postId = params.postId;
   let post: API.PostVO | undefined;
   let relatedPostList: API.PostVO[] = [];
@@ -13,11 +13,11 @@ export default async function PostDetailPage({ params }: { params: { postId: str
   const [postResult, relatedResult] = await Promise.allSettled([
     getPostVoByIdUsingGet(
       { id: postId },
-      { headers: { cookie } },
+      requestOptions,
     ),
     listRelatedPostUsingGet(
       { postId, size: 4 },
-      { headers: { cookie } },
+      requestOptions,
     ),
   ]);
 
@@ -25,11 +25,11 @@ export default async function PostDetailPage({ params }: { params: { postId: str
     post = postResult.value.data;
   } else {
     console.error("获取帖子详情失败", postResult.reason);
-    if (cookie) {
+    if (requestOptions.headers.cookie) {
       try {
         const myPostResult = await getMyPostVoByIdUsingGet(
           { id: postId },
-          { headers: { cookie } },
+          requestOptions,
         );
         post = myPostResult.data;
       } catch (error) {

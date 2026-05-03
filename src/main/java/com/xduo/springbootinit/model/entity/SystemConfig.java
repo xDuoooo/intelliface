@@ -64,6 +64,16 @@ public class SystemConfig implements Serializable {
     private Integer enableLearningGoalReminder;
 
     /**
+     * 是否允许未登录用户访问题目模块
+     */
+    private Integer allowGuestViewQuestion;
+
+    /**
+     * 是否允许未登录用户访问论坛模块
+     */
+    private Integer allowGuestViewPost;
+
+    /**
      * 创建时间
      */
     private Date createTime;

@@ -27,6 +27,9 @@ public class CommentVO implements Serializable {
     /** 内容（已被删除时为 null） */
     private String content;
 
+    /** 发布时 IP 归属地 */
+    private String ipLocation;
+
     /** 点赞数 */
     private Integer likeNum;
 

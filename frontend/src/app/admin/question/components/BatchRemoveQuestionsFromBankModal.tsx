@@ -1,6 +1,6 @@
 import { Button, Form, message, Modal, Select } from "antd";
 import React, { useEffect, useState } from "react";
-import { listQuestionBankVoByPageUsingPost } from "@/api/questionBankController";
+import { listQuestionBankByPageUsingPost } from "@/api/questionBankController";
 import {
   batchRemoveQuestionsFromBankUsingPost,
 } from "@/api/questionBankQuestionController";
@@ -20,9 +20,7 @@ interface Props {
 const BatchRemoveQuestionsToBankModal: React.FC<Props> = (props) => {
   const { questionIdList = [], visible, onCancel, onSubmit } = props;
   const [form] = Form.useForm();
-  const [questionBankList, setQuestionBankList] = useState<
-    API.QuestionBankVO[]
-  >([]);
+  const [questionBankList, setQuestionBankList] = useState<API.QuestionBank[]>([]);
 
   /**
    * 提交
@@ -54,10 +52,10 @@ const BatchRemoveQuestionsToBankModal: React.FC<Props> = (props) => {
   // 获取题库列表
   const getQuestionBankList = async () => {
     // 题库数量不多，直接全量获取
-    const pageSize = 200;
+    const pageSize = 100;
 
     try {
-      const res = await listQuestionBankVoByPageUsingPost({
+      const res = await listQuestionBankByPageUsingPost({
         pageSize,
         sortField: "createTime",
         sortOrder: "descend",

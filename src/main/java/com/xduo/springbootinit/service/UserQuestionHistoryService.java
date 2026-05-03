@@ -34,7 +34,7 @@ public interface UserQuestionHistoryService extends IService<UserQuestionHistory
      */
     com.baomidou.mybatisplus.extension.plugins.pagination.Page<com.xduo.springbootinit.model.vo.UserQuestionHistoryVO> listMyQuestionHistoryByPage(
             com.baomidou.mybatisplus.extension.plugins.pagination.Page<com.xduo.springbootinit.model.entity.UserQuestionHistory> page,
-            long userId, jakarta.servlet.http.HttpServletRequest request);
+            long userId, Integer status, jakarta.servlet.http.HttpServletRequest request);
 
     /**
      * 获取用户刷题日历记录（每年的每日刷题量）

@@ -4,6 +4,7 @@ import React, { useState } from "react";
 import { Button, Card, Empty, Input, Pagination, Select, Typography, message } from "antd";
 import { listQuestionBankVoByPageUsingPost } from "@/api/questionBankController";
 import QuestionBankList from "@/components/QuestionBankList";
+import { QUESTION_REVIEW_STATUS_ENUM } from "@/constants/question";
 
 const { Title, Paragraph, Text } = Typography;
 
@@ -60,6 +61,7 @@ const BanksExplorer: React.FC<Props> = ({
       const res = await listQuestionBankVoByPageUsingPost({
         current: nextCurrent,
         pageSize: nextPageSize,
+        reviewStatus: QUESTION_REVIEW_STATUS_ENUM.APPROVED,
         searchText: nextFilters.searchText?.trim() || undefined,
         sortField,
         sortOrder,

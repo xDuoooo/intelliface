@@ -55,5 +55,15 @@ public class SystemConfigUpdateRequest implements Serializable {
      */
     private Boolean enableLearningGoalReminder;
 
+    /**
+     * 是否允许未登录用户访问题目模块
+     */
+    private Boolean allowGuestViewQuestion;
+
+    /**
+     * 是否允许未登录用户访问论坛模块
+     */
+    private Boolean allowGuestViewPost;
+
     private static final long serialVersionUID = 1L;
 }

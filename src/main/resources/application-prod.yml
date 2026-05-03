@@ -16,7 +16,7 @@ spring:
   cloud:
     nacos:
       discovery:
-        enabled: true
+        enabled: ${NACOS_DISCOVERY_ENABLED:true}
         server-addr: ${NACOS_DISCOVERY_SERVER_ADDR:}
         username: ${NACOS_DISCOVERY_USERNAME:}
         password: ${NACOS_DISCOVERY_PASSWORD:}
@@ -25,10 +25,12 @@ spring:
         server-addr: ${NACOS_CONFIG_SERVER_ADDR:}
         username: ${NACOS_CONFIG_USERNAME:}
         password: ${NACOS_CONFIG_PASSWORD:}
+        timeout: ${NACOS_CONFIG_TIMEOUT:30000}
+        refresh-enabled: ${NACOS_CONFIG_REFRESH_ENABLED:false}
         file-extension: yml
         shared-configs:
           - data-id: common.yml
-            refresh: true
+            refresh: ${NACOS_SHARED_CONFIG_REFRESH_ENABLED:false}
     sentinel:
       transport:
         dashboard: ${SENTINEL_DASHBOARD:}

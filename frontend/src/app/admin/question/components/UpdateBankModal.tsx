@@ -5,7 +5,7 @@ import {
   listQuestionBankQuestionVoByPageUsingPost,
   removeQuestionBankQuestionUsingPost,
 } from "@/api/questionBankQuestionController";
-import { listQuestionBankVoByPageUsingPost } from "@/api/questionBankController";
+import { listQuestionBankByPageUsingPost } from "@/api/questionBankController";
 
 interface Props {
   questionId?: string | number;
@@ -21,9 +21,7 @@ interface Props {
 const UpdateBankModal: React.FC<Props> = (props) => {
   const { questionId, visible, onCancel } = props;
   const [form] = Form.useForm();
-  const [questionBankList, setQuestionBankList] = useState<
-    API.QuestionBankVO[]
-  >([]);
+  const [questionBankList, setQuestionBankList] = useState<API.QuestionBank[]>([]);
 
   // 获取所属题库列表
   const getCurrentQuestionBankIdList = useCallback(async () => {
@@ -48,10 +46,10 @@ const UpdateBankModal: React.FC<Props> = (props) => {
   // 获取题库列表
   const getQuestionBankList = useCallback(async () => {
     // 题库数量不多，直接全量获取
-    const pageSize = 200;
+    const pageSize = 100;
 
     try {
-      const res = await listQuestionBankVoByPageUsingPost({
+      const res = await listQuestionBankByPageUsingPost({
         pageSize,
         sortField: "createTime",
         sortOrder: "descend",

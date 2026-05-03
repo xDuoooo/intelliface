@@ -11,6 +11,7 @@ interface Props {
   initialFollowerCount?: number;
   initialFollowingCount?: number;
   initialHasFollowed?: boolean;
+  canViewRelationList?: boolean;
 }
 
 /**
@@ -21,6 +22,7 @@ export default function UserRelationPanel({
   initialFollowerCount = 0,
   initialFollowingCount = 0,
   initialHasFollowed = false,
+  canViewRelationList = true,
 }: Props) {
   const loginUser = useSelector((state: RootState) => state.loginUser);
   const [followerCount, setFollowerCount] = useState(Number(initialFollowerCount || 0));
@@ -35,6 +37,7 @@ export default function UserRelationPanel({
   }, [initialFollowerCount, initialFollowingCount, initialHasFollowed, user?.id]);
 
   const isSelf = Boolean(loginUser?.id && user?.id && loginUser.id === user.id);
+  const canOpenRelationList = canViewRelationList || isSelf;
 
   const handleFollowChange = (nextFollowed: boolean) => {
     setHasFollowed(nextFollowed);
@@ -64,12 +67,19 @@ export default function UserRelationPanel({
             <button
               key={item.key}
               type="button"
-              onClick={() => setModalType(item.key)}
-              className="rounded-[1.75rem] border border-slate-100 bg-slate-50/70 px-5 py-5 text-left transition-all hover:-translate-y-0.5 hover:border-primary/20 hover:bg-white hover:shadow-xl hover:shadow-slate-200/30"
+              disabled={!canOpenRelationList}
+              onClick={() => canOpenRelationList && setModalType(item.key)}
+              className={`rounded-[1.75rem] border border-slate-100 bg-slate-50/70 px-5 py-5 text-left transition-all ${
+                canOpenRelationList
+                  ? "hover:-translate-y-0.5 hover:border-primary/20 hover:bg-white hover:shadow-xl hover:shadow-slate-200/30"
+                  : "cursor-not-allowed opacity-80"
+              }`}
             >
               <div className="text-sm font-bold text-slate-400">{item.label}</div>
               <div className="mt-3 text-3xl font-black tracking-tight text-slate-900">{item.value}</div>
-              <div className="mt-2 text-xs text-slate-400">{item.helper}</div>
+              <div className="mt-2 text-xs text-slate-400">
+                {canOpenRelationList ? item.helper : "列表未公开"}
+              </div>
             </button>
           ))}
         </div>

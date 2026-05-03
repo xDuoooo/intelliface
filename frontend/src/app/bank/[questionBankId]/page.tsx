@@ -8,8 +8,8 @@ import QuestionList from "@/components/QuestionList";
 import QuestionBankLeaderboardCard from "@/components/QuestionBankLeaderboardCard";
 import QuestionBankOwnerPanel from "./QuestionBankOwnerPanel";
 import { Play, BookOpen, Clock, Users, Sparkles } from "lucide-react";
-import { headers } from "next/headers";
 import { cn, validateImageSrc } from "@/lib/utils";
+import { buildServerRequestOptions } from "@/libs/serverRequestOptions";
 
 export const dynamic = "force-dynamic";
 
@@ -23,12 +23,7 @@ export default async function BankPage({ params }: { params: { questionBankId: s
   let leaderboard: API.QuestionBankLeaderboardVO | undefined = undefined;
   let loginUser: API.LoginUserVO | undefined = undefined;
 
-  const cookie = headers().get("cookie") || "";
-  const requestOptions = {
-    headers: {
-      cookie,
-    },
-  };
+  const requestOptions = buildServerRequestOptions();
 
   const [bankResult, leaderboardResult, loginUserResult] = await Promise.allSettled([
     getQuestionBankVoByIdUsingGet(
@@ -171,6 +166,8 @@ export default async function BankPage({ params }: { params: { questionBankId: s
           questionBankId={questionBankId as any}
           questionList={bank.questionPage?.records ?? []}
           cardTitle={`题目列表 (${bank.questionPage?.total || 0})`}
+          collapsibleOnMobile
+          mobileInitialCount={6}
         />
       </section>
     </div>

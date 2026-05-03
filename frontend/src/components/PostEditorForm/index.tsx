@@ -1,27 +1,14 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useState } from "react";
 import dynamic from "next/dynamic";
-import { Button, Form, Input, Select, Space, Typography } from "antd";
+import { Button, Form, Input, Space, Typography } from "antd";
+import TagSearchSelect from "@/components/TagSearchSelect";
 
 const MdEditor = dynamic(() => import("@/components/MdEditor"), {
   ssr: false,
   loading: () => <div className="rounded-3xl border border-slate-100 bg-slate-50 px-6 py-8 text-center text-slate-400">正在加载编辑器...</div>,
 });
-
-const DEFAULT_TAG_OPTIONS = [
-  "Java",
-  "前端",
-  "后端",
-  "MySQL",
-  "Redis",
-  "算法",
-  "系统设计",
-  "项目复盘",
-  "校招",
-  "面经",
-  "求职经验",
-];
 
 type PostFormValues = {
   title: string;
@@ -66,11 +53,6 @@ export default function PostEditorForm({
     setContent(initialValues?.content || "");
     setContentError(undefined);
   }, [form, initialValues]);
-
-  const tagOptions = useMemo(
-    () => DEFAULT_TAG_OPTIONS.map((value) => ({ label: value, value })),
-    [],
-  );
 
   return (
     <Form<PostFormValues>
@@ -117,10 +99,8 @@ export default function PostEditorForm({
         name="tags"
         rules={[{ required: true, message: "请至少选择 1 个标签" }]}
       >
-        <Select
-          mode="tags"
-          size="large"
-          options={tagOptions}
+        <TagSearchSelect
+          scene="post"
           maxCount={6}
           placeholder="请选择或输入标签，如 Java、系统设计、项目复盘"
           className="rounded-2xl"
@@ -131,7 +111,7 @@ export default function PostEditorForm({
         label={<span className="font-bold text-slate-700">内容</span>}
         required
         validateStatus={contentError ? "error" : undefined}
-        help={contentError || "支持 Markdown，建议包含问题背景、你的做法、踩坑点和复盘。"}
+        help={<span className="block leading-5">{contentError || "支持 Markdown，建议包含问题背景、你的做法、踩坑点和复盘。"}</span>}
       >
         <div className="space-y-3">
           <MdEditor
@@ -143,9 +123,9 @@ export default function PostEditorForm({
             }}
             placeholder={"建议结构：\n1. 面试背景或问题场景\n2. 你的回答/解决方案\n3. 面试官追问\n4. 你的复盘与建议"}
           />
-          <div className="flex items-center justify-between text-xs text-slate-400">
-            <span>一篇有价值的经验帖，通常会写清楚背景、过程、取舍和结果。</span>
-            <span>{content.length} 字</span>
+          <div className="space-y-1 text-xs text-slate-400">
+            <span className="block leading-5">一篇有价值的经验帖，通常会写清楚背景、过程、取舍和结果。</span>
+            <span className="block text-right font-medium">{content.length} 字</span>
           </div>
         </div>
       </Form.Item>

@@ -34,6 +34,11 @@ public class Post implements Serializable {
     private String content;
 
     /**
+     * 发布时 IP 归属地
+     */
+    private String ipLocation;
+
+    /**
      * 标签列表 json
      */
     private String tags;

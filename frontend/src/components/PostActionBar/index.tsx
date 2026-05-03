@@ -16,6 +16,9 @@ interface Props {
   initialFavourNum?: number;
   initialHasThumb?: boolean;
   initialHasFavour?: boolean;
+  variant?: "default" | "meta";
+  showThumbAndFavour?: boolean;
+  showReport?: boolean;
 }
 
 export default function PostActionBar({
@@ -24,6 +27,9 @@ export default function PostActionBar({
   initialFavourNum = 0,
   initialHasThumb = false,
   initialHasFavour = false,
+  variant = "default",
+  showThumbAndFavour = true,
+  showReport = true,
 }: Props) {
   const router = useRouter();
   const pathname = usePathname() || "/";
@@ -126,38 +132,56 @@ export default function PostActionBar({
 
   return (
     <>
-      <div className="flex flex-wrap items-center gap-3">
-        <button
-          onClick={handleThumb}
-          disabled={thumbLoading}
-          className={`inline-flex items-center gap-2 rounded-2xl border px-4 py-2 text-sm font-black transition-all ${
-            hasThumb
-              ? "border-blue-200 bg-blue-50 text-blue-600"
-              : "border-slate-200 bg-white text-slate-500 hover:border-blue-200 hover:text-blue-600"
-          }`}
-        >
-          <ThumbsUp className="h-4 w-4" />
-          点赞 {thumbNum}
-        </button>
-        <button
-          onClick={handleFavour}
-          disabled={favourLoading}
-          className={`inline-flex items-center gap-2 rounded-2xl border px-4 py-2 text-sm font-black transition-all ${
-            hasFavour
-              ? "border-rose-200 bg-rose-50 text-rose-600"
-              : "border-slate-200 bg-white text-slate-500 hover:border-rose-200 hover:text-rose-600"
-          }`}
-        >
-          <Heart className="h-4 w-4" />
-          收藏 {favourNum}
-        </button>
-        <button
-          onClick={handleOpenReport}
-          className="inline-flex items-center gap-2 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-2 text-sm font-black text-amber-700 transition-all hover:border-amber-300 hover:bg-amber-100"
-        >
-          <AlertTriangle className="h-4 w-4" />
-          举报帖子
-        </button>
+      <div className={`flex flex-wrap items-center ${variant === "meta" ? "gap-4 text-sm" : "gap-3"}`}>
+        {showThumbAndFavour ? (
+          <>
+            <button
+              onClick={handleThumb}
+              disabled={thumbLoading}
+              className={`inline-flex items-center gap-1.5 transition-all ${
+                variant === "meta"
+                  ? hasThumb
+                    ? "font-semibold text-blue-600"
+                    : "text-slate-400 hover:text-blue-600"
+                  : hasThumb
+                    ? "rounded-2xl border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-black text-blue-600"
+                    : "rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-black text-slate-500 hover:border-blue-200 hover:text-blue-600"
+              }`}
+            >
+              <ThumbsUp className="h-4 w-4" />
+              <span>{variant === "meta" ? thumbNum : `点赞 ${thumbNum}`}</span>
+            </button>
+            <button
+              onClick={handleFavour}
+              disabled={favourLoading}
+              className={`inline-flex items-center gap-1.5 transition-all ${
+                variant === "meta"
+                  ? hasFavour
+                    ? "font-semibold text-rose-600"
+                    : "text-slate-400 hover:text-rose-600"
+                  : hasFavour
+                    ? "rounded-2xl border border-rose-200 bg-rose-50 px-4 py-2 text-sm font-black text-rose-600"
+                    : "rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-black text-slate-500 hover:border-rose-200 hover:text-rose-600"
+              }`}
+            >
+              <Heart className="h-4 w-4" />
+              <span>{variant === "meta" ? favourNum : `收藏 ${favourNum}`}</span>
+            </button>
+          </>
+        ) : null}
+        {showReport ? (
+          <button
+            onClick={handleOpenReport}
+            className={`inline-flex items-center gap-2 transition-all ${
+              variant === "meta"
+                ? "font-semibold text-amber-700 hover:text-amber-800"
+                : "rounded-2xl border border-amber-200 bg-amber-50 px-4 py-2 text-sm font-black text-amber-700 hover:border-amber-300 hover:bg-amber-100"
+            }`}
+          >
+            <AlertTriangle className="h-4 w-4" />
+            <span>{variant === "meta" ? "举报" : "举报帖子"}</span>
+          </button>
+        ) : null}
       </div>
 
       <Modal

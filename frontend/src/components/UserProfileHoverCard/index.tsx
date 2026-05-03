@@ -7,6 +7,7 @@ import { useSelector } from "react-redux";
 import { Activity, BookOpen, Flame, MapPin, PenSquare, Sparkles } from "lucide-react";
 import { getUserProfileVoByIdUsingGet } from "@/api/userController";
 import UserFollowButton from "@/components/UserFollowButton";
+import { formatIpLocation } from "@/lib/location";
 import { cn } from "@/lib/utils";
 import UserAvatar from "@/components/UserAvatar";
 import { RootState } from "@/stores";
@@ -16,8 +17,12 @@ type PublicUser = Pick<
   "id" | "userName" | "userAvatar" | "userProfile" | "userRole" | "city" | "createTime" | "careerDirection" | "interestTagList"
 >;
 
+type HoverCardUser = PublicUser & {
+  userId?: string | number;
+};
+
 interface Props {
-  user?: PublicUser | null;
+  user?: HoverCardUser | null;
   children: React.ReactNode;
   placement?: PopoverProps["placement"];
   triggerClassName?: string;
@@ -77,6 +82,11 @@ function formatJoinDate(date?: string) {
   }
 }
 
+function isProfileFieldVisible(profile: API.UserProfileVO | undefined, field: string) {
+  const visibleFields = profile?.profileVisibleFieldList;
+  return !Array.isArray(visibleFields) || visibleFields.includes(field);
+}
+
 /**
  * 公开用户悬浮名片
  */
@@ -86,25 +96,54 @@ export default function UserProfileHoverCard({
   placement = "top",
   triggerClassName,
 }: Props) {
+  const actionButtonClass =
+    "h-11 w-full rounded-xl px-4 text-sm font-bold shadow-none transition-all active:scale-95";
+
   const loginUser = useSelector((state: RootState) => state.loginUser);
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [isTouchDevice, setIsTouchDevice] = useState(false);
+  const targetUserId = useMemo(() => user?.id ?? user?.userId, [user?.id, user?.userId]);
   const [profile, setProfile] = useState<API.UserProfileVO | undefined>(() =>
-    user?.id ? profileCache.get(getProfileCacheKey(user.id)) : undefined,
+    targetUserId ? profileCache.get(getProfileCacheKey(targetUserId)) : undefined,
   );
   const [loadError, setLoadError] = useState<string>("");
 
   useEffect(() => {
-    setProfile(user?.id ? profileCache.get(getProfileCacheKey(user.id)) : undefined);
+    setProfile(targetUserId ? profileCache.get(getProfileCacheKey(targetUserId)) : undefined);
     setLoadError("");
-  }, [user?.id]);
+  }, [targetUserId]);
 
-  const canOpen = Boolean(user?.id);
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return undefined;
+    }
+    const mediaQuery = window.matchMedia("(hover: none), (pointer: coarse)");
+    const syncTouchState = (matches: boolean) => setIsTouchDevice(matches);
+    syncTouchState(mediaQuery.matches);
+    const listener = (event: MediaQueryListEvent) => syncTouchState(event.matches);
+    mediaQuery.addEventListener("change", listener);
+    return () => mediaQuery.removeEventListener("change", listener);
+  }, []);
+
+  const canOpen = Boolean(targetUserId);
   const displayUser = useMemo(() => profile?.user || user, [profile?.user, user]);
-  const isSelf = Boolean(loginUser?.id && displayUser?.id && loginUser.id === displayUser.id);
+  const resolvedDisplayUserId = displayUser?.id ?? targetUserId;
+  const isSelf = Boolean(
+    loginUser?.id && resolvedDisplayUserId && String(loginUser.id) === String(resolvedDisplayUserId),
+  );
+  const hasResolvedProfile = Boolean(profile);
+  const showProfile = hasResolvedProfile && isProfileFieldVisible(profile, "profile");
+  const showStats = hasResolvedProfile && isProfileFieldVisible(profile, "stats");
+  const showCity = hasResolvedProfile && isProfileFieldVisible(profile, "city");
+  const showJoinTime = hasResolvedProfile && isProfileFieldVisible(profile, "joinTime");
+  const showCareer = hasResolvedProfile && isProfileFieldVisible(profile, "career");
+  const showTags = hasResolvedProfile && isProfileFieldVisible(profile, "tags");
+  const showRelation = hasResolvedProfile && isProfileFieldVisible(profile, "relation");
+  const showContent = hasResolvedProfile && isProfileFieldVisible(profile, "content");
 
   const stats = useMemo(
-    () => [
+    () => showStats ? [
       {
         key: "practice",
         label: "刷题",
@@ -129,18 +168,18 @@ export default function UserProfileHoverCard({
         value: profile?.currentStreak ?? 0,
         icon: <Flame className="h-4 w-4 text-rose-500" />,
       },
-    ],
-    [profile],
+    ] : [],
+    [profile, showStats],
   );
 
   const loadProfile = async () => {
-    if (!user?.id || loading || profile) {
+    if (!targetUserId || loading || profile) {
       return;
     }
     setLoading(true);
     setLoadError("");
     try {
-      const nextProfile = await fetchUserProfile(user.id);
+      const nextProfile = await fetchUserProfile(targetUserId);
       setProfile(nextProfile);
       if (!nextProfile) {
         setLoadError("暂时无法加载该用户资料");
@@ -153,7 +192,6 @@ export default function UserProfileHoverCard({
   };
 
   const handleFollowChange = (nextFollowed: boolean) => {
-    const targetUserId = user?.id;
     if (!targetUserId) {
       return;
     }
@@ -172,7 +210,7 @@ export default function UserProfileHoverCard({
   };
 
   const content = (
-    <div className="w-[320px] space-y-4">
+    <div className="w-[320px] space-y-4 rounded-[28px] bg-white">
       <div className="flex items-start gap-3">
         <UserAvatar
           src={displayUser?.userAvatar}
@@ -190,9 +228,11 @@ export default function UserProfileHoverCard({
               </span>
             ) : null}
           </div>
-          <p className="mt-2 line-clamp-2 text-sm leading-6 text-slate-500">
-            {displayUser?.userProfile || "这个人还没有填写个人简介。"}
-          </p>
+          {showProfile ? (
+            <p className="mt-2 line-clamp-2 text-sm leading-6 text-slate-500">
+              {displayUser?.userProfile || "这个人还没有填写个人简介。"}
+            </p>
+          ) : null}
         </div>
       </div>
 
@@ -200,6 +240,7 @@ export default function UserProfileHoverCard({
         <Skeleton active paragraph={{ rows: 3 }} title={false} />
       ) : (
         <>
+          {showStats ? (
           <div className="grid grid-cols-2 gap-3">
             {stats.map((item) => (
               <div
@@ -214,21 +255,26 @@ export default function UserProfileHoverCard({
               </div>
             ))}
           </div>
+          ) : null}
 
+          {showCity || showJoinTime ? (
           <div className="flex items-center justify-between rounded-2xl bg-slate-50 px-4 py-3 text-xs font-medium text-slate-500">
+            {showCity ? (
             <span className="inline-flex items-center gap-1.5">
               <MapPin className="h-3.5 w-3.5" />
-              最近登录城市：{displayUser?.city || "暂未识别"}
+              {formatIpLocation(displayUser?.city)}
             </span>
-            <span>加入于 {formatJoinDate(displayUser?.createTime)}</span>
+            ) : <span />}
+            {showJoinTime ? <span>加入于 {formatJoinDate(displayUser?.createTime)}</span> : null}
           </div>
+          ) : null}
 
-          {displayUser?.careerDirection || displayUser?.interestTagList?.length ? (
+          {(showCareer && displayUser?.careerDirection) || (showTags && displayUser?.interestTagList?.length) ? (
             <div className="rounded-2xl border border-dashed border-slate-200 px-4 py-3">
-              {displayUser.careerDirection ? (
+              {showCareer && displayUser.careerDirection ? (
                 <div className="text-sm font-semibold text-slate-700">方向：{displayUser.careerDirection}</div>
               ) : null}
-              {displayUser.interestTagList?.length ? (
+              {showTags && displayUser.interestTagList?.length ? (
                 <div className="mt-2 flex flex-wrap gap-2">
                   {displayUser.interestTagList.slice(0, 5).map((tag) => (
                     <span
@@ -243,6 +289,7 @@ export default function UserProfileHoverCard({
             </div>
           ) : null}
 
+          {showRelation ? (
           <div className="grid grid-cols-2 gap-3">
             <div className="rounded-2xl border border-slate-100 bg-white px-4 py-3">
               <div className="text-xs font-bold text-slate-400">粉丝</div>
@@ -253,10 +300,13 @@ export default function UserProfileHoverCard({
               <div className="mt-2 text-lg font-black text-slate-900">{profile?.followingCount ?? 0}</div>
             </div>
           </div>
+          ) : null}
 
+          {showContent ? (
           <div className="rounded-2xl border border-dashed border-slate-200 px-4 py-3 text-sm text-slate-500">
             公开题目 {profile?.approvedQuestionCount ?? 0} 道，点击主页可以查看完整公开资料和最近题目。
           </div>
+          ) : null}
         </>
       )}
 
@@ -265,16 +315,19 @@ export default function UserProfileHoverCard({
       <div className={cn("grid gap-3", isSelf ? "grid-cols-1" : "grid-cols-2")}>
         {!isSelf ? (
           <UserFollowButton
-            userId={displayUser?.id}
+            userId={resolvedDisplayUserId}
             initialFollowed={Boolean(profile?.hasFollowed)}
             onChange={handleFollowChange}
-            className="h-10 rounded-xl font-bold"
+            className={cn("!h-11 !w-full !rounded-xl", actionButtonClass)}
           />
         ) : null}
         <Link
-          href={`/user/${user?.id}`}
+          href={`/user/${targetUserId}`}
           prefetch={false}
-          className="flex h-10 items-center justify-center rounded-xl bg-primary text-sm font-bold text-white transition-all hover:scale-[1.02] active:scale-95"
+          className={cn(
+            "inline-flex items-center justify-center border border-slate-200 bg-white text-slate-700 hover:border-primary/20 hover:text-primary",
+            actionButtonClass,
+          )}
         >
           进入主页
         </Link>
@@ -287,16 +340,23 @@ export default function UserProfileHoverCard({
   }
 
   const triggerNode = (
-    <Link
-      href={`/user/${user?.id}`}
-      prefetch={false}
+    <span
+      role="button"
+      tabIndex={0}
       className={cn(
         "inline-flex min-w-0 cursor-pointer hover:no-underline",
         triggerClassName,
       )}
+      onKeyDown={(event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          setOpen(true);
+          void loadProfile();
+        }
+      }}
     >
       {children}
-    </Link>
+    </span>
   );
 
   return (
@@ -308,12 +368,17 @@ export default function UserProfileHoverCard({
           void loadProfile();
         }
       }}
-      trigger={["hover"]}
+      trigger={isTouchDevice ? ["click"] : ["hover"]}
       placement={placement}
       mouseEnterDelay={0.12}
       getPopupContainer={() => document.body}
       zIndex={1600}
       overlayClassName="user-profile-hover-card"
+      overlayInnerStyle={{
+        padding: 16,
+        backgroundColor: "#ffffff",
+        borderRadius: 28,
+      }}
       content={content}
     >
       {triggerNode}

@@ -61,6 +61,27 @@ const PostAdminPage: React.FC = () => {
   const [reportListLoading, setReportListLoading] = useState(false);
   const [reportProcessingId, setReportProcessingId] = useState<string | number>();
 
+  const normalizeScalar = (value: unknown) => {
+    if (Array.isArray(value)) {
+      return value[0];
+    }
+    return value === "" ? undefined : value;
+  };
+
+  const buildPostQueryRequest = (params: Record<string, any>, sort: Record<string, any>) => {
+    const sortField = Object.keys(sort || {})?.[0];
+    const sortOrder = sortField ? sort?.[sortField] : undefined;
+    return {
+      current: Number(params.current) || 1,
+      pageSize: Number(params.pageSize) || 10,
+      title: normalizeScalar(params.title),
+      userId: normalizeScalar(params.userId),
+      reviewStatus: normalizeScalar(params.reviewStatus),
+      sortField,
+      sortOrder,
+    } as API.PostQueryRequest;
+  };
+
   const governanceHighlights = [
     {
       title: "自动审核",
@@ -448,17 +469,7 @@ const PostAdminPage: React.FC = () => {
             columns={columns}
             request={async (params, sort) => {
               try {
-                const sortField = Object.keys(sort || {})?.[0];
-                const sortOrder = sortField ? sort?.[sortField] : undefined;
-                const res = await listPostVoByPageUsingPost({
-                  current: params.current,
-                  pageSize: params.pageSize,
-                  title: params.title,
-                  userId: params.userId,
-                  reviewStatus: params.reviewStatus,
-                  sortField,
-                  sortOrder,
-                } as API.PostQueryRequest);
+                const res = await listPostVoByPageUsingPost(buildPostQueryRequest(params, sort as Record<string, any>));
                 return {
                   data: res.data?.records || [],
                   success: true,
@@ -473,7 +484,7 @@ const PostAdminPage: React.FC = () => {
                 };
               }
             }}
-            pagination={{ pageSize: 10 }}
+            pagination={{ pageSize: 10, showSizeChanger: true }}
           />
         </div>
       ) : (

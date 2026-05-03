@@ -54,6 +54,59 @@ const parseTagList = (tags?: string) => {
   }
 };
 
+const normalizeStringArray = (value: unknown) => {
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => String(item ?? "").trim())
+      .filter(Boolean);
+  }
+  if (typeof value === "string" && value.trim()) {
+    return [value.trim()];
+  }
+  return undefined;
+};
+
+const normalizeScalar = (value: unknown) => {
+  if (Array.isArray(value)) {
+    const firstValue = value[0];
+    if (firstValue === undefined || firstValue === null || firstValue === "") {
+      return undefined;
+    }
+    return firstValue;
+  }
+  if (value === undefined || value === null || value === "") {
+    return undefined;
+  }
+  return value;
+};
+
+const buildQuestionQueryRequest = (
+  params: Record<string, any>,
+  sort: Record<string, "ascend" | "descend" | null>,
+) => {
+  const sortField = Object.keys(sort)?.[0];
+  const sortOrder = sortField ? sort?.[sortField] ?? undefined : undefined;
+  const reviewStatus = normalizeScalar(params.reviewStatus);
+  const userId = normalizeScalar(params.userId);
+  const id = normalizeScalar(params.id);
+  const difficulty = normalizeScalar(params.difficulty);
+
+  return {
+    current: Number(params.current) || 1,
+    pageSize: Number(params.pageSize) || 10,
+    id,
+    userId,
+    title: typeof params.title === "string" ? params.title : undefined,
+    content: typeof params.content === "string" ? params.content : undefined,
+    answer: typeof params.answer === "string" ? params.answer : undefined,
+    difficulty: typeof difficulty === "string" ? difficulty : undefined,
+    reviewStatus: reviewStatus !== undefined ? Number(reviewStatus) : undefined,
+    tags: normalizeStringArray(params.tags),
+    sortField,
+    sortOrder,
+  } as API.QuestionQueryRequest;
+};
+
 /**
  * 题目管理页面
  * @constructor
@@ -375,15 +428,16 @@ const QuestionAdminPage: React.FC = () => {
             )}
             request={async (params, sort, filter) => {
               try {
-                const sortField = Object.keys(sort)?.[0];
-                const sortOrder = sort?.[sortField] ?? undefined;
-                // @ts-ignore
-                const { data, code } = await listQuestionByPageUsingPost({
-                  ...params,
-                  sortField,
-                  sortOrder,
-                  ...filter,
-                } as API.QuestionQueryRequest) as unknown as API.BaseResponsePageQuestion_;
+                const queryRequest = buildQuestionQueryRequest(
+                  {
+                    ...params,
+                    ...filter,
+                  },
+                  sort as Record<string, "ascend" | "descend" | null>,
+                );
+                const { data, code } = (await listQuestionByPageUsingPost(
+                  queryRequest,
+                )) as unknown as API.BaseResponsePageQuestion_;
                 return {
                   success: code === 0,
                   data: data?.records || [],
@@ -400,6 +454,10 @@ const QuestionAdminPage: React.FC = () => {
             }}
             columns={columns}
             scroll={{ x: true }}
+            pagination={{
+              pageSize: 10,
+              showSizeChanger: true,
+            }}
           />
         </div>
       ) : (

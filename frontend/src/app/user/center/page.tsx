@@ -20,8 +20,10 @@ import {
   NotebookPen,
   BriefcaseBusiness,
   MessageSquareText,
+  FileSearch,
 } from "lucide-react";
 import UserAvatar from "@/components/UserAvatar";
+import { formatIpLocation } from "@/lib/location";
 
 import { getMyQuestionStatsUsingGet } from "@/api/userQuestionHistoryController";
 import { USER_ROLE_ENUM, USER_ROLE_TEXT_MAP } from "@/constants/user";
@@ -92,6 +94,7 @@ function UserCenterContent() {
   const router = useRouter();
   const hasShownMessage = useRef(false);
   const statsRef = useRef<any>({});
+  const tabScrollRef = useRef<HTMLDivElement | null>(null);
   const statsLoadedRef = useRef(false);
   const statsRequestRef = useRef<Promise<Record<string, any>> | null>(null);
   const validTabKeySet = useRef(
@@ -107,6 +110,7 @@ function UserCenterContent() {
       "comments",
       "posts",
       "history",
+      "resume",
       "achievement",
     ]),
   );
@@ -202,9 +206,22 @@ function UserCenterContent() {
     const tab = currentSearchParams.get("tab");
     const error = currentSearchParams.get("error");
     const msg = currentSearchParams.get("msg");
-    const normalizedTab = tab === "submissions" ? "submission" : tab === "achievement" ? "record" : tab;
+    const editProfile = currentSearchParams.get("editProfile");
+    let shouldReplaceQuery = false;
+    const normalizedTab =
+      tab === "submissions"
+        ? "submission"
+        : tab === "achievement"
+          ? "record"
+          : tab === "status"
+            ? "history"
+            : tab;
     if (normalizedTab && validTabKeySet.current.has(normalizedTab)) {
       setActiveTabKey(normalizedTab);
+    }
+    if (editProfile === "1") {
+      setIsEditModalVisible(true);
+      shouldReplaceQuery = true;
     }
     if ((error || msg) && !hasShownMessage.current) {
       if (error) message.error(error);
@@ -213,9 +230,13 @@ function UserCenterContent() {
       if (!tab) {
         setActiveTabKey("security");
       }
+      shouldReplaceQuery = true;
+    }
+    if (shouldReplaceQuery) {
       const nextSearchParams = new URLSearchParams(window.location.search);
       nextSearchParams.delete("error");
       nextSearchParams.delete("msg");
+      nextSearchParams.delete("editProfile");
       const nextQuery = nextSearchParams.toString();
       router.replace(nextQuery ? `${window.location.pathname}?${nextQuery}` : window.location.pathname);
     }
@@ -224,6 +245,32 @@ function UserCenterContent() {
   const onTabChange = (key: string) => {
     setActiveTabKey(key);
   };
+
+  const handleTabWheel = (event: React.WheelEvent<HTMLDivElement>) => {
+    const container = tabScrollRef.current;
+    if (!container) {
+      return;
+    }
+    if (Math.abs(event.deltaY) <= Math.abs(event.deltaX)) {
+      return;
+    }
+    container.scrollLeft += event.deltaY;
+    event.preventDefault();
+  };
+
+  const centerTabList = [
+    { key: "overview", label: <span className="flex items-center gap-2 whitespace-nowrap"><LayoutDashboard size={16} />个人概览</span> },
+    { key: "record", label: <span className="flex items-center gap-2 whitespace-nowrap"><Calendar size={16} />成就看板</span> },
+    { key: "banks", label: <span className="flex items-center gap-2 whitespace-nowrap"><BookOpen size={16} />我的题库</span> },
+    { key: "submission", label: <span className="flex items-center gap-2 whitespace-nowrap"><FilePenLine size={16} />我的题目</span> },
+    { key: "notes", label: <span className="flex items-center gap-2 whitespace-nowrap"><NotebookPen size={16} />我的笔记</span> },
+    { key: "comments", label: <span className="flex items-center gap-2 whitespace-nowrap"><MessageSquareText size={16} />评论足迹</span> },
+    { key: "posts", label: <span className="flex items-center gap-2 whitespace-nowrap"><MessageSquareText size={16} />社区足迹</span> },
+    { key: "resume", label: <span className="flex items-center gap-2 whitespace-nowrap"><FileSearch size={16} />简历推荐</span> },
+    { key: "security", label: <span className="flex items-center gap-2 whitespace-nowrap"><ShieldCheck size={16} />账号安全</span> },
+    { key: "favour", label: <span className="flex items-center gap-2 whitespace-nowrap"><Heart size={16} />收藏题目</span> },
+    { key: "history", label: <span className="flex items-center gap-2 whitespace-nowrap"><History size={16} />刷题轨迹</span> },
+  ];
 
   return (
     <div id="userCenterPage" className="max-width-content">
@@ -274,7 +321,7 @@ function UserCenterContent() {
                 </Tag>
                 {user.city ? (
                   <Tag className="rounded-full px-3 m-0 bg-emerald-50 border-emerald-100 text-emerald-700">
-                    最近登录城市: {user.city}
+                    {formatIpLocation(user.city)}
                   </Tag>
                 ) : null}
                 {user.careerDirection ? (
@@ -338,65 +385,35 @@ function UserCenterContent() {
 
         {/* 右侧核心内容区 */}
         <Col xs={24} md={17}>
-          <Card
-            className="user-tabs-card min-h-[600px]"
-            tabList={[
-              { key: "overview", label: <span className="flex items-center gap-2 whitespace-nowrap"><LayoutDashboard size={16} />个人概览</span> },
-              { key: "record", label: <span className="flex items-center gap-2 whitespace-nowrap"><Calendar size={16} />成就看板</span> },
-              { key: "banks", label: <span className="flex items-center gap-2 whitespace-nowrap"><BookOpen size={16} />我的题库</span> },
-              { key: "submission", label: <span className="flex items-center gap-2 whitespace-nowrap"><FilePenLine size={16} />我的题目</span> },
-              { key: "notes", label: <span className="flex items-center gap-2 whitespace-nowrap"><NotebookPen size={16} />我的笔记</span> },
-              { key: "comments", label: <span className="flex items-center gap-2 whitespace-nowrap"><MessageSquareText size={16} />评论足迹</span> },
-              { key: "posts", label: <span className="flex items-center gap-2 whitespace-nowrap"><MessageSquareText size={16} />社区足迹</span> },
-              { key: "security", label: <span className="flex items-center gap-2 whitespace-nowrap"><ShieldCheck size={16} />账号安全</span> },
-              { key: "favour", label: <span className="flex items-center gap-2 whitespace-nowrap"><Heart size={16} />收藏题目</span> },
-              { key: "history", label: <span className="flex items-center gap-2 whitespace-nowrap"><History size={16} />刷题轨迹</span> },
-            ]}
-            activeTabKey={activeTabKey}
-            onTabChange={onTabChange}
-          >
+          <div className="user-tabs-shell">
+            <div
+              ref={tabScrollRef}
+              className="user-tabs-scroll"
+              role="tablist"
+              aria-label="个人中心栏目"
+              onWheel={handleTabWheel}
+            >
+              {centerTabList.map((tab) => {
+                const isActive = activeTabKey === tab.key;
+                return (
+                  <button
+                    key={tab.key}
+                    type="button"
+                    role="tab"
+                    aria-selected={isActive}
+                    className={`user-tab-trigger ${isActive ? "user-tab-trigger-active" : ""}`}
+                    onClick={() => onTabChange(tab.key)}
+                  >
+                    {tab.label}
+                  </button>
+                );
+              })}
+            </div>
+
+            <Card className="user-tabs-card min-h-[600px]">
             {activeTabKey === "overview" && (
               <div className="fade-in animate-in slide-in-from-bottom-2 duration-500">
                 <div className="space-y-8">
-                  <div className="rounded-[2rem] border border-slate-100 bg-white p-6 shadow-xl shadow-slate-200/30">
-                    <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
-                      <div className="space-y-3">
-                        <Title level={4} style={{ margin: 0 }}>
-                          {user.userName || "同学"}，欢迎来到你的个人概览
-                        </Title>
-                        <Paragraph type="secondary" style={{ marginBottom: 0 }}>
-                          这里更适合快速查看当前学习状态和常用入口；更完整的目标、成就、热力图和刷题记录已经集中放到“成就看板”里了。
-                        </Paragraph>
-                      </div>
-                      <div className="flex flex-wrap gap-3">
-                        <Button type="primary" onClick={() => setActiveTabKey("record")}>
-                          查看成就看板
-                        </Button>
-                        <Button onClick={() => setActiveTabKey("submission")}>
-                          我的题目
-                        </Button>
-                        <Button onClick={() => setActiveTabKey("banks")}>
-                          我的题库
-                        </Button>
-                        <Button onClick={() => setActiveTabKey("notes")}>
-                          我的笔记
-                        </Button>
-                        <Button onClick={() => setActiveTabKey("comments")}>
-                          评论足迹
-                        </Button>
-                        <Button onClick={() => setActiveTabKey("posts")}>
-                          社区足迹
-                        </Button>
-                        <Button onClick={() => setActiveTabKey("favour")}>
-                          查看收藏题目
-                        </Button>
-                        <Button onClick={() => setActiveTabKey("security")}>
-                          账号安全
-                        </Button>
-                      </div>
-                    </div>
-                  </div>
-
                   <Row gutter={[16, 16]}>
                     <Col xs={24} sm={12} xl={6}>
                       <Card bordered={false} className="stats-card">
@@ -487,10 +504,6 @@ function UserCenterContent() {
                       </Card>
                     </Col>
                   </Row>
-
-                <div className="mb-8">
-                  <ResumeRecommendPanel />
-                </div>
                 </div>
               </div>
             )}
@@ -524,6 +537,11 @@ function UserCenterContent() {
                 <MyCommunityPostPanel />
               </div>
             )}
+            {activeTabKey === "resume" && (
+              <div className="fade-in animate-in slide-in-from-bottom-2 duration-500">
+                <ResumeRecommendPanel />
+              </div>
+            )}
             {activeTabKey === "record" && (
               <div className="fade-in animate-in slide-in-from-bottom-2 duration-500">
                 <LearningDataDashboard stats={stats} statsLoading={statsLoading} onRefreshStats={fetchStats} />
@@ -549,7 +567,8 @@ function UserCenterContent() {
             )}
             {activeTabKey === "favour" && <MyFavourList />}
             {activeTabKey === "history" && <LearningHistoryList />}
-          </Card>
+            </Card>
+          </div>
         </Col>
       </Row>
 

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { Tag } from "antd";
 import TagList from "@/components/TagList";
 import UserAvatar from "@/components/UserAvatar";
+import { formatIpLocation } from "@/lib/location";
 import { CalendarClock, ChevronRight, Heart, MessageSquareText, ThumbsUp } from "lucide-react";
 import { POST_REVIEW_STATUS_COLOR_MAP, POST_REVIEW_STATUS_TEXT_MAP } from "@/constants/post";
 
@@ -85,6 +86,9 @@ export default function PostList({ postList = [], getHref }: Props) {
                   <CalendarClock className="h-3.5 w-3.5" />
                   {item.createTime ? new Date(item.createTime).toLocaleDateString("zh-CN") : "刚刚"}
                 </div>
+                {item.ipLocation ? (
+                  <div className="mt-1 text-xs font-medium text-slate-400">{formatIpLocation(item.ipLocation)}</div>
+                ) : null}
               </div>
             </div>
             <div className="flex items-center gap-4 text-sm text-slate-400">

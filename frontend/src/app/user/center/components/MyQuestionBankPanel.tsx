@@ -2,6 +2,7 @@
 
 import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import {
   Alert,
   Button,
@@ -18,6 +19,7 @@ import {
   Space,
   Tag,
   Typography,
+  Upload,
 } from "antd";
 import {
   addQuestionBankUsingPost,
@@ -27,7 +29,8 @@ import {
   submitQuestionBankReviewUsingPost,
 } from "@/api/questionBankController";
 import { BookOpen, Image as ImageIcon, PencilLine, Plus, Trash2 } from "lucide-react";
-import { formatDateTime } from "@/lib/utils";
+import { formatDateTime, validateImageSrc } from "@/lib/utils";
+import { buildApiUrl } from "@/libs/request";
 import ManageQuestionBankQuestionsModal from "./ManageQuestionBankQuestionsModal";
 import {
   QUESTION_REVIEW_STATUS_COLOR_MAP,
@@ -80,19 +83,64 @@ const QuestionBankModal: React.FC<QuestionBankModalProps> = ({
 }) => {
   const [form] = Form.useForm<QuestionBankFormValues>();
   const [submitting, setSubmitting] = useState(false);
+  const [uploadLoading, setUploadLoading] = useState(false);
+  const [pictureUrl, setPictureUrl] = useState("");
   const isEdit = Boolean(questionBank?.id);
 
   useEffect(() => {
     if (open) {
+      const nextPicture = questionBank?.picture || "";
       form.setFieldsValue({
         title: questionBank?.title || "",
         description: questionBank?.description || "",
-        picture: questionBank?.picture || "",
+        picture: nextPicture,
       });
+      setPictureUrl(nextPicture);
     } else {
       form.resetFields();
+      setPictureUrl("");
+      setUploadLoading(false);
     }
   }, [form, open, questionBank]);
+
+  const beforeUpload = (file: File) => {
+    const isSupportedType =
+      file.type === "image/jpeg" || file.type === "image/png" || file.type === "image/webp";
+    if (!isSupportedType) {
+      message.error("仅支持 JPG / PNG / WebP 格式封面");
+    }
+    const isLt2M = file.size / 1024 / 1024 < 2;
+    if (!isLt2M) {
+      message.error("封面图片不能超过 2MB");
+    }
+    return isSupportedType && isLt2M;
+  };
+
+  const handleUploadChange = (info: any) => {
+    if (info.file.status === "uploading") {
+      setUploadLoading(true);
+      return;
+    }
+    if (info.file.status === "done") {
+      const { code, data, message: msg } = info.file.response || {};
+      if (code === 0 && data) {
+        form.setFieldValue("picture", data);
+        setPictureUrl(data);
+        message.success("题库封面上传成功");
+      } else {
+        message.error(msg || "封面上传失败");
+      }
+      setUploadLoading(false);
+    } else if (info.file.status === "error") {
+      message.error("服务器响应错误，封面上传失败");
+      setUploadLoading(false);
+    }
+  };
+
+  const handleClearPicture = () => {
+    form.setFieldValue("picture", "");
+    setPictureUrl("");
+  };
 
   const handleSubmit = async () => {
     const values = await form.validateFields();
@@ -160,12 +208,68 @@ const QuestionBankModal: React.FC<QuestionBankModalProps> = ({
           />
         </Form.Item>
         <Form.Item
-          label="封面图片链接"
-          name="picture"
-          rules={[{ type: "url", warningOnly: true, message: "建议填写合法的图片链接地址" }]}
-          extra="可选，支持填写公开图片链接作为题库封面。"
+          label="封面图片"
+          extra="推荐直接上传封面图，也支持继续填写公开图片链接。"
         >
-          <Input placeholder="https://example.com/question-bank-cover.png" />
+            <div className="space-y-4">
+              <div className="flex flex-col gap-4 rounded-2xl border border-slate-100 bg-slate-50/70 p-4 sm:flex-row sm:items-center">
+              <div className="relative flex h-28 w-full shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-slate-200 bg-white sm:w-40">
+                {pictureUrl ? (
+                  <Image
+                    src={validateImageSrc(pictureUrl)}
+                    alt="题库封面预览"
+                    fill
+                    className="object-cover"
+                  />
+                ) : (
+                  <div className="flex flex-col items-center gap-2 text-slate-400">
+                    <ImageIcon className="h-6 w-6" />
+                    <span className="text-xs font-semibold">暂无封面</span>
+                  </div>
+                )}
+              </div>
+              <div className="flex-1 space-y-3">
+                <div className="flex flex-wrap gap-3">
+                  <Upload
+                    name="file"
+                    showUploadList={false}
+                    action={buildApiUrl("/api/file/upload?biz=question_bank_cover")}
+                    beforeUpload={beforeUpload}
+                    onChange={handleUploadChange}
+                    withCredentials
+                  >
+                    <Button
+                      className="rounded-2xl"
+                      icon={<ImageIcon size={16} />}
+                      loading={uploadLoading}
+                    >
+                      上传封面
+                    </Button>
+                  </Upload>
+                  <Button
+                    className="rounded-2xl"
+                    onClick={handleClearPicture}
+                    disabled={!pictureUrl}
+                  >
+                    清空封面
+                  </Button>
+                </div>
+                <div className="text-xs leading-6 text-slate-400">
+                  支持 JPG / PNG / WebP，大小不超过 2MB。建议使用清晰的横向图片，题库列表里会更好看。
+                </div>
+              </div>
+            </div>
+            <Form.Item
+              name="picture"
+              noStyle
+              rules={[{ type: "url", warningOnly: true, message: "建议填写合法的图片链接地址" }]}
+            >
+              <Input
+                placeholder="也可以直接粘贴图片链接，例如 https://example.com/question-bank-cover.png"
+                onChange={(event) => setPictureUrl(event.target.value.trim())}
+              />
+            </Form.Item>
+          </div>
         </Form.Item>
       </Form>
     </Modal>

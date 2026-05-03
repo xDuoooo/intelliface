@@ -3,7 +3,6 @@ import { listQuestionBankVoByPageUsingPost } from "@/api/questionBankController"
 import { getGlobalLeaderboardUsingGet } from "@/api/leaderboardController";
 import { listQuestionVoByPageUsingPost } from "@/api/questionController";
 import { listFeaturedPostUsingGet, listHotPostUsingGet } from "@/api/postController";
-import { headers } from "next/headers";
 import QuestionBankList from "@/components/QuestionBankList";
 import QuestionList from "@/components/QuestionList";
 import LeaderboardSection from "@/components/LeaderboardSection";
@@ -11,6 +10,8 @@ import PostList from "@/components/PostList";
 import Image from "next/image";
 import { Trophy, Zap, ArrowRight } from "lucide-react";
 import { APP_CONFIG } from "@/config/appConfig";
+import { QUESTION_REVIEW_STATUS_ENUM } from "@/constants/question";
+import { buildServerRequestOptions } from "@/libs/serverRequestOptions";
 
 // 本页面使用服务端渲染，禁用静态生成
 export const dynamic = 'force-dynamic';
@@ -25,17 +26,13 @@ export default async function HomePage() {
   let leaderboard: API.GlobalLeaderboardVO | undefined = undefined;
   let featuredPostList: API.PostVO[] = [];
   let hotPostList: API.PostVO[] = [];
-  const cookie = headers().get("cookie") || "";
-  const requestOptions = {
-    headers: {
-      cookie,
-    },
-  };
+  const requestOptions = buildServerRequestOptions();
 
   const [questionBankResult, latestQuestionResult, leaderboardResult, featuredPostResult, hotPostResult] = await Promise.allSettled([
     listQuestionBankVoByPageUsingPost(
       {
-        pageSize: 8,
+        pageSize: 4,
+        reviewStatus: QUESTION_REVIEW_STATUS_ENUM.APPROVED,
         sortField: "createTime",
         sortOrder: "descend",
       },
@@ -43,7 +40,7 @@ export default async function HomePage() {
     ),
     listQuestionVoByPageUsingPost(
       {
-        pageSize: 12,
+        pageSize: 4,
         sortField: "createTime",
         sortOrder: "descend",
       },

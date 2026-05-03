@@ -30,6 +30,7 @@ export default function UserFollowListModal({ open, onCancel, userId, type }: Pr
   const [pageSize] = useState(8);
   const [total, setTotal] = useState(0);
   const [records, setRecords] = useState<API.UserVO[]>([]);
+  const [errorMessage, setErrorMessage] = useState("");
   const viewingOwnFollowingList = Boolean(
     type === "following" && userId && loginUser?.id && String(loginUser.id) === String(userId),
   );
@@ -76,16 +77,19 @@ export default function UserFollowListModal({ open, onCancel, userId, type }: Pr
   useEffect(() => {
     if (!open) {
       setCurrent(1);
+      setErrorMessage("");
       return;
     }
     if (!userId) {
       setRecords([]);
       setTotal(0);
+      setErrorMessage("");
       return;
     }
     const loadData = async () => {
       setLoading(true);
       try {
+        setErrorMessage("");
         const requestBody = {
           userId,
           current,
@@ -97,9 +101,10 @@ export default function UserFollowListModal({ open, onCancel, userId, type }: Pr
             : await listFollowingUserVoByPageUsingPost(requestBody);
         setRecords(res.data?.records || []);
         setTotal(Number(res.data?.total || 0));
-      } catch (error) {
+      } catch (error: any) {
         setRecords([]);
         setTotal(0);
+        setErrorMessage(error?.message || "暂时无法查看列表");
       } finally {
         setLoading(false);
       }
@@ -178,7 +183,7 @@ export default function UserFollowListModal({ open, onCancel, userId, type }: Pr
         </div>
       ) : (
         <div className="py-10">
-          <Empty description={type === "follower" ? "还没有粉丝" : "还没有关注任何人"} />
+          <Empty description={errorMessage || (type === "follower" ? "还没有粉丝" : "还没有关注任何人")} />
         </div>
       )}
     </Modal>

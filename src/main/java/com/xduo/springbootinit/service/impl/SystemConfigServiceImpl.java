@@ -113,6 +113,8 @@ public class SystemConfigServiceImpl extends ServiceImpl<SystemConfigMapper, Sys
         updateConfig.setEnableSiteNotification(Boolean.TRUE.equals(systemConfigUpdateRequest.getEnableSiteNotification()) ? 1 : 0);
         updateConfig.setEnableEmailNotification(Boolean.TRUE.equals(systemConfigUpdateRequest.getEnableEmailNotification()) ? 1 : 0);
         updateConfig.setEnableLearningGoalReminder(Boolean.TRUE.equals(systemConfigUpdateRequest.getEnableLearningGoalReminder()) ? 1 : 0);
+        updateConfig.setAllowGuestViewQuestion(Boolean.TRUE.equals(systemConfigUpdateRequest.getAllowGuestViewQuestion()) ? 1 : 0);
+        updateConfig.setAllowGuestViewPost(Boolean.TRUE.equals(systemConfigUpdateRequest.getAllowGuestViewPost()) ? 1 : 0);
         boolean updated = this.updateById(updateConfig);
         if (updated) {
             SystemConfig latestConfig = this.getById(currentConfig.getId());
@@ -155,6 +157,16 @@ public class SystemConfigServiceImpl extends ServiceImpl<SystemConfigMapper, Sys
         return Integer.valueOf(1).equals(getCurrentConfig().getEnableLearningGoalReminder());
     }
 
+    @Override
+    public boolean isAllowGuestViewQuestion() {
+        return Integer.valueOf(1).equals(getCurrentConfig().getAllowGuestViewQuestion());
+    }
+
+    @Override
+    public boolean isAllowGuestViewPost() {
+        return Integer.valueOf(1).equals(getCurrentConfig().getAllowGuestViewPost());
+    }
+
     private SystemConfig buildDefaultConfig() {
         SystemConfig systemConfig = new SystemConfig();
         systemConfig.setSiteName(DEFAULT_SITE_NAME);
@@ -166,6 +178,8 @@ public class SystemConfigServiceImpl extends ServiceImpl<SystemConfigMapper, Sys
         systemConfig.setEnableSiteNotification(1);
         systemConfig.setEnableEmailNotification(1);
         systemConfig.setEnableLearningGoalReminder(1);
+        systemConfig.setAllowGuestViewQuestion(1);
+        systemConfig.setAllowGuestViewPost(1);
         return systemConfig;
     }
 
@@ -178,6 +192,8 @@ public class SystemConfigServiceImpl extends ServiceImpl<SystemConfigMapper, Sys
         systemConfigVO.setEnableSiteNotification(Integer.valueOf(1).equals(systemConfig.getEnableSiteNotification()));
         systemConfigVO.setEnableEmailNotification(Integer.valueOf(1).equals(systemConfig.getEnableEmailNotification()));
         systemConfigVO.setEnableLearningGoalReminder(Integer.valueOf(1).equals(systemConfig.getEnableLearningGoalReminder()));
+        systemConfigVO.setAllowGuestViewQuestion(Integer.valueOf(1).equals(systemConfig.getAllowGuestViewQuestion()));
+        systemConfigVO.setAllowGuestViewPost(Integer.valueOf(1).equals(systemConfig.getAllowGuestViewPost()));
         return systemConfigVO;
     }
 

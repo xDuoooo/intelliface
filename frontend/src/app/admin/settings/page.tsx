@@ -20,7 +20,9 @@ import {
   Save,
   Monitor,
   Lock,
-  Zap
+  Zap,
+  BookOpen,
+  MessageSquareText
 } from "lucide-react";
 import { APP_CONFIG } from "@/config/appConfig";
 import { getSystemConfigUsingGet, updateSystemConfigUsingPost } from "@/api/systemConfigController";
@@ -50,6 +52,8 @@ export default function AdminSettingsPage() {
         enableSiteNotification: data?.enableSiteNotification ?? true,
         enableEmailNotification: data?.enableEmailNotification ?? true,
         enableLearningGoalReminder: data?.enableLearningGoalReminder ?? true,
+        allowGuestViewQuestion: data?.allowGuestViewQuestion ?? true,
+        allowGuestViewPost: data?.allowGuestViewPost ?? true,
       });
     } catch (e: any) {
       message.error(e.message || "系统设置加载失败");
@@ -124,6 +128,32 @@ export default function AdminSettingsPage() {
             <Switch className="bg-slate-200" />
          </Form.Item>
       </div>
+      <Divider className="my-0 border-slate-100" />
+      <div className="flex items-center justify-between gap-4">
+         <div className="flex items-center gap-3">
+            <div className="bg-sky-100 p-2 rounded-xl"><BookOpen className="h-5 w-5 text-sky-600" /></div>
+            <div>
+               <Text className="font-bold text-slate-800 block text-lg">允许未登录访问题目</Text>
+               <Text type="secondary">关闭后，游客访问题目列表、题目详情、题目搜索和题目评论时会被要求先登录。</Text>
+            </div>
+         </div>
+         <Form.Item name="allowGuestViewQuestion" valuePropName="checked" noStyle>
+            <Switch className="bg-slate-200" />
+         </Form.Item>
+      </div>
+      <Divider className="my-0 border-slate-100" />
+      <div className="flex items-center justify-between gap-4">
+         <div className="flex items-center gap-3">
+            <div className="bg-violet-100 p-2 rounded-xl"><MessageSquareText className="h-5 w-5 text-violet-600" /></div>
+            <div>
+               <Text className="font-bold text-slate-800 block text-lg">允许未登录访问论坛</Text>
+               <Text type="secondary">关闭后，游客访问帖子列表、帖子详情、热门帖、精选帖和论坛评论时会被要求先登录。</Text>
+            </div>
+         </div>
+         <Form.Item name="allowGuestViewPost" valuePropName="checked" noStyle>
+            <Switch className="bg-slate-200" />
+         </Form.Item>
+      </div>
     </div>
   );
 
@@ -188,6 +218,7 @@ export default function AdminSettingsPage() {
               showIcon
               className="rounded-2xl"
               message="这页配置已经接入真实后端，安全策略会直接作用到登录、验证码发送和注册链路。"
+              description="题目 / 论坛的游客访问开关也在这里统一控制，保存后会实时生效。"
             />
           </div>
           <Tabs 

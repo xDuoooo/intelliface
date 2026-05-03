@@ -54,6 +54,7 @@ export async function listMyQuestionHistoryByPageUsingGet(
   params: {
     current?: number;
     pageSize?: number;
+    status?: number;
   },
   options?: { [key: string]: any },
 ) {

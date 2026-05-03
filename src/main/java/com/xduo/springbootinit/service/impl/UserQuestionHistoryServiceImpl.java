@@ -146,9 +146,10 @@ public class UserQuestionHistoryServiceImpl extends ServiceImpl<UserQuestionHist
     }
 
     @Override
-    public Page<UserQuestionHistoryVO> listMyQuestionHistoryByPage(Page<UserQuestionHistory> page, long userId, HttpServletRequest request) {
+    public Page<UserQuestionHistoryVO> listMyQuestionHistoryByPage(Page<UserQuestionHistory> page, long userId, Integer status, HttpServletRequest request) {
         QueryWrapper<UserQuestionHistory> historyQueryWrapper = new QueryWrapper<>();
         historyQueryWrapper.eq("userId", userId);
+        historyQueryWrapper.eq(status != null, "status", status);
         historyQueryWrapper.orderByDesc("updateTime");
         Page<UserQuestionHistory> historyPage = this.page(page, historyQueryWrapper);
         

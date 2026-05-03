@@ -45,12 +45,6 @@ public class WxMpController {
         return wxMpService.receiveMessage(signature, timestamp, nonce, requestBody);
     }
 
-    @GetMapping("/setMenu")
-    @Operation(summary = "保留的公众号菜单接口", hidden = true)
-    public String setMenu() {
-        return "个人订阅号验证码登录模式无需设置自定义菜单";
-    }
-
     @PostMapping("/mp/login/ticket")
     @Operation(summary = "创建公众号验证码登录口令")
     public BaseResponse<WxMpLoginTicketVO> createLoginTicket(HttpServletRequest request) {

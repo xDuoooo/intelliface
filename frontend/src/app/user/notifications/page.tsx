@@ -160,7 +160,7 @@ const UserNotificationsPage: React.FC = () => {
   };
 
   return (
-    <div style={{ maxWidth: 900, margin: "0 auto", padding: "24px 16px" }}>
+    <div style={{ maxWidth: 1120, margin: "0 auto", padding: "24px 16px" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24 }}>
         <Space size="middle">
           <div style={{ 
@@ -208,7 +208,7 @@ const UserNotificationsPage: React.FC = () => {
       <Card
         bordered={false}
         style={{ marginBottom: 16 }}
-        bodyStyle={{ padding: 16 }}
+        bodyStyle={{ padding: 20 }}
       >
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div className="flex flex-col gap-2">
@@ -230,7 +230,7 @@ const UserNotificationsPage: React.FC = () => {
         </div>
       </Card>
 
-      <Card bodyStyle={{ padding: 0 }} bordered={false}>
+      <Card bodyStyle={{ padding: 0 }} bordered={false} className="overflow-hidden">
         <List
           loading={loading}
           dataSource={dataList}
@@ -240,7 +240,7 @@ const UserNotificationsPage: React.FC = () => {
           renderItem={(item) => (
             <List.Item
               className="hover:bg-gray-50 transition-colors cursor-pointer"
-              style={{ padding: "20px 24px", opacity: item.status === 1 ? 0.7 : 1 }}
+              style={{ padding: "20px 28px", opacity: item.status === 1 ? 0.7 : 1 }}
               onClick={() => handleRead(item)}
               extra={(
                 <Space size={8}>

@@ -4,6 +4,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { Alert, Button, Card, Empty, Form, Input, List, message, Modal, Pagination, Select, Space, Tag, Typography } from "antd";
 import { addQuestionUsingPost, deleteQuestionUsingPost, editQuestionUsingPost, listMyQuestionVoByPageUsingPost, submitQuestionReviewUsingPost } from "@/api/questionController";
+import TagSearchSelect from "@/components/TagSearchSelect";
 import TagList from "@/components/TagList";
 import {
   QUESTION_DIFFICULTY_COLOR_MAP,
@@ -126,7 +127,7 @@ const SubmissionModal: React.FC<SubmissionModalProps> = ({ open, question, onCan
           rules={[{ required: true, message: "请至少填写一个标签" }]}
           extra="按 Enter 可继续添加标签，例如：Java、Spring、MySQL"
         >
-          <Select mode="tags" placeholder="请输入题目标签" tokenSeparators={[","]} />
+          <TagSearchSelect scene="question" placeholder="请输入题目标签" tokenSeparators={[","]} />
         </Form.Item>
         <Form.Item label="题目内容" name="content" rules={[{ required: true, message: "请输入题目内容" }]}>
           <Input.TextArea rows={7} placeholder="请完整描述题目背景、要求和考察点，支持 Markdown 文本。" />

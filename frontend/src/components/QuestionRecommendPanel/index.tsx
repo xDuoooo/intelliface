@@ -1,6 +1,8 @@
 "use client";
 
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState, useMemo } from "react";
+import { useSelector } from "react-redux";
+import { RootState } from "@/stores";
 import Link from "next/link";
 import { Card, Empty, List, Spin, Tag, Typography, message } from "antd";
 import { ArrowRight, Compass, Sparkles } from "lucide-react";
@@ -26,15 +28,25 @@ export default function QuestionRecommendPanel({ questionId }: Props) {
   const [personalList, setPersonalList] = useState<API.QuestionVO[]>([]);
   const [relatedList, setRelatedList] = useState<API.QuestionVO[]>([]);
 
+  const loginUser = useSelector((state: RootState) => state.loginUser);
+  const isLogin = useMemo(() => Boolean(loginUser?.id), [loginUser?.id]);
+
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      const [personalRes, relatedRes] = await Promise.allSettled([
-        listPersonalRecommendQuestionVoUsingGet({ questionId, size: 4 }),
+      const promises: Promise<any>[] = [
         listRelatedQuestionVoUsingGet({ questionId, size: 4 }),
-      ]);
+      ];
+      if (isLogin) {
+        promises.unshift(listPersonalRecommendQuestionVoUsingGet({ questionId, size: 4 }));
+      } else {
+        promises.unshift(Promise.resolve({ data: [] } as any));
+      }
+      
+      const [personalRes, relatedRes] = await Promise.allSettled(promises);
+      
       if (personalRes.status === "fulfilled") {
-        setPersonalList(personalRes.value.data || []);
+        setPersonalList(personalRes?.value?.data || []);
       } else {
         setPersonalList([]);
       }
@@ -53,7 +65,7 @@ export default function QuestionRecommendPanel({ questionId }: Props) {
     } finally {
       setLoading(false);
     }
-  }, [questionId]);
+  }, [isLogin, questionId]);
 
   useEffect(() => {
     if (!questionId) {
@@ -136,7 +148,7 @@ export default function QuestionRecommendPanel({ questionId }: Props) {
         <Paragraph className="text-slate-500">
           结合你的刷题记录、收藏偏好、题目标签和协同过滤结果，推荐下一步更值得继续攻克的题目。
         </Paragraph>
-        {renderQuestionList(personalList, "暂时还没有可推荐的题目", "personal")}
+        {renderQuestionList(personalList, isLogin ? "暂时还没有可推荐的题目" : "登录后即可获取专属个性化推荐", "personal")}
       </Card>
 
       <Card

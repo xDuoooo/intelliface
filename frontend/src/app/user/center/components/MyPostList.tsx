@@ -10,6 +10,7 @@ import {
   listMyPostVoByPageUsingPost,
 } from "@/api/postController";
 import PostEditorForm from "@/components/PostEditorForm";
+import { formatIpLocation } from "@/lib/location";
 import { POST_REVIEW_STATUS_COLOR_MAP, POST_REVIEW_STATUS_TEXT_MAP } from "@/constants/post";
 import RecordFilterToolbar from "./RecordFilterToolbar";
 
@@ -216,6 +217,7 @@ export default function MyPostList() {
                         <CalendarClock className="h-4 w-4" />
                         {item.createTime ? new Date(item.createTime).toLocaleString("zh-CN") : "刚刚发布"}
                       </span>
+                      {item.ipLocation ? <span>{formatIpLocation(item.ipLocation)}</span> : null}
                       <span>点赞 {item.thumbNum || 0}</span>
                       <span>收藏 {item.favourNum || 0}</span>
                     </div>

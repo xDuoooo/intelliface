@@ -11,8 +11,8 @@ where not exists (
 );
 
 -- 初始化系统配置
-insert into system_config (id, siteName, seoKeywords, announcement, allowRegister, requireCaptcha, maintenanceMode, enableSiteNotification, enableEmailNotification, enableLearningGoalReminder)
-values (1, 'IntelliFace 智面', '面试, 刷题, Java, 互联网', '欢迎来到智面 1.0 版本，体验 AI 智能面经！', 1, 1, 0, 1, 1, 1)
+insert into system_config (id, siteName, seoKeywords, announcement, allowRegister, requireCaptcha, maintenanceMode, enableSiteNotification, enableEmailNotification, enableLearningGoalReminder, allowGuestViewQuestion, allowGuestViewPost)
+values (1, 'IntelliFace 智面', '面试, 刷题, Java, 互联网', '欢迎来到智面 1.0 版本，体验 AI 智能面经！', 1, 1, 0, 1, 1, 1, 1, 1)
 on duplicate key update
     siteName = values(siteName),
     seoKeywords = values(seoKeywords),
@@ -22,7 +22,9 @@ on duplicate key update
     maintenanceMode = values(maintenanceMode),
     enableSiteNotification = values(enableSiteNotification),
     enableEmailNotification = values(enableEmailNotification),
-    enableLearningGoalReminder = values(enableLearningGoalReminder);
+    enableLearningGoalReminder = values(enableLearningGoalReminder),
+    allowGuestViewQuestion = values(allowGuestViewQuestion),
+    allowGuestViewPost = values(allowGuestViewPost);
 
 set @seed_user_id = (
     select id

@@ -22,6 +22,7 @@ import com.xduo.springbootinit.constant.QuestionConstant;
 import com.xduo.springbootinit.constant.UserConstant;
 import com.xduo.springbootinit.exception.BusinessException;
 import com.xduo.springbootinit.exception.ThrowUtils;
+import com.xduo.springbootinit.manager.SystemAccessManager;
 import com.xduo.springbootinit.mapper.CounterManager;
 import com.xduo.springbootinit.model.dto.question.*;
 import com.xduo.springbootinit.model.entity.Question;
@@ -34,6 +35,7 @@ import com.xduo.springbootinit.service.QuestionRecommendLogService;
 import com.xduo.springbootinit.service.QuestionSearchLogService;
 import com.xduo.springbootinit.service.QuestionService;
 import com.xduo.springbootinit.service.SecurityAlertService;
+import com.xduo.springbootinit.service.TagSyncService;
 import com.xduo.springbootinit.service.UserService;
 import com.xduo.springbootinit.utils.NetUtils;
 import lombok.Data;
@@ -106,6 +108,12 @@ public class QuestionController {
     @Resource
     private QuestionRecommendLogService questionRecommendLogService;
 
+    @Resource
+    private TagSyncService tagSyncService;
+
+    @Resource
+    private SystemAccessManager systemAccessManager;
+
     /**
      * 创建题目
      *
@@ -137,6 +145,7 @@ public class QuestionController {
         boolean result = questionService.save(question);
         ThrowUtils.throwIf(!result, ErrorCode.OPERATION_ERROR);
         questionService.syncQuestionToEs(question);
+        tagSyncService.syncQuestionTags(null, question.getTags());
         long newQuestionId = question.getId();
         return ResultUtils.success(newQuestionId);
     }
@@ -195,6 +204,7 @@ public class QuestionController {
         ThrowUtils.throwIf(!result, ErrorCode.OPERATION_ERROR);
         Question latestQuestion = questionService.getById(id);
         questionService.syncQuestionToEs(latestQuestion);
+        tagSyncService.syncQuestionTags(oldQuestion.getTags(), latestQuestion == null ? null : latestQuestion.getTags());
         return ResultUtils.success(true);
     }
 
@@ -207,6 +217,7 @@ public class QuestionController {
     @GetMapping("/get/vo")
     public BaseResponse<QuestionVO> getQuestionVOById(Long id, HttpServletRequest request) {
         ThrowUtils.throwIf(id == null || id <= 0, ErrorCode.PARAMS_ERROR);
+        systemAccessManager.ensureGuestQuestionAccessAllowed(request);
         // 查询数据库
         Question question = questionService.getById(id);
         ThrowUtils.throwIf(question == null, ErrorCode.NOT_FOUND_ERROR);
@@ -241,6 +252,7 @@ public class QuestionController {
                                                                 @RequestParam(defaultValue = "6") Integer size,
                                                                 HttpServletRequest request) {
         ThrowUtils.throwIf(questionId == null || questionId <= 0, ErrorCode.PARAMS_ERROR);
+        systemAccessManager.ensureGuestQuestionAccessAllowed(request);
         User loginUser = userService.getLoginUserPermitNull(request);
         List<QuestionVO> questionVOList = questionService.listRelatedQuestionVO(questionId, size, request);
         logRecommendationExposure(loginUser == null ? null : loginUser.getId(), "related", questionVOList);
@@ -366,6 +378,7 @@ public class QuestionController {
     public BaseResponse<Page<QuestionVO>> listQuestionVOByPage(@RequestBody QuestionQueryRequest questionQueryRequest,
                                                                HttpServletRequest request) {
         ThrowUtils.throwIf(questionQueryRequest == null, ErrorCode.PARAMS_ERROR);
+        systemAccessManager.ensureGuestQuestionAccessAllowed(request);
         long current = questionQueryRequest.getCurrent();
         long size = questionQueryRequest.getPageSize();
         Entry entry = null;
@@ -481,6 +494,7 @@ public class QuestionController {
         ThrowUtils.throwIf(!result, ErrorCode.OPERATION_ERROR);
         Question latestQuestion = questionService.getById(id);
         questionService.syncQuestionToEs(latestQuestion);
+        tagSyncService.syncQuestionTags(oldQuestion.getTags(), latestQuestion == null ? null : latestQuestion.getTags());
         return ResultUtils.success(true);
     }
 
@@ -511,6 +525,7 @@ public class QuestionController {
         ThrowUtils.throwIf(!result, ErrorCode.OPERATION_ERROR);
         Question latestQuestion = questionService.getById(oldQuestion.getId());
         questionService.syncQuestionToEs(latestQuestion);
+        tagSyncService.syncQuestionTags(oldQuestion.getTags(), latestQuestion == null ? null : latestQuestion.getTags());
         return ResultUtils.success(true);
     }
 
@@ -518,6 +533,7 @@ public class QuestionController {
     public BaseResponse<Page<QuestionVO>> searchQuestionVOByPage(@RequestBody QuestionQueryRequest questionQueryRequest,
                                                                  HttpServletRequest request) {
         ThrowUtils.throwIf(questionQueryRequest == null, ErrorCode.PARAMS_ERROR);
+        systemAccessManager.ensureGuestQuestionAccessAllowed(request);
         long size = questionQueryRequest.getPageSize();
         // 限制爬虫
         ThrowUtils.throwIf(size > 200, ErrorCode.PARAMS_ERROR);
@@ -526,12 +542,16 @@ public class QuestionController {
         }
         Page<Question> questionPage;
         boolean fallbackToDb = false;
-        try {
-            questionPage = questionService.searchFromEs(questionQueryRequest);
-        } catch (Exception e) {
-            log.warn("题目搜索 ES 不可用，已降级到数据库查询，searchText={}", questionQueryRequest.getSearchText(), e);
+        if (shouldSearchQuestionFromEs(questionQueryRequest)) {
+            try {
+                questionPage = questionService.searchFromEs(questionQueryRequest);
+            } catch (Exception e) {
+                log.warn("题目搜索 ES 不可用，已降级到数据库查询，searchText={}", questionQueryRequest.getSearchText(), e);
+                questionPage = questionService.listQuestionByPage(questionQueryRequest);
+                fallbackToDb = true;
+            }
+        } else {
             questionPage = questionService.listQuestionByPage(questionQueryRequest);
-            fallbackToDb = true;
         }
         if (StringUtils.isNotBlank(questionQueryRequest.getSearchText())) {
             try {
@@ -548,6 +568,13 @@ public class QuestionController {
             }
         }
         return ResultUtils.success(questionService.getQuestionVOPage(questionPage, request));
+    }
+
+    private boolean shouldSearchQuestionFromEs(QuestionQueryRequest questionQueryRequest) {
+        return StringUtils.isNotBlank(questionQueryRequest.getSearchText())
+                || StringUtils.isNotBlank(questionQueryRequest.getTitle())
+                || StringUtils.isNotBlank(questionQueryRequest.getContent())
+                || StringUtils.isNotBlank(questionQueryRequest.getAnswer());
     }
 
     /**
@@ -586,6 +613,7 @@ public class QuestionController {
 
         Question latestQuestion = questionService.getById(oldQuestion.getId());
         questionService.syncQuestionToEs(latestQuestion);
+        tagSyncService.syncQuestionTags(oldQuestion.getTags(), latestQuestion == null ? null : latestQuestion.getTags());
         notificationService.sendNotification(
                 latestQuestion.getUserId(),
                 QuestionConstant.REVIEW_STATUS_APPROVED == reviewStatus ? "你的题目已审核通过" : "你的题目未通过审核",
@@ -653,6 +681,7 @@ public class QuestionController {
                 questionService.validQuestion(question, true);
                 questionService.save(question);
                 questionService.syncQuestionToEs(question);
+                tagSyncService.syncQuestionTags(null, question.getTags());
                 successCount++;
             }
             ThrowUtils.throwIf(successCount == 0, ErrorCode.SYSTEM_ERROR, "AI 未生成可保存的题目");

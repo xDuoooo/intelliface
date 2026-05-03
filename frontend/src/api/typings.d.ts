@@ -223,6 +223,8 @@ declare namespace API {
 
   type SystemConfigUpdateRequest = {
     allowRegister?: boolean;
+    allowGuestViewPost?: boolean;
+    allowGuestViewQuestion?: boolean;
     announcement?: string;
     enableEmailNotification?: boolean;
     enableLearningGoalReminder?: boolean;
@@ -235,6 +237,8 @@ declare namespace API {
 
   type SystemConfigVO = {
     allowRegister?: boolean;
+    allowGuestViewPost?: boolean;
+    allowGuestViewQuestion?: boolean;
     announcement?: string;
     createTime?: string;
     enableEmailNotification?: boolean;
@@ -384,6 +388,7 @@ declare namespace API {
     email?: string;
     id?: string | number;
     interestTagList?: string[];
+    profileVisibleFieldList?: string[];
     passwordConfigured?: number;
     phone?: string;
     updateTime?: string;
@@ -796,6 +801,7 @@ declare namespace API {
     hasFavour?: boolean;
     hasThumb?: boolean;
     id?: string | number;
+    ipLocation?: string;
     isFeatured?: number;
     isTop?: number;
     reportNum?: number;
@@ -1103,6 +1109,7 @@ declare namespace API {
     jobDirection?: string;
     questionList?: QuestionVO[];
     recommendFocus?: string;
+    resumeText?: string;
   };
 
   type SecurityAlertHandleRequest = {
@@ -1152,6 +1159,7 @@ declare namespace API {
     email?: string;
     id?: string | number;
     interestTags?: string | string[];
+    profileVisibleFields?: string | string[];
     isDelete?: number;
     phone?: string;
     updateTime?: string;
@@ -1188,6 +1196,7 @@ declare namespace API {
     userAccount?: string;
     userAvatar?: string;
     userName?: string;
+    userPassword?: string;
     userRole?: string;
   };
 
@@ -1232,12 +1241,17 @@ declare namespace API {
     careerDirection?: string;
     city?: string;
     interestTags?: string[];
+    profileVisibleFields?: string[];
     userAccount?: string;
     userAvatar?: string;
     userName?: string;
     userProfile?: string;
     phone?: string;
     email?: string;
+  };
+
+  type UserInterestTagsMergeRequest = {
+    interestTags?: string[];
   };
 
   type UserChangePasswordRequest = {
@@ -1260,6 +1274,7 @@ declare namespace API {
     city?: string;
     id?: string | number;
     interestTags?: string[];
+    userAccount?: string;
     userAvatar?: string;
     userName?: string;
     userProfile?: string;
@@ -1273,6 +1288,7 @@ declare namespace API {
     hasFollowed?: boolean;
     id?: string | number;
     interestTagList?: string[];
+    profileVisibleFieldList?: string[];
     userAvatar?: string;
     userName?: string;
     userProfile?: string;
@@ -1281,15 +1297,27 @@ declare namespace API {
 
   type UserProfileVO = {
     activeDays?: number;
+    achievementList?: Record<string, any>[];
+    averageStudyDurationSeconds?: number;
     approvedQuestionBankCount?: number;
     approvedQuestionCount?: number;
     currentStreak?: number;
+    dailyTarget?: number;
+    favourCount?: number;
     followerCount?: number;
     followingCount?: number;
+    goalCompletedToday?: boolean;
     hasFollowed?: boolean;
     masteredQuestionCount?: number;
+    profileVisibleFieldList?: string[];
+    questionHistoryRecordList?: Record<string, any>[];
+    recommendedDifficulty?: string;
     recentActivityList?: UserActivityVO[];
+    studySessionCount?: number;
+    todayCount?: number;
+    todayStudyDurationSeconds?: number;
     totalQuestionCount?: number;
+    totalStudyDurationSeconds?: number;
     user?: UserVO;
   };
 

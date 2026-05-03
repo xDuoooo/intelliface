@@ -9,6 +9,7 @@ import com.xduo.springbootinit.common.ResultUtils;
 import com.xduo.springbootinit.constant.UserConstant;
 import com.xduo.springbootinit.exception.BusinessException;
 import com.xduo.springbootinit.exception.ThrowUtils;
+import com.xduo.springbootinit.manager.SystemAccessManager;
 import com.xduo.springbootinit.model.dto.comment.CommentActivityQueryRequest;
 import com.xduo.springbootinit.model.dto.postcomment.PostCommentAddRequest;
 import com.xduo.springbootinit.model.dto.postcomment.PostCommentAdminQueryRequest;
@@ -26,7 +27,9 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import java.util.Map;
 
 /**
  * 帖子评论接口
@@ -42,12 +45,15 @@ public class PostCommentController {
     @Resource
     private UserService userService;
 
+    @Resource
+    private SystemAccessManager systemAccessManager;
+
     @PostMapping("/add")
     public BaseResponse<PostCommentSubmitResultVO> addComment(@RequestBody PostCommentAddRequest request,
                                                               HttpServletRequest httpRequest) {
         ThrowUtils.throwIf(request == null, ErrorCode.PARAMS_ERROR);
         User loginUser = userService.getLoginUser(httpRequest);
-        return ResultUtils.success(postCommentService.addComment(request, loginUser));
+        return ResultUtils.success(postCommentService.addComment(request, loginUser, httpRequest));
     }
 
     @PostMapping("/delete")
@@ -60,10 +66,19 @@ public class PostCommentController {
         return ResultUtils.success(postCommentService.deleteComment(deleteRequest.getId(), loginUser));
     }
 
+    @PostMapping("/like")
+    public BaseResponse<Map<String, Object>> likeComment(@RequestParam Long commentId,
+                                                         HttpServletRequest httpRequest) {
+        ThrowUtils.throwIf(commentId == null || commentId <= 0, ErrorCode.PARAMS_ERROR);
+        User loginUser = userService.getLoginUser(httpRequest);
+        return ResultUtils.success(postCommentService.likeComment(commentId, loginUser));
+    }
+
     @PostMapping("/list/page/vo")
     public BaseResponse<Page<PostCommentVO>> listCommentVOByPage(@RequestBody PostCommentQueryRequest request,
                                                                  HttpServletRequest httpRequest) {
         ThrowUtils.throwIf(request == null, ErrorCode.PARAMS_ERROR);
+        systemAccessManager.ensureGuestPostAccessAllowed(httpRequest);
         ThrowUtils.throwIf(request.getPageSize() > 50, ErrorCode.PARAMS_ERROR, "每页最多 50 条");
         return ResultUtils.success(postCommentService.listCommentVOByPage(request, httpRequest));
     }

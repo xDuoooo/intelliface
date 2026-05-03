@@ -3,6 +3,7 @@ package com.xduo.springbootinit.config;
 import org.apache.http.HttpHost;
 import org.apache.http.auth.AuthScope;
 import org.apache.http.auth.UsernamePasswordCredentials;
+import org.apache.http.client.config.RequestConfig;
 import org.apache.http.client.CredentialsProvider;
 import org.apache.http.conn.ssl.NoopHostnameVerifier;
 import org.apache.http.conn.ssl.TrustAllStrategy;
@@ -27,6 +28,15 @@ public class Es8Config {
     @Value("${spring.elasticsearch.password}")
     private String password;
 
+    @Value("${app.elasticsearch.connect-timeout-ms:1000}")
+    private int connectTimeoutMs;
+
+    @Value("${app.elasticsearch.socket-timeout-ms:3000}")
+    private int socketTimeoutMs;
+
+    @Value("${app.elasticsearch.connection-request-timeout-ms:1000}")
+    private int connectionRequestTimeoutMs;
+
     /**
      * 自定义 RestClientBuilder，实现免 SSL 证书校验和基础认证
      * Spring Boot 3 会自动使用此 Customizer 构造 RestClient、ElasticsearchClient 和 ElasticsearchTemplate
@@ -47,6 +57,10 @@ public class Es8Config {
                 // 3. 应用配置
                 // 注意：在 SB3 中，如果手动 setHttpClientConfigCallback，会覆盖自动配置的逻辑
                 // 因此我们必须在这里同时包含 SSL 和身份认证
+                builder.setRequestConfigCallback(requestConfigBuilder -> RequestConfig.copy(requestConfigBuilder.build())
+                        .setConnectTimeout(connectTimeoutMs)
+                        .setSocketTimeout(socketTimeoutMs)
+                        .setConnectionRequestTimeout(connectionRequestTimeoutMs));
                 builder.setHttpClientConfigCallback(httpClientBuilder -> httpClientBuilder
                         .setSSLContext(sslContext)
                         .setSSLHostnameVerifier(NoopHostnameVerifier.INSTANCE)

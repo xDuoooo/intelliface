@@ -31,6 +31,10 @@ public class SystemConfigVO implements Serializable {
 
     private Boolean enableLearningGoalReminder;
 
+    private Boolean allowGuestViewQuestion;
+
+    private Boolean allowGuestViewPost;
+
     private Date createTime;
 
     private Date updateTime;

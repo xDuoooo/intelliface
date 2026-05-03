@@ -27,6 +27,7 @@ import com.xduo.springbootinit.manager.AiManager;
 import com.xduo.springbootinit.service.NotificationService;
 import com.xduo.springbootinit.service.QuestionCommentService;
 import com.xduo.springbootinit.service.UserService;
+import com.xduo.springbootinit.utils.IpCityResolver;
 import jakarta.annotation.Resource;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
@@ -80,12 +81,15 @@ public class QuestionCommentServiceImpl extends ServiceImpl<QuestionCommentMappe
     @Resource
     private AiManager aiManager;
 
+    @Resource
+    private IpCityResolver ipCityResolver;
+
     // ----------------------------------------------------------------
     //  1. 发表评论
     // ----------------------------------------------------------------
 
     @Override
-    public CommentSubmitResultVO addComment(CommentAddRequest request, User loginUser) {
+    public CommentSubmitResultVO addComment(CommentAddRequest request, User loginUser, HttpServletRequest httpRequest) {
         // 参数校验
         ThrowUtils.throwIf(request == null, ErrorCode.PARAMS_ERROR);
         Long questionId = request.getQuestionId();
@@ -119,6 +123,7 @@ public class QuestionCommentServiceImpl extends ServiceImpl<QuestionCommentMappe
         comment.setParentId(parentId);
         comment.setReplyToId(request.getReplyToId());
         comment.setContent(content);
+        comment.setIpLocation(resolveCommentIpLocation(httpRequest));
         comment.setLikeNum(0);
         comment.setReportNum(0);
         comment.setIsPinned(0);
@@ -236,7 +241,9 @@ public class QuestionCommentServiceImpl extends ServiceImpl<QuestionCommentMappe
     public Map<String, Object> likeComment(Long commentId, User loginUser) {
         ThrowUtils.throwIf(commentId == null || commentId <= 0, ErrorCode.PARAMS_ERROR);
         QuestionComment comment = getById(commentId);
-        ThrowUtils.throwIf(comment == null, ErrorCode.NOT_FOUND_ERROR);
+        ThrowUtils.throwIf(comment == null || Objects.equals(comment.getIsDelete(), 1), ErrorCode.NOT_FOUND_ERROR, "评论不存在");
+        ThrowUtils.throwIf(!Objects.equals(comment.getStatus(), COMMENT_STATUS_APPROVED),
+                ErrorCode.OPERATION_ERROR, "当前评论审核通过后才能点赞");
 
         Long userId = loginUser.getId();
 
@@ -269,10 +276,11 @@ public class QuestionCommentServiceImpl extends ServiceImpl<QuestionCommentMappe
 
             // 发送点赞通知（异步）
             if (delta > 0 && !comment.getUserId().equals(loginUser.getId())) {
+                String displayName = StringUtils.defaultIfBlank(loginUser.getUserName(), "有用户");
                 notificationService.sendNotification(
                     comment.getUserId(),
                     "有人给你点赞了",
-                    loginUser.getUserName() + " 点赞了你的评论：" + StringUtils.abbreviate(comment.getContent(), 20),
+                    displayName + " 点赞了你的评论：" + StringUtils.abbreviate(comment.getContent(), 20),
                     "like",
                     comment.getQuestionId()
                 );
@@ -470,6 +478,7 @@ public class QuestionCommentServiceImpl extends ServiceImpl<QuestionCommentMappe
         vo.setParentId(comment.getParentId());
         vo.setReplyToId(comment.getReplyToId());
         vo.setContent(comment.getContent());
+        vo.setIpLocation(comment.getIpLocation());
         vo.setLikeNum(comment.getLikeNum());
         vo.setIsPinned(comment.getIsPinned());
         vo.setIsOfficial(comment.getIsOfficial());
@@ -498,6 +507,7 @@ public class QuestionCommentServiceImpl extends ServiceImpl<QuestionCommentMappe
                     childVO.setParentId(child.getParentId());
                     childVO.setReplyToId(child.getReplyToId());
                     childVO.setContent(child.getContent());
+                    childVO.setIpLocation(child.getIpLocation());
                     childVO.setLikeNum(child.getLikeNum());
                     childVO.setIsPinned(child.getIsPinned());
                     childVO.setIsOfficial(child.getIsOfficial());
@@ -575,6 +585,7 @@ public class QuestionCommentServiceImpl extends ServiceImpl<QuestionCommentMappe
             commentVO.setParentId(comment.getParentId());
             commentVO.setReplyToId(comment.getReplyToId());
             commentVO.setContent(comment.getContent());
+            commentVO.setIpLocation(comment.getIpLocation());
             commentVO.setLikeNum(comment.getLikeNum());
             commentVO.setIsPinned(comment.getIsPinned());
             commentVO.setIsOfficial(comment.getIsOfficial());
@@ -740,13 +751,14 @@ public class QuestionCommentServiceImpl extends ServiceImpl<QuestionCommentMappe
     }
 
     private void sendReplyNotificationIfNeeded(QuestionComment comment, User authorUser) {
+        String displayName = StringUtils.defaultIfBlank(authorUser.getUserName(), "有用户");
         if (comment.getReplyToId() != null) {
             QuestionComment replyToComment = getById(comment.getReplyToId());
             if (replyToComment != null && !replyToComment.getUserId().equals(comment.getUserId())) {
                 notificationService.sendNotification(
                         replyToComment.getUserId(),
                         "有人回复了你的评论",
-                        authorUser.getUserName() + " 回复了你：" + StringUtils.abbreviate(comment.getContent(), 20),
+                        displayName + " 回复了你：" + StringUtils.abbreviate(comment.getContent(), 20),
                         "reply",
                         comment.getQuestionId()
                 );
@@ -759,11 +771,22 @@ public class QuestionCommentServiceImpl extends ServiceImpl<QuestionCommentMappe
                 notificationService.sendNotification(
                         parentComment.getUserId(),
                         "你的评论有了新回复",
-                        authorUser.getUserName() + " 回复了你：" + StringUtils.abbreviate(comment.getContent(), 20),
+                        displayName + " 回复了你：" + StringUtils.abbreviate(comment.getContent(), 20),
                         "reply",
                         comment.getQuestionId()
                 );
             }
+            return;
+        }
+        Question question = questionMapper.selectById(comment.getQuestionId());
+        if (question != null && !Objects.equals(question.getUserId(), comment.getUserId())) {
+            notificationService.sendNotification(
+                    question.getUserId(),
+                    "你的题目有了新评论",
+                    displayName + " 评论了你的题目：" + StringUtils.abbreviate(comment.getContent(), 20),
+                    "question_comment",
+                    comment.getQuestionId()
+            );
         }
     }
 
@@ -848,6 +871,7 @@ public class QuestionCommentServiceImpl extends ServiceImpl<QuestionCommentMappe
             vo.setParentId(comment.getParentId());
             vo.setReplyToId(comment.getReplyToId());
             vo.setContent(comment.getContent());
+            vo.setIpLocation(comment.getIpLocation());
             vo.setLikeNum(comment.getLikeNum());
             vo.setStatus(comment.getStatus());
             vo.setReviewMessage(comment.getReviewMessage());
@@ -878,5 +902,13 @@ public class QuestionCommentServiceImpl extends ServiceImpl<QuestionCommentMappe
     }
 
     private record CommentAutoReviewResult(int status, String reviewMessage) {
+    }
+
+    private String resolveCommentIpLocation(HttpServletRequest httpRequest) {
+        if (httpRequest == null) {
+            return null;
+        }
+        String resolvedLocation = StringUtils.trimToNull(ipCityResolver.resolveLocationLabel(httpRequest));
+        return StringUtils.abbreviate(resolvedLocation, 64);
     }
 }

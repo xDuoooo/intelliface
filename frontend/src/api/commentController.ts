@@ -61,6 +61,7 @@ export interface CommentVO {
   parentId?: string | number | null;
   replyToId?: string | number | null;
   content: string;
+  ipLocation?: string;
   likeNum: number;
   isPinned: number;
   isOfficial: number;
@@ -81,6 +82,7 @@ export interface UserCommentActivityVO {
   parentId?: number | string | null;
   replyToId?: number | string | null;
   content?: string;
+  ipLocation?: string;
   likeNum?: number;
   status?: number;
   reviewMessage?: string;

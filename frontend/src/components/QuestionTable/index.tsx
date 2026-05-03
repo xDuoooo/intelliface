@@ -3,6 +3,7 @@ import React, { useMemo, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { searchQuestionVoByPageUsingPost } from "@/api/questionController";
+import TagSearchSelect from "@/components/TagSearchSelect";
 import TagList from "@/components/TagList";
 import { ChevronLeft, ChevronRight, Filter, Loader2, Search, Sparkles } from "lucide-react";
 import { Button, Input, Select, Tag, message } from "antd";
@@ -269,14 +270,12 @@ const QuestionTable: React.FC<Props> = (props) => {
           </div>
 
           <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_160px] lg:items-center">
-            <Select
-              mode="tags"
-              size="large"
+            <TagSearchSelect
+              scene="question"
               value={selectedTags}
               onChange={(value) => setSelectedTags(value)}
               tokenSeparators={[",", " "]}
               placeholder="输入一个或多个标签，例如：MySQL、索引、Java"
-              allowClear
             />
             <Button
               type="primary"
@@ -303,11 +302,11 @@ const QuestionTable: React.FC<Props> = (props) => {
             <Link
               key={item.id}
               href={`/question/${item.id}`}
-              className="group flex flex-col justify-between rounded-[2.5rem] border border-slate-100/80 bg-white p-6 transition-all duration-500 hover:border-primary/40 hover:shadow-2xl hover:shadow-primary/5 sm:flex-row sm:items-center sm:p-8"
+              className="group flex w-full min-w-0 flex-col justify-between overflow-hidden rounded-[2.5rem] border border-slate-100/80 bg-white p-6 transition-all duration-500 hover:border-primary/40 hover:shadow-2xl hover:shadow-primary/5 sm:flex-row sm:items-center sm:p-8"
             >
-              <div className="min-w-0 flex-1 pr-6">
+              <div className="min-w-0 flex-1 pr-0 sm:pr-6">
                 <div className="flex flex-wrap items-center gap-3">
-                  <h3 className="truncate text-xl font-black text-foreground transition-colors group-hover:text-primary sm:text-2xl">
+                  <h3 className="break-words text-xl font-black text-foreground transition-colors group-hover:text-primary sm:text-2xl sm:truncate">
                     {item.title}
                   </h3>
                   <div className="flex flex-wrap items-center gap-2">
@@ -328,7 +327,7 @@ const QuestionTable: React.FC<Props> = (props) => {
                 </div>
               </div>
 
-              <div className="mt-6 flex items-center gap-5 sm:mt-0">
+              <div className="mt-6 flex shrink-0 items-center gap-5 self-end sm:mt-0 sm:self-auto">
                 <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-50 text-slate-400 shadow-inner transition-all duration-300 group-hover:bg-primary group-hover:text-white group-hover:shadow-lg group-hover:shadow-primary/30">
                   <ChevronRight className="h-6 w-6 transition-transform group-hover:translate-x-0.5" />
                 </div>

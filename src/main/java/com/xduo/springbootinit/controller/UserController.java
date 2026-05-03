@@ -15,6 +15,7 @@ import com.xduo.springbootinit.annotation.RateLimit;
 import com.xduo.springbootinit.exception.BusinessException;
 import com.xduo.springbootinit.exception.ThrowUtils;
 import com.xduo.springbootinit.model.dto.user.UserAddRequest;
+import com.xduo.springbootinit.model.dto.user.UserInterestTagsMergeRequest;
 import com.xduo.springbootinit.model.dto.user.UserLoginRequest;
 import com.xduo.springbootinit.model.dto.user.UserQueryRequest;
 import com.xduo.springbootinit.model.dto.user.UserRegisterRequest;
@@ -30,6 +31,7 @@ import com.xduo.springbootinit.model.vo.UserProfileVO;
 import com.xduo.springbootinit.model.vo.UserVO;
 import com.xduo.springbootinit.service.QuestionBankService;
 import com.xduo.springbootinit.service.QuestionService;
+import com.xduo.springbootinit.service.TagSyncService;
 import com.xduo.springbootinit.service.UserFollowService;
 import com.xduo.springbootinit.service.UserQuestionHistoryService;
 import com.xduo.springbootinit.service.UserService;
@@ -68,8 +70,24 @@ import static com.xduo.springbootinit.service.impl.UserServiceImpl.SALT;
 @Slf4j
 public class UserController {
 
+    private static final List<String> DEFAULT_PROFILE_VISIBLE_FIELDS = List.of(
+            "profile",
+            "city",
+            "career",
+            "tags",
+            "joinTime",
+            "stats",
+            "activity",
+            "content",
+            "relation",
+            "relationList"
+    );
+
     @Resource
     private UserService userService;
+
+    @Resource
+    private TagSyncService tagSyncService;
 
     @Resource
     private UserQuestionHistoryService userQuestionHistoryService;
@@ -215,19 +233,22 @@ public class UserController {
         ThrowUtils.throwIf(userAccount == null, ErrorCode.PARAMS_ERROR, "账号不能为空");
         userService.checkUserAccountUnique(userAccount, null);
         user.setUserAccount(userAccount);
+        String userPassword = StringUtils.trimToNull(userAddRequest.getUserPassword());
+        ThrowUtils.throwIf(userPassword == null, ErrorCode.PARAMS_ERROR, "密码不能为空");
+        ThrowUtils.throwIf(userPassword.length() < 8, ErrorCode.PARAMS_ERROR, "密码至少 8 位");
         String userName = normalizeOptionalUserName(userAddRequest.getUserName());
         userService.checkUserNameUnique(userName, null);
         user.setUserName(userName);
+        user.setUserAvatar(StringUtils.trimToNull(userAddRequest.getUserAvatar()));
         user.setCity(normalizeOptionalSupportedCity(userAddRequest.getCity(), false));
         user.setCareerDirection(normalizeCareerDirection(userAddRequest.getCareerDirection()));
         user.setInterestTags(normalizeInterestTags(userAddRequest.getInterestTags()));
-        // 默认密码 12345678
-        String defaultPassword = "12345678";
-        String encryptPassword = DigestUtils.md5DigestAsHex((SALT + defaultPassword).getBytes());
+        String encryptPassword = DigestUtils.md5DigestAsHex((SALT + userPassword).getBytes());
         user.setUserPassword(encryptPassword);
         user.setPasswordConfigured(1);
         boolean result = userService.save(user);
         ThrowUtils.throwIf(!result, ErrorCode.OPERATION_ERROR);
+        tagSyncService.syncInterestTags(null, user.getInterestTags());
         return ResultUtils.success(user.getId());
     }
 
@@ -254,6 +275,9 @@ public class UserController {
             ThrowUtils.throwIf(userService.count(adminQueryWrapper) <= 1, ErrorCode.OPERATION_ERROR, "至少保留一个管理员账号");
         }
         boolean b = userService.removeById(deleteRequest.getId());
+        if (b) {
+            tagSyncService.syncInterestTags(targetUser.getInterestTags(), null);
+        }
         return ResultUtils.success(b);
     }
 
@@ -291,6 +315,8 @@ public class UserController {
         user.setInterestTags(normalizeInterestTags(userUpdateRequest.getInterestTags()));
         boolean result = userService.updateById(user);
         ThrowUtils.throwIf(!result, ErrorCode.OPERATION_ERROR);
+        User latestUser = userService.getById(userUpdateRequest.getId());
+        tagSyncService.syncInterestTags(oldUser.getInterestTags(), latestUser == null ? null : latestUser.getInterestTags());
         return ResultUtils.success(true);
     }
 
@@ -323,7 +349,9 @@ public class UserController {
     @RateLimit(key = "user:getVO", maxRequests = 600, windowSeconds = 60)
     public BaseResponse<UserVO> getUserVOById(long id, HttpServletRequest request) {
         User user = getPublicUserById(id);
-        return ResultUtils.success(userService.getUserVO(user));
+        UserVO userVO = userService.getUserVO(user);
+        applyProfileVisibility(userVO, parseProfileVisibleFieldList(user.getProfileVisibleFields()));
+        return ResultUtils.success(userVO);
     }
 
     /**
@@ -357,6 +385,9 @@ public class UserController {
         ThrowUtils.throwIf(current < 1 || size < 1 || size > 100, ErrorCode.PARAMS_ERROR, "分页参数不合法");
         Page<User> userPage = userService.page(new Page<>(current, size),
                 userService.getQueryWrapper(userQueryRequest));
+        userPage.getRecords().forEach(user -> {
+            user.setUserAvatar(userService.getUserVO(user).getUserAvatar());
+        });
         return ResultUtils.success(userPage);
     }
 
@@ -402,6 +433,10 @@ public class UserController {
             throw new BusinessException(ErrorCode.PARAMS_ERROR);
         }
         User loginUser = userService.getLoginUser(request);
+        User currentUser = userService.getById(loginUser.getId());
+        if (currentUser != null) {
+            loginUser = currentUser;
+        }
         if (userUpdateMyRequest.getUserAccount() != null) {
             String userAccount = StringUtils.trimToNull(userUpdateMyRequest.getUserAccount());
             ThrowUtils.throwIf(userAccount == null, ErrorCode.PARAMS_ERROR, "登录账号不能为空");
@@ -432,17 +467,58 @@ public class UserController {
         if (userUpdateMyRequest.getInterestTags() != null) {
             userUpdateMyRequest.setInterestTags(parseInterestTagList(normalizeInterestTags(userUpdateMyRequest.getInterestTags())));
         }
+        String profileVisibleFields = null;
+        if (userUpdateMyRequest.getProfileVisibleFields() != null) {
+            profileVisibleFields = normalizeProfileVisibleFields(userUpdateMyRequest.getProfileVisibleFields());
+        }
         // 校验昵称唯一性
         userService.checkUserNameUnique(userUpdateMyRequest.getUserName(), loginUser.getId());
 
         User user = new User();
         // 仅允许修改账号、昵称、头像、简介、城市
-        BeanUtils.copyProperties(userUpdateMyRequest, user, "phone", "email", "mpOpenId", "githubId", "giteeId", "googleId");
+        BeanUtils.copyProperties(userUpdateMyRequest, user, "phone", "email", "mpOpenId", "githubId", "giteeId", "googleId", "profileVisibleFields");
         user.setInterestTags(normalizeInterestTags(userUpdateMyRequest.getInterestTags()));
+        user.setProfileVisibleFields(profileVisibleFields);
         user.setId(loginUser.getId());
         boolean result = userService.updateById(user);
         ThrowUtils.throwIf(!result, ErrorCode.OPERATION_ERROR);
+        User latestUser = userService.getById(loginUser.getId());
+        tagSyncService.syncInterestTags(currentUser == null ? null : currentUser.getInterestTags(),
+                latestUser == null ? null : latestUser.getInterestTags());
         return ResultUtils.success(true);
+    }
+
+    /**
+     * 将简历解析出的技能标签合并到个人资料兴趣标签
+     *
+     * @param mergeRequest 标签合并请求
+     * @param request      HTTP 请求
+     * @return 最新登录用户信息
+     */
+    @PostMapping("/interest_tags/merge")
+    @RateLimit(key = "user:interestTagsMerge", maxRequests = 30, windowSeconds = 60)
+    public BaseResponse<LoginUserVO> mergeMyInterestTags(@RequestBody UserInterestTagsMergeRequest mergeRequest,
+                                                         HttpServletRequest request) {
+        ThrowUtils.throwIf(mergeRequest == null || mergeRequest.getInterestTags() == null,
+                ErrorCode.PARAMS_ERROR, "请选择要添加的技能标签");
+        User loginUser = userService.getLoginUser(request);
+        User latestUser = userService.getById(loginUser.getId());
+        ThrowUtils.throwIf(latestUser == null, ErrorCode.NOT_FOUND_ERROR, "用户不存在");
+
+        LinkedHashSet<String> mergedTagSet = new LinkedHashSet<>(parseInterestTagList(latestUser.getInterestTags()));
+        mergeRequest.getInterestTags().stream()
+                .filter(StringUtils::isNotBlank)
+                .map(String::trim)
+                .forEach(mergedTagSet::add);
+        ThrowUtils.throwIf(mergedTagSet.isEmpty(), ErrorCode.PARAMS_ERROR, "请选择要添加的技能标签");
+
+        User user = new User();
+        user.setId(latestUser.getId());
+        user.setInterestTags(normalizeInterestTags(new ArrayList<>(mergedTagSet)));
+        boolean result = userService.updateById(user);
+        ThrowUtils.throwIf(!result, ErrorCode.OPERATION_ERROR);
+        tagSyncService.syncInterestTags(latestUser.getInterestTags(), user.getInterestTags());
+        return ResultUtils.success(userService.getLoginUserVO(userService.getById(latestUser.getId())));
     }
 
     private String normalizeOptionalSupportedCity(String city, boolean allowEmpty) {
@@ -491,6 +567,20 @@ public class UserController {
         return normalizedTagList.isEmpty() ? null : JSONUtil.toJsonStr(normalizedTagList);
     }
 
+    private String normalizeProfileVisibleFields(List<String> profileVisibleFieldList) {
+        if (profileVisibleFieldList == null) {
+            return null;
+        }
+        Set<String> requestedFieldSet = profileVisibleFieldList.stream()
+                .filter(StringUtils::isNotBlank)
+                .map(String::trim)
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+        List<String> normalizedFieldList = DEFAULT_PROFILE_VISIBLE_FIELDS.stream()
+                .filter(requestedFieldSet::contains)
+                .collect(Collectors.toList());
+        return JSONUtil.toJsonStr(normalizedFieldList);
+    }
+
     private List<String> parseInterestTagList(String interestTags) {
         if (StringUtils.isBlank(interestTags)) {
             return Collections.emptyList();
@@ -500,6 +590,27 @@ public class UserController {
         } catch (Exception e) {
             return Collections.emptyList();
         }
+    }
+
+    private List<String> parseProfileVisibleFieldList(String profileVisibleFields) {
+        if (StringUtils.isBlank(profileVisibleFields)) {
+            return DEFAULT_PROFILE_VISIBLE_FIELDS;
+        }
+        try {
+            Set<String> requestedFieldSet = JSONUtil.toList(profileVisibleFields, String.class).stream()
+                    .filter(StringUtils::isNotBlank)
+                    .map(String::trim)
+                    .collect(Collectors.toCollection(LinkedHashSet::new));
+            return DEFAULT_PROFILE_VISIBLE_FIELDS.stream()
+                    .filter(requestedFieldSet::contains)
+                    .collect(Collectors.toList());
+        } catch (Exception e) {
+            return DEFAULT_PROFILE_VISIBLE_FIELDS;
+        }
+    }
+
+    private boolean isProfileFieldVisible(List<String> visibleFieldList, String field) {
+        return visibleFieldList != null && visibleFieldList.contains(field);
     }
 
     /**
@@ -673,27 +784,75 @@ public class UserController {
      */
     private UserProfileVO buildUserProfileVO(User user, User loginUser) {
         UserProfileVO userProfileVO = new UserProfileVO();
-        userProfileVO.setUser(userService.getUserVO(user));
+        List<String> visibleFieldList = parseProfileVisibleFieldList(user.getProfileVisibleFields());
+        UserVO userVO = userService.getUserVO(user);
+        applyProfileVisibility(userVO, visibleFieldList);
+        userProfileVO.setUser(userVO);
+        userProfileVO.setProfileVisibleFieldList(visibleFieldList);
 
-        java.util.Map<String, Object> stats = userQuestionHistoryService.getUserQuestionStats(user.getId());
-        userProfileVO.setTotalQuestionCount(getLongValue(stats.get("totalCount")));
-        userProfileVO.setMasteredQuestionCount(getLongValue(stats.get("masteredCount")));
-        userProfileVO.setActiveDays(getLongValue(stats.get("activeDays")));
-        userProfileVO.setCurrentStreak(getLongValue(stats.get("currentStreak")));
+        if (isProfileFieldVisible(visibleFieldList, "stats")) {
+            java.util.Map<String, Object> stats = userQuestionHistoryService.getUserQuestionStats(user.getId());
+            userProfileVO.setTotalQuestionCount(getLongValue(stats.get("totalCount")));
+            userProfileVO.setMasteredQuestionCount(getLongValue(stats.get("masteredCount")));
+            userProfileVO.setActiveDays(getLongValue(stats.get("activeDays")));
+            userProfileVO.setCurrentStreak(getLongValue(stats.get("currentStreak")));
+            userProfileVO.setFavourCount(getLongValue(stats.get("favourCount")));
+            userProfileVO.setTodayCount(getLongValue(stats.get("todayCount")));
+            userProfileVO.setDailyTarget(getLongValue(stats.get("dailyTarget")));
+            userProfileVO.setGoalCompletedToday(Boolean.TRUE.equals(stats.get("goalCompletedToday")));
+            userProfileVO.setRecommendedDifficulty((String) stats.get("recommendedDifficulty"));
+            userProfileVO.setTotalStudyDurationSeconds(getLongValue(stats.get("totalStudyDurationSeconds")));
+            userProfileVO.setTodayStudyDurationSeconds(getLongValue(stats.get("todayStudyDurationSeconds")));
+            userProfileVO.setStudySessionCount(getLongValue(stats.get("studySessionCount")));
+            userProfileVO.setAverageStudyDurationSeconds(getLongValue(stats.get("averageStudyDurationSeconds")));
+            userProfileVO.setAchievementList(getMapListValue(stats.get("achievementList")));
+            userProfileVO.setQuestionHistoryRecordList(userQuestionHistoryService.getUserQuestionHistoryRecord(
+                    user.getId(),
+                    java.time.LocalDate.now(java.time.ZoneId.of("Asia/Shanghai")).getYear()
+            ));
+        }
 
-        QueryWrapper<Question> questionQueryWrapper = new QueryWrapper<>();
-        questionQueryWrapper.eq("userId", user.getId());
-        questionQueryWrapper.and(qw -> qw.eq("reviewStatus", QuestionConstant.REVIEW_STATUS_APPROVED).or().isNull("reviewStatus"));
-        userProfileVO.setApprovedQuestionCount(questionService.count(questionQueryWrapper));
-        QueryWrapper<QuestionBank> questionBankQueryWrapper = new QueryWrapper<>();
-        questionBankQueryWrapper.eq("userId", user.getId());
-        questionBankQueryWrapper.and(qw -> qw.eq("reviewStatus", QuestionBankConstant.REVIEW_STATUS_APPROVED).or().isNull("reviewStatus"));
-        userProfileVO.setApprovedQuestionBankCount(questionBankService.count(questionBankQueryWrapper));
-        userProfileVO.setFollowerCount(userFollowService.getFollowerCount(user.getId()));
-        userProfileVO.setFollowingCount(userFollowService.getFollowingCount(user.getId()));
+        if (isProfileFieldVisible(visibleFieldList, "content")) {
+            QueryWrapper<Question> questionQueryWrapper = new QueryWrapper<>();
+            questionQueryWrapper.eq("userId", user.getId());
+            questionQueryWrapper.and(qw -> qw.eq("reviewStatus", QuestionConstant.REVIEW_STATUS_APPROVED).or().isNull("reviewStatus"));
+            userProfileVO.setApprovedQuestionCount(questionService.count(questionQueryWrapper));
+            QueryWrapper<QuestionBank> questionBankQueryWrapper = new QueryWrapper<>();
+            questionBankQueryWrapper.eq("userId", user.getId());
+            questionBankQueryWrapper.and(qw -> qw.eq("reviewStatus", QuestionBankConstant.REVIEW_STATUS_APPROVED).or().isNull("reviewStatus"));
+            userProfileVO.setApprovedQuestionBankCount(questionBankService.count(questionBankQueryWrapper));
+        }
+        if (isProfileFieldVisible(visibleFieldList, "relation")) {
+            userProfileVO.setFollowerCount(userFollowService.getFollowerCount(user.getId()));
+            userProfileVO.setFollowingCount(userFollowService.getFollowingCount(user.getId()));
+        }
         userProfileVO.setHasFollowed(userFollowService.hasFollowed(loginUser == null ? null : loginUser.getId(), user.getId()));
-        userProfileVO.setRecentActivityList(buildRecentActivityList(user.getId()));
+        userProfileVO.setRecentActivityList(isProfileFieldVisible(visibleFieldList, "activity")
+                ? buildRecentActivityList(user.getId())
+                : Collections.emptyList());
         return userProfileVO;
+    }
+
+    private void applyProfileVisibility(UserVO userVO, List<String> visibleFieldList) {
+        if (userVO == null) {
+            return;
+        }
+        userVO.setProfileVisibleFieldList(visibleFieldList);
+        if (!isProfileFieldVisible(visibleFieldList, "profile")) {
+            userVO.setUserProfile(null);
+        }
+        if (!isProfileFieldVisible(visibleFieldList, "city")) {
+            userVO.setCity(null);
+        }
+        if (!isProfileFieldVisible(visibleFieldList, "career")) {
+            userVO.setCareerDirection(null);
+        }
+        if (!isProfileFieldVisible(visibleFieldList, "tags")) {
+            userVO.setInterestTagList(Collections.emptyList());
+        }
+        if (!isProfileFieldVisible(visibleFieldList, "joinTime")) {
+            userVO.setCreateTime(null);
+        }
     }
 
     private List<UserActivityVO> buildRecentActivityList(Long userId) {
@@ -781,5 +940,16 @@ public class UserController {
 
     private long getLongValue(Object value) {
         return value instanceof Number ? ((Number) value).longValue() : 0L;
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<Map<String, Object>> getMapListValue(Object value) {
+        if (!(value instanceof List<?>)) {
+            return Collections.emptyList();
+        }
+        return ((List<?>) value).stream()
+                .filter(Map.class::isInstance)
+                .map(item -> (Map<String, Object>) item)
+                .collect(Collectors.toList());
     }
 }

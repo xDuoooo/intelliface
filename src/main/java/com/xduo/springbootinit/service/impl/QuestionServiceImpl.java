@@ -30,6 +30,7 @@ import com.xduo.springbootinit.model.vo.UserVO;
 import com.xduo.springbootinit.service.QuestionBankQuestionService;
 import com.xduo.springbootinit.service.EsSyncTaskService;
 import com.xduo.springbootinit.service.QuestionService;
+import com.xduo.springbootinit.service.TagSyncService;
 import com.xduo.springbootinit.service.UserService;
 import com.xduo.springbootinit.utils.SqlUtils;
 import lombok.extern.slf4j.Slf4j;
@@ -102,6 +103,9 @@ public class QuestionServiceImpl extends ServiceImpl<QuestionMapper, Question> i
 
     @Resource
     private EsSyncTaskService esSyncTaskService;
+
+    @Resource
+    private TagSyncService tagSyncService;
 
     /**
      * 校验数据
@@ -387,10 +391,7 @@ public class QuestionServiceImpl extends ServiceImpl<QuestionMapper, Question> i
         }
         // 按关键词检索
         if (StringUtils.isNotBlank(searchText)) {
-            boolQueryBuilder.should(s -> s.match(m -> m.field("title").query(searchText)));
-            boolQueryBuilder.should(s -> s.match(m -> m.field("content").query(searchText)));
-            boolQueryBuilder.should(s -> s.match(m -> m.field("answer").query(searchText)));
-            boolQueryBuilder.minimumShouldMatch("1");
+            boolQueryBuilder.must(m -> m.bool(buildQuestionKeywordSearchQuery(searchText)));
         }
         // 排序
         SortOptions sortOptions;
@@ -430,6 +431,45 @@ public class QuestionServiceImpl extends ServiceImpl<QuestionMapper, Question> i
         return page;
     }
 
+    private BoolQuery buildQuestionKeywordSearchQuery(String rawKeyword) {
+        String keyword = StringUtils.trimToEmpty(rawKeyword);
+        String normalizedKeyword = keyword.toLowerCase(Locale.ROOT);
+        String escapedWildcardKeyword = escapeEsWildcardKeyword(normalizedKeyword);
+        BoolQuery.Builder searchQueryBuilder = new BoolQuery.Builder();
+        addKeywordShouldClauses(searchQueryBuilder, "title", keyword, escapedWildcardKeyword);
+        addKeywordShouldClauses(searchQueryBuilder, "content", keyword, escapedWildcardKeyword);
+        addKeywordShouldClauses(searchQueryBuilder, "answer", keyword, escapedWildcardKeyword);
+        searchQueryBuilder.should(s -> s.term(t -> t.field("tags").value(keyword)));
+        addKeywordShouldClauses(searchQueryBuilder, "tags", keyword, escapedWildcardKeyword);
+        searchQueryBuilder.minimumShouldMatch("1");
+        return searchQueryBuilder.build();
+    }
+
+    private void addKeywordShouldClauses(BoolQuery.Builder searchQueryBuilder,
+                                         String field,
+                                         String keyword,
+                                         String escapedWildcardKeyword) {
+        searchQueryBuilder.should(s -> s.match(m -> m.field(field).query(keyword)));
+        searchQueryBuilder.should(s -> s.matchPhrasePrefix(m -> m.field(field).query(keyword)));
+        searchQueryBuilder.should(s -> s.wildcard(w -> w
+                .field(field)
+                .value(escapedWildcardKeyword + "*")
+                .caseInsensitive(true)));
+        if (keyword.length() >= 2) {
+            searchQueryBuilder.should(s -> s.wildcard(w -> w
+                    .field(field)
+                    .value("*" + escapedWildcardKeyword + "*")
+                    .caseInsensitive(true)));
+        }
+    }
+
+    private String escapeEsWildcardKeyword(String keyword) {
+        return keyword
+                .replace("\\", "\\\\")
+                .replace("*", "\\*")
+                .replace("?", "\\?");
+    }
+
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void batchDeleteQuestions(List<Long> questionIdList) {
@@ -446,11 +486,13 @@ public class QuestionServiceImpl extends ServiceImpl<QuestionMapper, Question> i
         // 题目可能还未加入任何题库，这里不应把 0 行删除视为异常。
         questionBankQuestionService.remove(relationQueryWrapper);
         for (Long questionId : distinctQuestionIdSet) {
+            Question oldQuestion = this.getById(questionId);
             boolean result = this.removeById(questionId);
             if (!result) {
                 throw new BusinessException(ErrorCode.OPERATION_ERROR, "删除题目失败");
             }
             deleteQuestionFromEs(questionId);
+            tagSyncService.syncQuestionTags(oldQuestion == null ? null : oldQuestion.getTags(), null);
         }
     }
     @Override
@@ -667,6 +709,7 @@ public class QuestionServiceImpl extends ServiceImpl<QuestionMapper, Question> i
         if (CollUtil.isEmpty(allQuestionList)) {
             result.setJobDirection("待识别");
             result.setExtractedTags(Collections.emptyList());
+            result.setResumeText(trimmedResumeText);
             result.setAnalysisSummary("当前题库为空，暂时无法给出题目推荐。");
             result.setRecommendFocus("请先补充题目数据");
             result.setAnalysisSource("系统规则分析");
@@ -716,6 +759,7 @@ public class QuestionServiceImpl extends ServiceImpl<QuestionMapper, Question> i
 
         result.setJobDirection(profile.getJobDirection());
         result.setExtractedTags(profile.getExtractedTags());
+        result.setResumeText(trimmedResumeText);
         result.setAnalysisSummary(profile.getAnalysisSummary());
         result.setRecommendFocus(profile.getRecommendFocus());
         result.setAnalysisSource(profile.getAnalysisSource());

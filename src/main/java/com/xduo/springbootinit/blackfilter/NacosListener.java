@@ -2,21 +2,21 @@ package com.xduo.springbootinit.blackfilter;
 
 import com.alibaba.cloud.nacos.NacosConfigManager;
 import com.alibaba.nacos.api.config.ConfigService;
-import com.alibaba.nacos.api.config.listener.Listener;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.InitializingBean;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 import jakarta.annotation.Resource;
-import java.util.concurrent.Executor;
+import java.util.Objects;
 
 @Slf4j
 @Component
 @ConditionalOnBean(NacosConfigManager.class)
-@ConditionalOnProperty(prefix = "spring.cloud.nacos.config", name = "enabled", havingValue = "true")
+@ConditionalOnProperty(prefix = "nacos.config", name = "sync-enabled", havingValue = "true")
 public class NacosListener implements InitializingBean {
 
     @Resource
@@ -28,33 +28,33 @@ public class NacosListener implements InitializingBean {
     @Value("${nacos.config.group}")
     private String group;
 
-    @Override
-    public void afterPropertiesSet() throws Exception {
-        log.info("nacos 监听器启动");
+    @Value("${nacos.config.timeout:30000}")
+    private long timeout;
 
+    private volatile String lastConfig;
+
+    @Override
+    public void afterPropertiesSet() {
+        log.info("nacos 黑名单同步器启动，模式：定时拉取");
+        syncBlackIpConfig();
+    }
+
+    @Scheduled(
+            fixedDelayString = "${nacos.config.poll-fixed-delay-ms:30000}",
+            initialDelayString = "${nacos.config.poll-initial-delay-ms:30000}"
+    )
+    public void syncBlackIpConfig() {
         try {
             ConfigService configService = nacosConfigManager.getConfigService();
-            String config = configService.getConfigAndSignListener(dataId, group, 3000L, new Listener() {
-                @Override
-                public Executor getExecutor() {
-                    return null;
-                }
-
-                // 监听后续黑名单变化
-                @Override
-                public void receiveConfigInfo(String configInfo) {
-                    log.info("监听到配置信息变化：{}", configInfo);
-                    try {
-                        BlackIpUtils.rebuildBlackIp(configInfo);
-                    } catch (Exception e) {
-                        log.error("更新黑名单失败", e);
-                    }
-                }
-            });
-            // 初始化黑名单
+            String config = configService.getConfig(dataId, group, timeout);
+            if (Objects.equals(lastConfig, config)) {
+                return;
+            }
             BlackIpUtils.rebuildBlackIp(config);
+            lastConfig = config;
+            log.info("nacos 黑名单配置已同步，dataId={}, group={}", dataId, group);
         } catch (Exception e) {
-            log.error("nacos 监听器初始化失败", e);
+            log.warn("nacos 黑名单配置同步失败，dataId={}, group={}", dataId, group, e);
         }
     }
 }

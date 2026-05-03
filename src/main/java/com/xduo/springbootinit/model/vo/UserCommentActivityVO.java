@@ -23,6 +23,8 @@ public class UserCommentActivityVO implements Serializable {
 
     private String content;
 
+    private String ipLocation;
+
     private Integer likeNum;
 
     private Integer status;

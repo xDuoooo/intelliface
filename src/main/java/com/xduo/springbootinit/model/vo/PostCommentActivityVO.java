@@ -23,6 +23,8 @@ public class PostCommentActivityVO implements Serializable {
 
     private String content;
 
+    private String ipLocation;
+
     private Integer status;
 
     private String reviewMessage;

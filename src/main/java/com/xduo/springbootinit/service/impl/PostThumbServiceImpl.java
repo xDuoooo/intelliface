@@ -11,9 +11,12 @@ import com.xduo.springbootinit.mapper.PostThumbMapper;
 import com.xduo.springbootinit.model.entity.Post;
 import com.xduo.springbootinit.model.entity.PostThumb;
 import com.xduo.springbootinit.model.entity.User;
+import com.xduo.springbootinit.service.NotificationService;
 import com.xduo.springbootinit.service.PostService;
 import com.xduo.springbootinit.service.PostThumbService;
+import com.xduo.springbootinit.service.UserService;
 import jakarta.annotation.Resource;
+import org.apache.commons.lang3.StringUtils;
 import org.springframework.aop.framework.AopContext;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -28,6 +31,12 @@ public class PostThumbServiceImpl extends ServiceImpl<PostThumbMapper, PostThumb
 
     @Resource
     private PostService postService;
+
+    @Resource
+    private NotificationService notificationService;
+
+    @Resource
+    private UserService userService;
 
     /**
      * 点赞
@@ -105,6 +114,7 @@ public class PostThumbServiceImpl extends ServiceImpl<PostThumbMapper, PostThumb
                         .update();
                 if (result) {
                     postService.syncPostToEs(postService.getById(postId));
+                    sendPostThumbNotificationIfNeeded(userId, postId);
                 }
                 return result ? 1 : 0;
             } else {
@@ -113,6 +123,22 @@ public class PostThumbServiceImpl extends ServiceImpl<PostThumbMapper, PostThumb
         }
     }
 
-}
+    private void sendPostThumbNotificationIfNeeded(long userId, long postId) {
+        Post post = postService.getById(postId);
+        if (post == null || post.getUserId() == null || post.getUserId().equals(userId)) {
+            return;
+        }
+        User user = userService.getById(userId);
+        String displayName = user == null ? "有用户" : StringUtils.defaultIfBlank(user.getUserName(), "有用户");
+        String postTitle = StringUtils.defaultIfBlank(post.getTitle(), "这篇帖子");
+        notificationService.sendNotification(
+                post.getUserId(),
+                "有人点赞了你的帖子",
+                displayName + " 点赞了你的帖子：" + StringUtils.abbreviate(postTitle, 30),
+                "post_thumb",
+                postId
+        );
+    }
 
+}
 

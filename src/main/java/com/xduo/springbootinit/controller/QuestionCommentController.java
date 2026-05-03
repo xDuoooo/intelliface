@@ -9,6 +9,7 @@ import com.xduo.springbootinit.common.ResultUtils;
 import com.xduo.springbootinit.constant.UserConstant;
 import com.xduo.springbootinit.exception.BusinessException;
 import com.xduo.springbootinit.exception.ThrowUtils;
+import com.xduo.springbootinit.manager.SystemAccessManager;
 import com.xduo.springbootinit.model.dto.comment.CommentAdminQueryRequest;
 import com.xduo.springbootinit.model.dto.comment.CommentAddRequest;
 import com.xduo.springbootinit.model.dto.comment.CommentActivityQueryRequest;
@@ -42,6 +43,9 @@ public class QuestionCommentController {
     @Resource
     private UserService userService;
 
+    @Resource
+    private SystemAccessManager systemAccessManager;
+
     /**
      * 发表评论（含回复）
      */
@@ -50,7 +54,7 @@ public class QuestionCommentController {
                                                           HttpServletRequest httpRequest) {
         ThrowUtils.throwIf(request == null, ErrorCode.PARAMS_ERROR);
         User loginUser = userService.getLoginUser(httpRequest);
-        CommentSubmitResultVO result = questionCommentService.addComment(request, loginUser);
+        CommentSubmitResultVO result = questionCommentService.addComment(request, loginUser, httpRequest);
         return ResultUtils.success(result);
     }
 
@@ -75,6 +79,7 @@ public class QuestionCommentController {
     public BaseResponse<Page<CommentVO>> listCommentVOByPage(@RequestBody CommentQueryRequest request,
                                                               HttpServletRequest httpRequest) {
         ThrowUtils.throwIf(request == null, ErrorCode.PARAMS_ERROR);
+        systemAccessManager.ensureGuestQuestionAccessAllowed(httpRequest);
         // 最多每页 50 条
         ThrowUtils.throwIf(request.getPageSize() > 50, ErrorCode.PARAMS_ERROR, "每页最多 50 条");
         Page<CommentVO> page = questionCommentService.listCommentVOByPage(request, httpRequest);

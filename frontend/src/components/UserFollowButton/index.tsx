@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { useSelector } from "react-redux";
 import ACCESS_ENUM from "@/access/accessEnum";
 import { followUserUsingPost, unfollowUserUsingPost } from "@/api/userFollowController";
+import { cn } from "@/lib/utils";
 import { RootState } from "@/stores";
 
 interface Props {
@@ -75,7 +76,13 @@ export default function UserFollowButton({
       size={size}
       loading={loading}
       onClick={handleClick}
-      className={className}
+      className={cn(
+        "!inline-flex !items-center !justify-center !rounded-xl !px-4 !text-sm !font-bold !shadow-none transition-all active:!scale-95",
+        followed
+          ? "!border-slate-200 !bg-white !text-slate-700 hover:!border-primary/20 hover:!bg-white hover:!text-primary"
+          : "!border-primary !bg-primary !text-white hover:!border-primary hover:!bg-primary/90 hover:!text-white",
+        className,
+      )}
     >
       {followed ? "已关注" : "关注 Ta"}
     </Button>

@@ -12,6 +12,7 @@ import com.xduo.springbootinit.constant.PostConstant;
 import com.xduo.springbootinit.constant.UserConstant;
 import com.xduo.springbootinit.exception.BusinessException;
 import com.xduo.springbootinit.exception.ThrowUtils;
+import com.xduo.springbootinit.manager.SystemAccessManager;
 import com.xduo.springbootinit.model.dto.post.PostAddRequest;
 import com.xduo.springbootinit.model.dto.post.PostEditRequest;
 import com.xduo.springbootinit.model.dto.post.PostOperateRequest;
@@ -30,7 +31,9 @@ import com.xduo.springbootinit.model.vo.PostReportVO;
 import com.xduo.springbootinit.mapper.PostReportMapper;
 import com.xduo.springbootinit.service.NotificationService;
 import com.xduo.springbootinit.service.PostService;
+import com.xduo.springbootinit.service.TagSyncService;
 import com.xduo.springbootinit.service.UserService;
+import com.xduo.springbootinit.utils.IpCityResolver;
 import com.xduo.springbootinit.manager.AiManager;
 import java.util.List;
 import java.util.Date;
@@ -74,6 +77,15 @@ public class PostController {
     @Resource
     private PostReportMapper postReportMapper;
 
+    @Resource
+    private IpCityResolver ipCityResolver;
+
+    @Resource
+    private TagSyncService tagSyncService;
+
+    @Resource
+    private SystemAccessManager systemAccessManager;
+
     // region 增删改查
 
     /**
@@ -97,12 +109,14 @@ public class PostController {
         postService.validPost(post, true);
         User loginUser = userService.getLoginUser(request);
         post.setUserId(loginUser.getId());
+        post.setIpLocation(ipCityResolver.resolveLocationLabel(request));
         post.setFavourNum(0);
         post.setThumbNum(0);
         applyPostReviewPolicy(post, loginUser, true);
         boolean result = postService.save(post);
         ThrowUtils.throwIf(!result, ErrorCode.OPERATION_ERROR);
         postService.syncPostToEs(post);
+        tagSyncService.syncPostTags(null, post.getTags());
         PostSubmitResultVO postSubmitResultVO = new PostSubmitResultVO();
         postSubmitResultVO.setId(post.getId());
         postSubmitResultVO.setReviewStatus(post.getReviewStatus());
@@ -134,6 +148,7 @@ public class PostController {
         boolean b = postService.removeById(id);
         if (b) {
             postService.deletePostFromEs(id);
+            tagSyncService.syncPostTags(oldPost.getTags(), null);
         }
         return ResultUtils.success(b);
     }
@@ -166,6 +181,7 @@ public class PostController {
         if (result) {
             Post latestPost = postService.getById(id);
             postService.syncPostToEs(latestPost);
+            tagSyncService.syncPostTags(oldPost.getTags(), latestPost == null ? null : latestPost.getTags());
         }
         return ResultUtils.success(result);
     }
@@ -181,6 +197,7 @@ public class PostController {
         if (id <= 0) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR);
         }
+        systemAccessManager.ensureGuestPostAccessAllowed(request);
         Post post = postService.getById(id);
         if (post == null) {
             throw new BusinessException(ErrorCode.NOT_FOUND_ERROR);
@@ -216,7 +233,8 @@ public class PostController {
      */
     @GetMapping("/hot/list")
     public BaseResponse<List<PostVO>> listHotPost(HttpServletRequest request) {
-        return ResultUtils.success(postService.listHotPostVO(6, request));
+        systemAccessManager.ensureGuestPostAccessAllowed(request);
+        return ResultUtils.success(postService.listHotPostVO(4, request));
     }
 
     /**
@@ -224,6 +242,7 @@ public class PostController {
      */
     @GetMapping("/featured/list")
     public BaseResponse<List<PostVO>> listFeaturedPost(HttpServletRequest request) {
+        systemAccessManager.ensureGuestPostAccessAllowed(request);
         return ResultUtils.success(postService.listFeaturedPostVO(4, request));
     }
 
@@ -235,6 +254,7 @@ public class PostController {
                                                       Integer size,
                                                       HttpServletRequest request) {
         ThrowUtils.throwIf(postId <= 0, ErrorCode.PARAMS_ERROR);
+        systemAccessManager.ensureGuestPostAccessAllowed(request);
         return ResultUtils.success(postService.listRelatedPostVO(postId, size == null ? 4 : size, request));
     }
 
@@ -267,6 +287,7 @@ public class PostController {
     public BaseResponse<Page<PostVO>> listPostVOByPage(@RequestBody PostQueryRequest postQueryRequest,
             HttpServletRequest request) {
         ThrowUtils.throwIf(postQueryRequest == null, ErrorCode.PARAMS_ERROR);
+        systemAccessManager.ensureGuestPostAccessAllowed(request);
         postQueryRequest.setReviewStatus(PostConstant.REVIEW_STATUS_APPROVED);
         long current = postQueryRequest.getCurrent();
         long size = postQueryRequest.getPageSize();
@@ -314,19 +335,30 @@ public class PostController {
     public BaseResponse<Page<PostVO>> searchPostVOByPage(@RequestBody PostQueryRequest postQueryRequest,
             HttpServletRequest request) {
         ThrowUtils.throwIf(postQueryRequest == null, ErrorCode.PARAMS_ERROR);
+        systemAccessManager.ensureGuestPostAccessAllowed(request);
         postQueryRequest.setReviewStatus(PostConstant.REVIEW_STATUS_APPROVED);
         long current = postQueryRequest.getCurrent();
         long size = postQueryRequest.getPageSize();
         // 限制爬虫
         ThrowUtils.throwIf(current < 1 || size < 1 || size > 20, ErrorCode.PARAMS_ERROR, "分页参数不合法");
         Page<Post> postPage;
-        try {
-            postPage = postService.searchFromEs(postQueryRequest);
-        } catch (Exception e) {
-            log.warn("post search fallback to database, reason={}", e.getMessage());
+        if (shouldSearchPostFromEs(postQueryRequest)) {
+            try {
+                postPage = postService.searchFromEs(postQueryRequest);
+            } catch (Exception e) {
+                log.warn("post search fallback to database, reason={}", e.getMessage());
+                postPage = postService.page(new Page<>(current, size), postService.getQueryWrapper(postQueryRequest));
+            }
+        } else {
             postPage = postService.page(new Page<>(current, size), postService.getQueryWrapper(postQueryRequest));
         }
         return ResultUtils.success(postService.getPostVOPage(postPage, request));
+    }
+
+    private boolean shouldSearchPostFromEs(PostQueryRequest postQueryRequest) {
+        return StringUtils.isNotBlank(postQueryRequest.getSearchText())
+                || StringUtils.isNotBlank(postQueryRequest.getTitle())
+                || StringUtils.isNotBlank(postQueryRequest.getContent());
     }
 
     /**
@@ -363,6 +395,7 @@ public class PostController {
         if (result) {
             Post latestPost = postService.getById(id);
             postService.syncPostToEs(latestPost);
+            tagSyncService.syncPostTags(oldPost.getTags(), latestPost == null ? null : latestPost.getTags());
         }
         return ResultUtils.success(result);
     }
@@ -406,6 +439,7 @@ public class PostController {
         if (result) {
             Post latestPost = postService.getById(post.getId());
             postService.syncPostToEs(latestPost);
+            tagSyncService.syncPostTags(post.getTags(), latestPost == null ? null : latestPost.getTags());
         }
         return ResultUtils.success(result);
     }
@@ -489,6 +523,7 @@ public class PostController {
             if (postUpdated) {
                 Post latestPost = postService.getById(targetPost.getId());
                 postService.syncPostToEs(latestPost);
+                tagSyncService.syncPostTags(targetPost.getTags(), latestPost == null ? null : latestPost.getTags());
             }
         }
         return ResultUtils.success(true);
@@ -525,6 +560,7 @@ public class PostController {
         ThrowUtils.throwIf(!result, ErrorCode.OPERATION_ERROR);
         Post latestPost = postService.getById(oldPost.getId());
         postService.syncPostToEs(latestPost);
+        tagSyncService.syncPostTags(oldPost.getTags(), latestPost == null ? null : latestPost.getTags());
 
         notificationService.sendNotification(
                 oldPost.getUserId(),

@@ -17,13 +17,21 @@ spring:
     pathmatch:
       matching-strategy: ant_path_matcher
 
-# Nacos 黑名单监听器自定义配置
+# Nacos 黑名单同步器自定义配置
 nacos:
   config:
+    # 是否启用自定义黑名单配置同步。默认关闭，按需开启后会使用定时拉取而不是长连接监听。
+    sync-enabled: ${NACOS_BLACK_IP_SYNC_ENABLED:false}
     # 远程黑名单配置文件名
     data-id: black-ip-list.yml
     # 所属分组
     group: DEFAULT_GROUP
+    # 获取远程配置的超时时间，单位毫秒
+    timeout: ${NACOS_LISTENER_TIMEOUT:30000}
+    # 定时拉取间隔，单位毫秒
+    poll-fixed-delay-ms: ${NACOS_BLACK_IP_POLL_FIXED_DELAY_MS:30000}
+    # 启动后首次拉取延迟，单位毫秒
+    poll-initial-delay-ms: ${NACOS_BLACK_IP_POLL_INITIAL_DELAY_MS:30000}
 
 # Web 服务基础配置
 server:

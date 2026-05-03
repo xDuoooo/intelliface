@@ -20,6 +20,7 @@ create table if not exists user
     city         varchar(128)                           null comment '所在城市',
     careerDirection varchar(128)                        null comment '就业方向',
     interestTags varchar(1024)                          null comment '兴趣标签（json 数组）',
+    profileVisibleFields varchar(512)                   null comment '公开主页可见字段（json 数组，空值默认全部公开）',
     githubId     varchar(256)                           null comment 'GitHub 唯一标识',
     giteeId      varchar(256)                           null comment 'Gitee 唯一标识',
     googleId     varchar(256)                           null comment 'Google 唯一标识',
@@ -184,6 +185,7 @@ create table if not exists post
     id           bigint                             not null comment 'id' primary key,
     title        varchar(80)                       not null comment '标题',
     content      text                              not null comment '内容',
+    ipLocation   varchar(64)                       null comment '发布时 IP 归属地',
     tags         varchar(1024)                     null comment '标签列表 json',
     thumbNum     int      default 0                not null comment '点赞数',
     favourNum    int      default 0                not null comment '收藏数',
@@ -257,6 +259,8 @@ create table if not exists post_comment
     parentId      bigint                             null comment '父评论 id（null=顶级评论）',
     replyToId     bigint                             null comment '回复的具体评论 id',
     content       text                               not null comment '内容',
+    ipLocation    varchar(64)                        null comment '发布时 IP 归属地',
+    likeNum       int      default 0                 not null comment '点赞数',
     status        tinyint  default 0                 not null comment '状态：0正常 1待审核 2已驳回',
     reviewMessage varchar(512)                       null comment '审核意见',
     reviewUserId  bigint                             null comment '审核人 id',
@@ -269,9 +273,21 @@ create table if not exists post_comment
     index idx_parentId (parentId),
     index idx_userId (userId),
     index idx_createTime (createTime),
+    index idx_likeNum (likeNum),
     index idx_post_parent_status_createTime (postId, parentId, status, createTime),
     index idx_parent_status_createTime (parentId, status, createTime)
 ) comment '帖子评论' collate = utf8mb4_unicode_ci;
+
+-- 帖子评论点赞表
+create table if not exists post_comment_like
+(
+    id         bigint auto_increment comment 'id' primary key,
+    commentId  bigint                             not null comment '评论 id',
+    userId     bigint                             not null comment '点赞用户 id',
+    createTime datetime default CURRENT_TIMESTAMP not null comment '点赞时间',
+    unique key uk_comment_user (commentId, userId),
+    index idx_user_createTime (userId, createTime)
+) comment '帖子评论点赞' collate = utf8mb4_unicode_ci;
 
 -- 题目评论表
 create table if not exists question_comment
@@ -282,6 +298,7 @@ create table if not exists question_comment
     parentId   bigint                             null comment '父评论 id（null=顶级评论）',
     replyToId  bigint                             null comment '回复的具体评论 id',
     content    text                               not null comment '内容',
+    ipLocation varchar(64)                        null comment '发布时 IP 归属地',
     likeNum    int      default 0                 not null comment '点赞数',
     reportNum  int      default 0                 not null comment '被举报次数',
     isPinned   tinyint  default 0                 not null comment '是否置顶：0否 1是',
@@ -340,7 +357,7 @@ create table if not exists mock_interview
     currentRound   int      default 0                 not null comment '当前已完成轮次',
     messages       longtext                           null comment '消息记录（json 数组）',
     report         longtext                           null comment '结构化面试报告（json）',
-    status         int      default 0                 not null comment '状态：0-待开始, 1-进行中, 2-已结束',
+    status         int      default 0                 not null comment '状态：0-待开始, 1-进行中, 2-已结束, 3-已暂停',
     userId         bigint                             not null comment '创建用户 id',
     createTime     datetime default CURRENT_TIMESTAMP not null comment '创建时间',
     updateTime     datetime default CURRENT_TIMESTAMP not null on update CURRENT_TIMESTAMP comment '更新时间',
@@ -412,6 +429,8 @@ create table if not exists system_config
     enableSiteNotification tinyint default 1           not null comment '是否开启站内通知',
     enableEmailNotification tinyint default 1          not null comment '是否开启邮件提醒',
     enableLearningGoalReminder tinyint default 1       not null comment '是否开启学习目标提醒任务',
+    allowGuestViewQuestion tinyint default 1           not null comment '是否允许未登录用户访问题目模块',
+    allowGuestViewPost tinyint default 1               not null comment '是否允许未登录用户访问论坛模块',
     createTime      datetime default CURRENT_TIMESTAMP not null comment '创建时间',
     updateTime      datetime default CURRENT_TIMESTAMP not null on update CURRENT_TIMESTAMP comment '更新时间'
 ) comment '系统配置' collate = utf8mb4_unicode_ci;

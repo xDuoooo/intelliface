@@ -50,14 +50,7 @@ myAxios.interceptors.response.use(
     // 未登录
     if (data.code === 40100) {
       const isLoginStatusRequest = requestUrl.includes("user/get/login");
-      // 不是获取用户信息接口，或者不是登录页面，则跳转到登录页面
-      if (
-        typeof window !== "undefined" &&
-        !window.location.pathname.includes("/user/login") &&
-        !isLoginStatusRequest
-      ) {
-        window.location.href = `/user/login?redirect=${encodeURIComponent(window.location.href)}`;
-      }
+      // 获取登录状态的请求静默处理，不抛异常
       if (!isLoginStatusRequest) {
         throw new Error(data.message ?? "请先登录");
       }

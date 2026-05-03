@@ -255,10 +255,10 @@ const AiGenerateQuestionPage: React.FC = () => {
                   type="primary"
                   htmlType="submit"
                   size="large"
-                  className="h-16 w-full rounded-[1.3rem] border-none bg-primary text-lg font-black shadow-xl shadow-primary/20 hover:scale-[1.01] active:scale-[0.99]"
+                  className="h-16 w-full whitespace-nowrap rounded-[1.3rem] border-none bg-primary text-lg font-black shadow-xl shadow-primary/20 hover:scale-[1.01] active:scale-[0.99] [&>span]:inline-flex [&>span]:items-center [&>span]:justify-center [&>span]:gap-2"
                 >
                   {loading ? "正在生成题目..." : (
-                    <span className="inline-flex items-center gap-2">
+                    <span className="inline-flex items-center gap-2 whitespace-nowrap">
                       <Wand2 className="h-5 w-5" />
                       立即开始生成
                     </span>

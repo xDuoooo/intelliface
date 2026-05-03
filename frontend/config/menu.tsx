@@ -48,6 +48,12 @@ export const menus = [
     access: ACCESS_ENUM.USER,
   },
   {
+    path: "/user/public-profile/settings",
+    name: "公开主页设置",
+    access: ACCESS_ENUM.USER,
+    hideInMenu: true,
+  },
+  {
     path: "/user/notifications",
     name: "通知中心",
     access: ACCESS_ENUM.USER,

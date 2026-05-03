@@ -19,6 +19,8 @@ interface PostCommentQueryRequest {
   postId: number | string;
   current?: number;
   pageSize?: number;
+  sortField?: "createTime" | "likeNum";
+  sortOrder?: "ascend" | "descend";
 }
 
 interface PostCommentAdminQueryRequest {
@@ -49,6 +51,9 @@ export interface PostCommentVO {
   parentId?: number | string | null;
   replyToId?: number | string | null;
   content?: string;
+  ipLocation?: string;
+  likeNum?: number;
+  hasLiked?: boolean;
   status?: number;
   reviewMessage?: string;
   createTime?: string;
@@ -71,6 +76,7 @@ export interface PostCommentActivityVO {
   parentId?: number | string | null;
   replyToId?: number | string | null;
   content?: string;
+  ipLocation?: string;
   status?: number;
   reviewMessage?: string;
   createTime?: string;
@@ -94,6 +100,11 @@ export async function addPostComment(data: PostCommentAddRequest): Promise<PostC
 
 export async function deletePostComment(id: number | string): Promise<boolean> {
   const res = (await request.post("/api/post/comment/delete", { id })) as any;
+  return res.data;
+}
+
+export async function likePostComment(commentId: number | string): Promise<{ liked: boolean; likeNum: number }> {
+  const res = (await request.post(`/api/post/comment/like?commentId=${commentId}`)) as any;
   return res.data;
 }
 

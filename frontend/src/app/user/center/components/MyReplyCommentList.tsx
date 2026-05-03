@@ -3,6 +3,7 @@ import Link from "next/link";
 import { CalendarClock, MessageCircle, ThumbsUp } from "lucide-react";
 import { Empty, Pagination, Spin, Tag, message } from "antd";
 import { listMyReplyCommentsByPage, type UserCommentActivityVO } from "@/api/commentController";
+import { formatIpLocation } from "@/lib/location";
 import RecordFilterToolbar from "./RecordFilterToolbar";
 
 type StatusFilter = "all" | 0 | 1 | 2;
@@ -117,6 +118,12 @@ export default function MyReplyCommentList() {
                     <ThumbsUp size={14} />
                     点赞 {item.likeNum || 0}
                   </span>
+                  {item.ipLocation ? (
+                    <span className="inline-flex items-center gap-1.5">
+                      <MessageCircle size={14} />
+                      {formatIpLocation(item.ipLocation)}
+                    </span>
+                  ) : null}
                   {typeof item.status === "number" && item.status !== 0 ? (
                     <Tag
                       className={`m-0 rounded-full px-3 py-1 text-xs font-bold ${

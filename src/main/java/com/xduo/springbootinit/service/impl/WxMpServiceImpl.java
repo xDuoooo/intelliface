@@ -2,8 +2,6 @@ package com.xduo.springbootinit.service.impl;
 
 import cn.hutool.core.util.RandomUtil;
 import cn.hutool.crypto.digest.DigestUtil;
-import cn.hutool.http.HttpUtil;
-import cn.hutool.json.JSONObject;
 import cn.hutool.json.JSONUtil;
 import com.xduo.springbootinit.common.ErrorCode;
 import com.xduo.springbootinit.config.WechatMpConfig;
@@ -175,65 +173,11 @@ public class WxMpServiceImpl implements WxMpService {
         return userService.getLoginUserVO(userService.getById(loginUserId));
     }
 
-    @Override
-    public void syncMenu() {
-        if (!isWechatMpConfigured()) {
-            log.warn("微信公众号未配置或已禁用，跳过菜单同步");
-            return;
-        }
-        String appId = wechatMpConfig.getAppId();
-        String appSecret = wechatMpConfig.getAppSecret();
-        if (StringUtils.isAnyBlank(appId, appSecret)) {
-            log.warn("微信 appId 或 appSecret 缺失，无法同步菜单");
-            return;
-        }
-
-        log.info("开始同步微信公众号菜单...");
-        try {
-            String accessToken = getAccessToken(appId, appSecret);
-            String url = "https://api.weixin.qq.com/cgi-bin/menu/create?access_token=" + accessToken;
-            
-            // 构造菜单 JSON
-            String menuJson = "{\"button\":[{\"type\":\"click\",\"name\":\"获取验证码\",\"key\":\"GET_CODE\"}]}";
-            
-            String result = HttpUtil.post(url, menuJson);
-            JSONObject resultObject = JSONUtil.parseObj(result);
-            Integer errcode = resultObject.getInt("errcode");
-            if (errcode != null && errcode != 0) {
-                log.error("同步微信菜单失败, errcode: {}, errmsg: {}", errcode, resultObject.getStr("errmsg"));
-            } else {
-                log.info("同步微信菜单成功");
-            }
-        } catch (Exception e) {
-            log.error("同步微信菜单发生异常", e);
-        }
-    }
-
-    private String getAccessToken(String appId, String appSecret) {
-        String url = String.format("https://api.weixin.qq.com/cgi-bin/token?grant_type=client_credential&appid=%s&secret=%s",
-                appId, appSecret);
-        String result = HttpUtil.get(url);
-        JSONObject jsonObject = JSONUtil.parseObj(result);
-        String accessToken = jsonObject.getStr("access_token");
-        if (StringUtils.isBlank(accessToken)) {
-            throw new BusinessException(ErrorCode.SYSTEM_ERROR, "获取微信 AccessToken 失败: " + jsonObject.getStr("errmsg"));
-        }
-        return accessToken;
-    }
-
     private String handleIncomingMessage(WxMpIncomingMessage message) {
         String openId = StringUtils.trimToEmpty(message.getFromUserName());
 
         // 关注/取关事件
         if ("event".equalsIgnoreCase(message.getMsgType())) {
-            String event = message.getEvent();
-            String eventKey = message.getEventKey();
-
-            // 处理菜单按钮点击事件
-            if ("CLICK".equalsIgnoreCase(event) && "GET_CODE".equalsIgnoreCase(eventKey)) {
-                return generateAndReplyDirectCode(openId, SCENE_LOGIN);
-            }
-
             // 默认欢迎语（如关注事件）
             return buildWelcomeText();
         }

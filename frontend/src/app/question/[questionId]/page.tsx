@@ -4,8 +4,8 @@ import { getLoginUserUsingGet } from "@/api/userController";
 import QuestionCard from "@/components/QuestionCard";
 import Link from "next/link";
 import { Sparkles } from "lucide-react";
-import { headers } from "next/headers";
 import QuestionOwnerPanel from "./QuestionOwnerPanel";
+import { buildServerRequestOptions } from "@/libs/serverRequestOptions";
 
 export const dynamic = "force-dynamic";
 
@@ -17,12 +17,7 @@ export default async function QuestionPage({ params }: { params: { questionId: s
   const { questionId } = params;
   let question: API.QuestionVO | undefined = undefined;
   let loginUser: API.LoginUserVO | undefined = undefined;
-  const cookie = headers().get("cookie") || "";
-  const requestOptions = {
-    headers: {
-      cookie,
-    },
-  };
+  const requestOptions = buildServerRequestOptions();
 
   const [questionResult, loginUserResult] = await Promise.allSettled([
     getQuestionVoByIdUsingGet(

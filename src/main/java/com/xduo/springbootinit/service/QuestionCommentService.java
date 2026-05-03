@@ -26,7 +26,7 @@ public interface QuestionCommentService extends IService<QuestionComment> {
     /**
      * 发表评论（含回复）
      */
-    CommentSubmitResultVO addComment(CommentAddRequest request, User loginUser);
+    CommentSubmitResultVO addComment(CommentAddRequest request, User loginUser, HttpServletRequest httpRequest);
 
     /**
      * 删除评论（本人或管理员，级联软删子评论）

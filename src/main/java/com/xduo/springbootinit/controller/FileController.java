@@ -175,15 +175,25 @@ public class FileController {
         // 文件后缀
         String fileSuffix = StringUtils.lowerCase(FileUtil.getSuffix(multipartFile.getOriginalFilename()));
         final long ONE_M = 1024 * 1024L;
+        final long TWO_M = 2 * ONE_M;
+        if (fileSize <= 0) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "文件不能为空");
+        }
         if (FileUploadBizEnum.USER_AVATAR.equals(fileUploadBizEnum)) {
-            if (fileSize <= 0) {
-                throw new BusinessException(ErrorCode.PARAMS_ERROR, "文件不能为空");
-            }
             if (fileSize > ONE_M) {
                 throw new BusinessException(ErrorCode.PARAMS_ERROR, "文件大小不能超过 1M");
             }
             if (!Arrays.asList("jpeg", "jpg", "svg", "png", "webp").contains(fileSuffix)) {
                 throw new BusinessException(ErrorCode.PARAMS_ERROR, "文件类型错误");
+            }
+            return;
+        }
+        if (FileUploadBizEnum.QUESTION_BANK_COVER.equals(fileUploadBizEnum)) {
+            if (fileSize > TWO_M) {
+                throw new BusinessException(ErrorCode.PARAMS_ERROR, "题库封面不能超过 2M");
+            }
+            if (!Arrays.asList("jpeg", "jpg", "png", "webp").contains(fileSuffix)) {
+                throw new BusinessException(ErrorCode.PARAMS_ERROR, "题库封面仅支持 JPG、PNG、WebP");
             }
         }
     }

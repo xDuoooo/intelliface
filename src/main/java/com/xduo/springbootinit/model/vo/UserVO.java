@@ -53,6 +53,11 @@ public class UserVO implements Serializable {
     private List<String> interestTagList;
 
     /**
+     * 公开主页可见字段
+     */
+    private List<String> profileVisibleFieldList;
+
+    /**
      * 创建时间
      */
     private Date createTime;

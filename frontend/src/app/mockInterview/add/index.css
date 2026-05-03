@@ -44,10 +44,241 @@
     color: #64748b;
 }
 
+#createMockInterviewPage .create-content-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 320px;
+    gap: 24px;
+    align-items: start;
+    margin-top: 24px;
+}
+
+#createMockInterviewPage .create-form-column {
+    min-width: 0;
+}
+
 #createMockInterviewPage .create-grid {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 16px;
+}
+
+#createMockInterviewPage .resume-import-card {
+    border-radius: 22px;
+    background: #f8fafc;
+    border: 1px dashed rgba(148, 163, 184, 0.55);
+    padding: 16px;
+    margin-bottom: 18px;
+}
+
+#createMockInterviewPage .resume-import-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 14px;
+}
+
+#createMockInterviewPage .resume-import-title {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    color: #0f172a;
+    font-size: 14px;
+    font-weight: 900;
+}
+
+#createMockInterviewPage .resume-import-desc {
+    margin-top: 6px;
+    color: #64748b;
+    font-size: 12px;
+    line-height: 1.7;
+}
+
+#createMockInterviewPage .resume-import-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 14px;
+}
+
+#createMockInterviewPage .resume-import-actions .ant-btn {
+    border-radius: 14px;
+    font-weight: 700;
+}
+
+#createMockInterviewPage .resume-file-line {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    margin-top: 12px;
+    color: #334155;
+    font-size: 12px;
+    font-weight: 700;
+}
+
+#createMockInterviewPage .resume-file-line span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+#createMockInterviewPage .resume-file-line em {
+    color: #94a3b8;
+    font-style: normal;
+    flex-shrink: 0;
+}
+
+#createMockInterviewPage .resume-parse-result {
+    margin-top: 12px;
+    border-radius: 18px;
+    background: #fff;
+    color: #475569;
+    font-size: 13px;
+    font-weight: 600;
+    line-height: 1.8;
+    padding: 12px;
+}
+
+#createMockInterviewPage .resume-tag-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 10px;
+}
+
+#createMockInterviewPage .resume-tag-list span {
+    display: inline-flex;
+    align-items: center;
+    border-radius: 999px;
+    background: rgba(22, 119, 255, 0.08);
+    color: #1677ff;
+    font-size: 12px;
+    font-weight: 800;
+    padding: 5px 9px;
+}
+
+#createMockInterviewPage .create-preview-panel {
+    position: sticky;
+    top: 88px;
+    display: grid;
+    gap: 16px;
+}
+
+#createMockInterviewPage .preview-card {
+    border-radius: 24px;
+    background: #fff;
+    border: 1px solid rgba(226, 232, 240, 0.9);
+    padding: 18px;
+    box-shadow: 0 16px 40px rgba(15, 23, 42, 0.06);
+}
+
+#createMockInterviewPage .preview-card-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 14px;
+}
+
+#createMockInterviewPage .preview-card-head span {
+    color: #1677ff;
+    font-size: 11px;
+    font-weight: 900;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+}
+
+#createMockInterviewPage .preview-card-head strong {
+    display: block;
+    margin-top: 5px;
+    color: #0f172a;
+    font-size: 16px;
+}
+
+#createMockInterviewPage .quality-list {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    margin-top: 14px;
+}
+
+#createMockInterviewPage .quality-item {
+    border-radius: 14px;
+    background: #f8fafc;
+    border: 1px solid rgba(226, 232, 240, 0.9);
+    padding: 10px;
+}
+
+#createMockInterviewPage .quality-item.done {
+    background: rgba(16, 185, 129, 0.08);
+    border-color: rgba(16, 185, 129, 0.24);
+}
+
+#createMockInterviewPage .quality-item span,
+#createMockInterviewPage .quality-item strong {
+    display: block;
+}
+
+#createMockInterviewPage .quality-item span {
+    color: #0f172a;
+    font-size: 12px;
+    font-weight: 800;
+}
+
+#createMockInterviewPage .quality-item strong {
+    margin-top: 5px;
+    color: #64748b;
+    font-size: 11px;
+}
+
+#createMockInterviewPage .quality-item.done strong {
+    color: #047857;
+}
+
+#createMockInterviewPage .quality-tip {
+    margin-top: 14px;
+    border-radius: 16px;
+    background: rgba(245, 158, 11, 0.1);
+    color: #92400e;
+    font-size: 12px;
+    font-weight: 700;
+    line-height: 1.7;
+    padding: 12px;
+}
+
+#createMockInterviewPage .quality-tip.strong {
+    background: rgba(16, 185, 129, 0.08);
+    color: #047857;
+}
+
+#createMockInterviewPage .preview-step-list {
+    display: grid;
+    gap: 12px;
+}
+
+#createMockInterviewPage .preview-step {
+    display: grid;
+    grid-template-columns: 28px minmax(0, 1fr);
+    gap: 10px;
+    align-items: start;
+    color: #475569;
+    font-size: 13px;
+    font-weight: 700;
+    line-height: 1.7;
+}
+
+#createMockInterviewPage .preview-step span {
+    width: 28px;
+    height: 28px;
+    border-radius: 999px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: #0f172a;
+    color: #fff;
+    font-size: 12px;
+    font-weight: 900;
 }
 
 @media (max-width: 768px) {
@@ -58,6 +289,14 @@
 
     #createMockInterviewPage .create-header h2 {
         font-size: 26px;
+    }
+
+    #createMockInterviewPage .create-content-grid {
+        grid-template-columns: 1fr;
+    }
+
+    #createMockInterviewPage .create-preview-panel {
+        position: static;
     }
 
     #createMockInterviewPage .create-grid {

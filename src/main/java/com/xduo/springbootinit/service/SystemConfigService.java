@@ -59,4 +59,14 @@ public interface SystemConfigService extends IService<SystemConfig> {
      * 是否开启学习目标提醒任务。
      */
     boolean isEnableLearningGoalReminder();
+
+    /**
+     * 是否允许未登录用户访问题目模块。
+     */
+    boolean isAllowGuestViewQuestion();
+
+    /**
+     * 是否允许未登录用户访问论坛模块。
+     */
+    boolean isAllowGuestViewPost();
 }

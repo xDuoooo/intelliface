@@ -9,6 +9,16 @@ import jakarta.servlet.http.HttpServletRequest;
  */
 public class NetUtils {
 
+    private static final String[] CLIENT_IP_HEADER_CANDIDATES = {
+            "X-Forwarded-For",
+            "X-Real-IP",
+            "CF-Connecting-IP",
+            "True-Client-IP",
+            "X-Client-IP",
+            "Proxy-Client-IP",
+            "WL-Proxy-Client-IP"
+    };
+
     /**
      * 获取客户端 IP 地址
      *
@@ -16,32 +26,23 @@ public class NetUtils {
      * @return
      */
     public static String getIpAddress(HttpServletRequest request) {
-        String ip = request.getHeader("x-forwarded-for");
-        if (ip == null || ip.length() == 0 || "unknown".equalsIgnoreCase(ip)) {
-            ip = request.getHeader("Proxy-Client-IP");
-        }
-        if (ip == null || ip.length() == 0 || "unknown".equalsIgnoreCase(ip)) {
-            ip = request.getHeader("WL-Proxy-Client-IP");
-        }
-        if (ip == null || ip.length() == 0 || "unknown".equalsIgnoreCase(ip)) {
-            ip = request.getRemoteAddr();
-            if (ip.equals("127.0.0.1")) {
-                // 根据网卡取本机配置的 IP
-                InetAddress inet = null;
-                try {
-                    inet = InetAddress.getLocalHost();
-                } catch (Exception e) {
-                    e.printStackTrace();
-                }
-                if (inet != null) {
-                    ip = inet.getHostAddress();
-                }
+        for (String headerName : CLIENT_IP_HEADER_CANDIDATES) {
+            String ip = extractFirstValidIp(request.getHeader(headerName));
+            if (ip != null) {
+                return ip;
             }
         }
-        // 多个代理的情况，第一个IP为客户端真实IP,多个IP按照','分割
-        if (ip != null && ip.length() > 15) {
-            if (ip.indexOf(",") > 0) {
-                ip = ip.substring(0, ip.indexOf(","));
+        String ip = request.getRemoteAddr();
+        if ("127.0.0.1".equals(ip)) {
+            // 根据网卡取本机配置的 IP
+            InetAddress inet = null;
+            try {
+                inet = InetAddress.getLocalHost();
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+            if (inet != null) {
+                ip = inet.getHostAddress();
             }
         }
         if (ip == null) {
@@ -50,4 +51,17 @@ public class NetUtils {
         return ip;
     }
 
+    private static String extractFirstValidIp(String headerValue) {
+        if (headerValue == null || headerValue.length() == 0) {
+            return null;
+        }
+        String[] ipList = headerValue.split(",");
+        for (String ip : ipList) {
+            String normalizedIp = ip == null ? "" : ip.trim();
+            if (normalizedIp.length() > 0 && !"unknown".equalsIgnoreCase(normalizedIp)) {
+                return normalizedIp;
+            }
+        }
+        return null;
+    }
 }

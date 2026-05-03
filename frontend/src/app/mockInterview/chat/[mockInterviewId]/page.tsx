@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Button, Card, Empty, Input, List, Popconfirm, Progress, Segmented, Skeleton, Tag, Typography, message } from "antd";
+import { Button, Card, Empty, Input, List, Popconfirm, Progress, Skeleton, Tag, Typography, message } from "antd";
 import {
   Briefcase,
   BrainCircuit,
@@ -153,160 +153,7 @@ const statusMap: Record<number, { text: string; color: string }> = {
 };
 
 const AUTO_SPEAK_STORAGE_KEY = "mockInterview:autoSpeakEnabled";
-const ROOM_MODE_STORAGE_KEY = "mockInterview:roomMode";
 const MAX_ANSWER_LENGTH = 4000;
-type RoomMode = "interview" | "coach";
-
-function buildAnswerCoachHints(answer: string) {
-  const normalized = answer.trim();
-  if (!normalized) {
-    return [];
-  }
-  const hints: string[] = [];
-  if (normalized.length < 40) {
-    hints.push("这段回答偏短，最好补上业务背景、你的职责和最终结果。");
-  }
-  if (!/\d/.test(normalized)) {
-    hints.push("如果能补一个量化指标，比如 QPS、耗时、成本或收益，会更像真实面试高质量回答。");
-  }
-  if (!/(因为|所以|权衡|取舍|方案|设计)/.test(normalized)) {
-    hints.push("建议补一句技术选型或设计取舍，面试官会更容易判断你的思考深度。");
-  }
-  if (!/(复盘|优化|改进|如果重来)/.test(normalized)) {
-    hints.push("可以加一句复盘或后续优化方向，这会让回答更完整。");
-  }
-  return hints.slice(0, 3);
-}
-
-function buildAnswerRecoveryHint(answer: string) {
-  const normalized = answer.trim();
-  if (!normalized) {
-    return "";
-  }
-  if (/(不会|不知道|不清楚|不了解|没接触|没做过|不太懂|答不上来)/.test(normalized)) {
-    return "可以诚实说明不熟，但别停在“不会”。补一段你的理解、排查思路、可验证假设和后续学习路径。";
-  }
-  if (/(可能|大概|应该|也许|好像|不确定)/.test(normalized) && normalized.length < 120) {
-    return "这段回答不确定性偏高。建议补一个你亲自验证过的事实、指标或项目经历来托住判断。";
-  }
-  return "";
-}
-
-function buildAnswerCoverageItems(answer: string, questionStyle?: string) {
-  const normalized = answer.trim();
-  const style = questionStyle || "";
-  if (/(架构|设计|扩展|数据|性能|稳定性|安全|成本)/.test(style)) {
-    return [
-      {
-        label: "需求约束",
-        matched: /(需求|目标|约束|边界|量级|容量|qps|并发|sla)/i.test(normalized),
-      },
-      {
-        label: "模块数据流",
-        matched: /(模块|服务|接口|数据流|链路|表|缓存|队列|消息|存储)/.test(normalized),
-      },
-      {
-        label: "关键取舍",
-        matched: /(取舍|权衡|因为|所以|一致性|可用性|延迟|吞吐|成本|复杂度)/.test(normalized),
-      },
-      {
-        label: "风险兜底",
-        matched: /(风险|异常|降级|限流|熔断|容灾|监控|告警|回滚)/.test(normalized),
-      },
-      {
-        label: "指标验证",
-        matched: /(\d|%|\b(qps|rt|ms|sla|p95|p99)\b|秒|分钟|提升|降低|成本|耗时)/i.test(normalized),
-      },
-    ];
-  }
-  if (/(行为|压力|协作|冲突|动机|规划)/.test(style)) {
-    return [
-      { label: "具体事件", matched: /(有一次|当时|背景|项目|场景|情况|situation)/i.test(normalized) },
-      { label: "目标任务", matched: /(目标|任务|问题|挑战|task|需要|希望)/i.test(normalized) },
-      { label: "我的行动", matched: /(我|本人|负责|推进|协调|沟通|action|做了)/i.test(normalized) },
-      { label: "结果影响", matched: /(结果|最终|影响|收益|提升|降低|完成|result|\d|%)/i.test(normalized) },
-      { label: "反思复盘", matched: /(反思|复盘|学到|改进|下次|reflection|如果重来)/i.test(normalized) },
-    ];
-  }
-  if (/原理/.test(style)) {
-    return [
-      { label: "核心概念", matched: /(概念|本质|核心|原理|机制|是什么)/.test(normalized) },
-      { label: "适用场景", matched: /(场景|适用|用于|什么时候|业务|项目)/.test(normalized) },
-      { label: "关键机制", matched: /(流程|机制|过程|实现|底层|源码|协议|算法)/.test(normalized) },
-      { label: "边界坑点", matched: /(边界|缺点|问题|坑|风险|异常|限制|不适合)/.test(normalized) },
-      { label: "项目经验", matched: /(我|项目|线上|排查|实践|使用|落地|优化)/.test(normalized) },
-    ];
-  }
-  if (/(结果|复盘|压测)/.test(style)) {
-    return [
-      { label: "目标指标", matched: /(目标|指标|基线|qps|rt|p95|p99|成本|耗时|错误率)/i.test(normalized) },
-      { label: "我的动作", matched: /(我|负责|推进|优化|调整|改造|压测|定位)/.test(normalized) },
-      { label: "最终结果", matched: /(结果|最终|提升|降低|减少|增长|稳定|\d|%)/.test(normalized) },
-      { label: "问题风险", matched: /(问题|风险|异常|瓶颈|失败|回滚|降级)/.test(normalized) },
-      { label: "复盘改进", matched: /(复盘|改进|如果重来|下次|后续|优化)/.test(normalized) },
-    ];
-  }
-  return [
-    {
-      label: "背景目标",
-      matched: /(背景|目标|业务|场景|需求|问题|痛点)/.test(normalized),
-    },
-    {
-      label: "个人职责",
-      matched: /(我|本人|负责|主导|参与|推进|落地)/.test(normalized),
-    },
-    {
-      label: "方案取舍",
-      matched: /(方案|设计|架构|选型|取舍|权衡|因为|所以|考虑)/.test(normalized),
-    },
-    {
-      label: "量化结果",
-      matched: /(\d|%|\b(qps|rt|ms|sla|p95|p99)\b|秒|分钟|提升|降低|减少|增长|成本|耗时)/i.test(normalized),
-    },
-    {
-      label: "复盘风险",
-      matched: /(复盘|优化|改进|风险|异常|降级|监控|告警|如果重来)/.test(normalized),
-    },
-  ];
-}
-
-function buildFallbackChecklist(questionStyle?: string) {
-  const style = questionStyle || "";
-  if (/(架构|设计|扩展)/.test(style)) {
-    return ["澄清目标、约束和量级", "拆核心模块、数据流和接口", "补瓶颈、降级、监控和成本"];
-  }
-  if (/(数据|性能|稳定性|安全|成本)/.test(style)) {
-    return ["先说目标指标和现状基线", "补定位过程、动作和取舍", "说明兜底、监控和最终效果"];
-  }
-  if (/(行为|压力|协作|动机|规划)/.test(style)) {
-    return ["用具体事件回答", "交代行动、冲突和推进方式", "补结果、反思和下一步"];
-  }
-  if (/原理/.test(style)) {
-    return ["讲核心概念和适用场景", "补关键机制、边界和常见坑", "结合一次真实项目经验"];
-  }
-  if (/(结果|复盘|压测)/.test(style)) {
-    return ["给目标指标、基线和变化", "讲你的动作和关键取舍", "补风险、复盘和后续优化"];
-  }
-  return ["背景目标和职责边界", "技术方案和关键取舍", "量化结果、复盘和优化"];
-}
-
-function buildContextualAnswerTemplate(questionStyle?: string, currentFocus?: string) {
-  const style = questionStyle || "";
-  const focus = currentFocus || "当前问题";
-  if (/(架构|设计|扩展|数据|性能|稳定性|安全|成本)/.test(style)) {
-    return `${focus}\n需求和约束：\n核心模块：\n数据流 / 接口：\n容量、性能或一致性：\n风险、降级和取舍：`;
-  }
-  if (/(行为|压力|协作|冲突|动机|规划)/.test(style)) {
-    return `Situation：\nTask：\nAction：\nResult：\nReflection：`;
-  }
-  if (/原理/.test(style)) {
-    return `${focus}\n核心概念：\n适用场景：\n关键机制：\n边界条件 / 常见坑：\n项目里的使用或排障经验：`;
-  }
-  if (/(结果|复盘|压测)/.test(style)) {
-    return `${focus}\n目标指标：\n我的动作：\n最终结果：\n问题和风险：\n如果重来会怎么优化：`;
-  }
-  return `${focus}\n背景目标：\n我的职责：\n方案和取舍：\n量化结果：\n复盘改进：`;
-}
 
 function safeParseJson<T>(value?: string | null): T | null {
   if (!value) {
@@ -436,7 +283,6 @@ export default function InterviewRoomPage({ params }: { params: { mockInterviewI
   const [isRecording, setIsRecording] = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [voiceStatus, setVoiceStatus] = useState("");
-  const [roomMode, setRoomMode] = useState<RoomMode>("interview");
 
   const speechRecognitionRef = useRef<SpeechRecognitionLike | null>(null);
   const streamAbortControllerRef = useRef<AbortController | null>(null);
@@ -490,10 +336,6 @@ export default function InterviewRoomPage({ params }: { params: { mockInterviewI
     const savedAutoSpeak = window.localStorage.getItem(AUTO_SPEAK_STORAGE_KEY);
     if (savedAutoSpeak === "0") {
       setAutoSpeakEnabled(false);
-    }
-    const savedRoomMode = window.localStorage.getItem(ROOM_MODE_STORAGE_KEY);
-    if (savedRoomMode === "coach" || savedRoomMode === "interview") {
-      setRoomMode(savedRoomMode);
     }
     return () => {
       speechRecognitionRef.current?.abort();
@@ -552,13 +394,6 @@ export default function InterviewRoomPage({ params }: { params: { mockInterviewI
     }
     window.localStorage.setItem(AUTO_SPEAK_STORAGE_KEY, autoSpeakEnabled ? "1" : "0");
   }, [autoSpeakEnabled]);
-
-  useEffect(() => {
-    if (typeof window === "undefined") {
-      return;
-    }
-    window.localStorage.setItem(ROOM_MODE_STORAGE_KEY, roomMode);
-  }, [roomMode]);
 
   const status = statusMap[interview?.status ?? 0] || statusMap[0];
   const isStarted = interview?.status === 1;
@@ -1066,15 +901,9 @@ export default function InterviewRoomPage({ params }: { params: { mockInterviewI
   const currentFocus = report?.currentFocus || latestRoundRecord?.focus || "开始面试后这里会显示当前考察重点";
   const currentQuestionStyle = report?.currentQuestionStyle || latestRoundRecord?.questionStyle || "真实面试追问";
   const currentActionHint = report?.nextActionHint || "建议用背景、方案、结果和复盘的结构组织回答。";
-  const latestInterviewerObservation = latestRoundRecord?.interviewerObservation
-    || latestRoundRecord?.followUpReason
-    || "面试开始后，这里会沉淀面试官对你上一轮回答的观察。";
   const hiringRecommendation = report?.hiringRecommendation || "";
   const riskPoints = report?.riskPoints || [];
   const nextInterviewFocus = report?.nextInterviewFocus || [];
-  const liveAnswerChecklist = (report?.answerChecklist || []).length
-    ? report?.answerChecklist || []
-    : buildFallbackChecklist(currentQuestionStyle);
   const latestQuestionText = latestQuestionMessage?.content || "面试官会在这里给出当前问题。";
   const answerTimePercent = Math.min(
     100,
@@ -1082,35 +911,13 @@ export default function InterviewRoomPage({ params }: { params: { mockInterviewI
   );
   const answerOvertime = questionElapsedSeconds > recommendedAnswerSeconds;
   const canAnswer = isStarted && !isEnded;
-  const coachMode = roomMode === "coach";
   const isStreaming = submitting && Boolean(streamAbortControllerRef.current);
-  const answerCoachHints = useMemo(() => buildAnswerCoachHints(inputMessage), [inputMessage]);
-  const answerRecoveryHint = useMemo(() => buildAnswerRecoveryHint(inputMessage), [inputMessage]);
-  const answerCoverageItems = useMemo(
-    () => buildAnswerCoverageItems(inputMessage, currentQuestionStyle),
-    [currentQuestionStyle, inputMessage],
-  );
-  const answerCoverageCount = answerCoverageItems.filter((item) => item.matched).length;
-  const contextualAnswerTemplate = useMemo(
-    () => buildContextualAnswerTemplate(currentQuestionStyle, currentFocus),
-    [currentFocus, currentQuestionStyle],
-  );
   const latestRoundScoreItems = buildRoundScoreItems(latestRoundRecord);
   const canSendAnswer = canAnswer
     && Boolean(inputMessage.trim())
     && !submitting
     && !isRecording
     && !isTranscribing;
-
-  const appendAnswerTemplate = (template: string) => {
-    stopSpeaking();
-    setInputMessage((prev) => {
-      if (!prev.trim()) {
-        return template;
-      }
-      return `${prev.trim()}\n${template}`;
-    });
-  };
 
   if (loading) {
     return (
@@ -1164,15 +971,6 @@ export default function InterviewRoomPage({ params }: { params: { mockInterviewI
             </div>
 
             <div className="hero-actions">
-              <Segmented
-                className="mode-segment"
-                options={[
-                  { label: "面试模式", value: "interview" },
-                  { label: "训练模式", value: "coach" },
-                ]}
-                value={roomMode}
-                onChange={(value) => setRoomMode(value as RoomMode)}
-              />
               <Link href={`/mockInterview/add?from=${interview.id}`}>
                 <Button className="action-button secondary">
                   <RefreshCw size={16} />
@@ -1326,13 +1124,6 @@ export default function InterviewRoomPage({ params }: { params: { mockInterviewI
                     strokeColor={answerOvertime ? "#f59e0b" : "#1677ff"}
                     trailColor="rgba(203, 213, 225, 0.8)"
                   />
-                  {coachMode ? (
-                    <div className="active-question-footer">
-                      {liveAnswerChecklist.map((item) => (
-                        <span key={item}>{item}</span>
-                      ))}
-                    </div>
-                  ) : null}
                 </div>
               ) : null}
               <Input.TextArea
@@ -1363,74 +1154,6 @@ export default function InterviewRoomPage({ params }: { params: { mockInterviewI
                   }
                 }}
               />
-              {coachMode ? (
-                <div className="template-row">
-                  <Button
-                    className="template-button"
-                    onClick={() => appendAnswerTemplate(contextualAnswerTemplate)}
-                    disabled={!canAnswer}
-                  >
-                    插入本轮回答骨架
-                  </Button>
-                  <Button
-                    className="template-button"
-                    onClick={() => appendAnswerTemplate("背景：\n职责：\n方案：\n结果：\n复盘：")}
-                    disabled={!canAnswer}
-                  >
-                    插入项目回答模板
-                  </Button>
-                  <Button
-                    className="template-button"
-                    onClick={() => appendAnswerTemplate("Situation：\nTask：\nAction：\nResult：")}
-                    disabled={!canAnswer}
-                  >
-                    插入 STAR 模板
-                  </Button>
-                </div>
-              ) : null}
-              {coachMode && answerRecoveryHint ? (
-                <div className="answer-risk-card">
-                  <div>
-                    <div className="answer-risk-title">回答风险提示</div>
-                    <div className="answer-risk-text">{answerRecoveryHint}</div>
-                  </div>
-                  <Button
-                    className="template-button compact"
-                    onClick={() => appendAnswerTemplate("我对这个点不是最熟，但我的理解是：\n我会先验证：\n如果落到项目里，我会关注：\n后续我会补齐：")}
-                    disabled={!canAnswer}
-                  >
-                    插入补救结构
-                  </Button>
-                </div>
-              ) : null}
-              {coachMode && canAnswer ? (
-                <div className="answer-coverage-card">
-                  <div className="answer-coverage-head">
-                    <span>作答覆盖度</span>
-                    <strong>{answerCoverageCount}/{answerCoverageItems.length}</strong>
-                  </div>
-                  <div className="coverage-list">
-                    {answerCoverageItems.map((item) => (
-                      <span className={`coverage-item ${item.matched ? "done" : ""}`} key={item.label}>
-                        {item.label}
-                      </span>
-                    ))}
-                  </div>
-                  {inputMessage.trim() && answerCoverageCount < 3 ? (
-                    <div className="coverage-tip">建议至少补齐 3 项后再发送，回答会更像真实面试里的有效信息。</div>
-                  ) : null}
-                </div>
-              ) : null}
-              {coachMode && answerCoachHints.length ? (
-                <div className="answer-coach-card">
-                  <div className="answer-coach-title">发出前再补一口</div>
-                  <ul>
-                    {answerCoachHints.map((hint) => (
-                      <li key={hint}>{hint}</li>
-                    ))}
-                  </ul>
-                </div>
-              ) : null}
               <div className="input-toolbar">
                 <div className="tool-group">
                   <Button
@@ -1514,7 +1237,7 @@ export default function InterviewRoomPage({ params }: { params: { mockInterviewI
                   onClick={() => void sendMessage()}
                   loading={submitting}
                   disabled={!canSendAnswer}
-                  className={`send-button ${coachMode && answerCoverageCount < 3 && inputMessage.trim() ? "needs-more" : ""}`}
+                  className="send-button"
                 >
                   发送回答
                 </Button>
@@ -1574,20 +1297,6 @@ export default function InterviewRoomPage({ params }: { params: { mockInterviewI
               <div className="cue-tag">{currentQuestionStyle}</div>
               <div className="cue-focus">{currentFocus}</div>
               <div className="cue-hint">{currentActionHint}</div>
-              {coachMode ? (
-                <>
-                  <div className="cue-observation">
-                    <div className="cue-checklist-title">面试官观察</div>
-                    <div>{latestInterviewerObservation}</div>
-                  </div>
-                  <div className="cue-checklist">
-                    <div className="cue-checklist-title">本轮回答抓手</div>
-                    {liveAnswerChecklist.map((item) => (
-                      <div className="cue-checklist-item" key={item}>{item}</div>
-                    ))}
-                  </div>
-                </>
-              ) : null}
               {isPaused ? (
                 <div className="cue-paused-banner">面试已暂停，继续后会从当前考察点接着追问。</div>
               ) : null}

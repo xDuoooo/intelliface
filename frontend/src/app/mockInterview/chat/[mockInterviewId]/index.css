@@ -90,18 +90,6 @@
     margin-top: 24px;
 }
 
-.mode-segment {
-    align-self: center;
-    border-radius: 14px;
-    background: #f8fafc;
-    padding: 4px;
-}
-
-.mode-segment .ant-segmented-item {
-    border-radius: 10px;
-    font-weight: 800;
-}
-
 .action-button {
     height: 46px !important;
     border-radius: 16px !important;
@@ -269,153 +257,9 @@
     margin-bottom: 10px;
 }
 
-.active-question-footer {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-    margin-top: 12px;
-}
-
-.active-question-footer span {
-    display: inline-flex;
-    align-items: center;
-    border-radius: 999px;
-    background: #fff;
-    color: #475569;
-    border: 1px solid rgba(203, 213, 225, 0.85);
-    font-size: 12px;
-    font-weight: 700;
-    line-height: 1.5;
-    padding: 7px 10px;
-}
-
 .input-area textarea {
     border-radius: 18px !important;
     padding: 16px !important;
-}
-
-.template-row {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 10px;
-    margin-top: 12px;
-}
-
-.template-button {
-    border-radius: 14px !important;
-    height: 38px !important;
-    font-weight: 700 !important;
-}
-
-.template-button.compact {
-    flex-shrink: 0;
-    height: 34px !important;
-    font-size: 12px !important;
-}
-
-.answer-risk-card {
-    margin-top: 12px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 14px;
-    border-radius: 18px;
-    background: rgba(245, 158, 11, 0.1);
-    border: 1px solid rgba(245, 158, 11, 0.22);
-    padding: 14px 16px;
-}
-
-.answer-risk-title {
-    color: #92400e;
-    font-size: 12px;
-    font-weight: 900;
-}
-
-.answer-risk-text {
-    margin-top: 5px;
-    color: #78350f;
-    font-size: 13px;
-    font-weight: 600;
-    line-height: 1.7;
-}
-
-.answer-coach-card {
-    margin-top: 12px;
-    border-radius: 18px;
-    background: linear-gradient(180deg, rgba(22, 119, 255, 0.08), rgba(15, 92, 214, 0.03));
-    border: 1px solid rgba(22, 119, 255, 0.12);
-    padding: 14px 16px;
-}
-
-.answer-coach-title {
-    color: #1677ff;
-    font-size: 12px;
-    font-weight: 800;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-}
-
-.answer-coach-card ul {
-    margin: 10px 0 0;
-    padding-left: 18px;
-    color: #475569;
-    line-height: 1.8;
-}
-
-.answer-coverage-card {
-    margin-top: 12px;
-    border-radius: 18px;
-    background: #f8fafc;
-    border: 1px solid rgba(226, 232, 240, 0.9);
-    padding: 14px 16px;
-}
-
-.answer-coverage-head {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 12px;
-    color: #475569;
-    font-size: 12px;
-    font-weight: 800;
-}
-
-.answer-coverage-head strong {
-    color: #0f172a;
-    font-size: 14px;
-}
-
-.coverage-list {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-    margin-top: 10px;
-}
-
-.coverage-item {
-    display: inline-flex;
-    align-items: center;
-    border-radius: 999px;
-    background: #fff;
-    color: #64748b;
-    border: 1px solid rgba(203, 213, 225, 0.9);
-    font-size: 12px;
-    font-weight: 700;
-    padding: 7px 10px;
-}
-
-.coverage-item.done {
-    color: #047857;
-    border-color: rgba(16, 185, 129, 0.35);
-    background: rgba(16, 185, 129, 0.08);
-}
-
-.coverage-tip {
-    margin-top: 10px;
-    color: #64748b;
-    font-size: 12px;
-    font-weight: 700;
-    line-height: 1.7;
 }
 
 .input-toolbar {
@@ -452,11 +296,6 @@
     border-radius: 16px !important;
     padding: 0 20px !important;
     font-weight: 700 !important;
-}
-
-.send-button.needs-more {
-    background: #0f172a !important;
-    border-color: #0f172a !important;
 }
 
 .voice-status,
@@ -567,39 +406,6 @@
     color: rgba(255, 255, 255, 0.72);
     line-height: 1.8;
     font-size: 13px;
-}
-
-.cue-observation {
-    margin-top: 14px;
-    border-radius: 16px;
-    background: rgba(255, 255, 255, 0.1);
-    color: rgba(255, 255, 255, 0.88);
-    font-size: 13px;
-    font-weight: 700;
-    line-height: 1.7;
-    padding: 12px 14px;
-}
-
-.cue-checklist {
-    display: grid;
-    gap: 8px;
-    margin-top: 14px;
-}
-
-.cue-checklist-title {
-    color: rgba(255, 255, 255, 0.62);
-    font-size: 12px;
-    font-weight: 800;
-}
-
-.cue-checklist-item {
-    border-radius: 14px;
-    background: rgba(255, 255, 255, 0.1);
-    color: rgba(255, 255, 255, 0.88);
-    font-size: 12px;
-    font-weight: 700;
-    line-height: 1.6;
-    padding: 9px 11px;
 }
 
 .cue-paused-banner {
@@ -1309,21 +1115,14 @@
         flex-direction: column;
     }
 
-    .mode-segment {
-        width: 100%;
-    }
-
     .input-toolbar,
-    .tool-group,
-    .template-row,
-    .answer-risk-card {
+    .tool-group {
         flex-direction: column;
         align-items: stretch;
     }
 
     .tool-button,
-    .send-button,
-    .template-button.compact {
+    .send-button {
         width: 100%;
         justify-content: center;
     }

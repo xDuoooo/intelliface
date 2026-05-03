@@ -31,6 +31,7 @@ import {
   downloadMockInterviewReviewUsingGet,
   listMockInterviewVoByPageUsingPost,
 } from "@/api/mockInterviewController";
+import { getInterviewDepthMeta } from "@/lib/mockInterview";
 
 const { Title, Paragraph, Text } = Typography;
 
@@ -229,6 +230,7 @@ export default function MockInterviewHomePage() {
               renderItem={(item) => {
                 const status = statusMap[item.status ?? 0] || statusMap[0];
                 const report = safeParseJson<InterviewReportPreview>(item.report);
+                const depthMeta = getInterviewDepthMeta(Number(item.expectedRounds || 5));
                 const progressPercent = Math.min(
                   100,
                   Math.round(((item.currentRound || 0) / Math.max(1, item.expectedRounds || 5)) * 100),
@@ -261,12 +263,20 @@ export default function MockInterviewHomePage() {
                             </span>
                             <span className="inline-flex items-center gap-1.5">
                               <Sparkles size={14} />
-                              轮次：{item.currentRound || 0}/{item.expectedRounds || 5}
+                              深度：{depthMeta.label}
+                            </span>
+                            <span className="inline-flex items-center gap-1.5">
+                              <Clock3 size={14} />
+                              预计时长：{depthMeta.durationText}
+                            </span>
+                            <span className="inline-flex items-center gap-1.5">
+                              <Sparkles size={14} />
+                              进度：{item.currentRound || 0}/{item.expectedRounds || 5} 主题
                             </span>
                           </div>
                           <div className="max-w-xl">
                             <div className="mb-1 flex items-center justify-between gap-3 text-xs font-bold text-slate-400">
-                              <span>轮次进度</span>
+                              <span>模拟进度</span>
                               <span>{progressPercent}%</span>
                             </div>
                             <Progress percent={progressPercent} showInfo={false} strokeColor="#1677ff" />

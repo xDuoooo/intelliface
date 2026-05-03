@@ -1,5 +1,5 @@
 "use client";
-import { AutoComplete, Button, Form, Input, InputNumber, Progress, Select, Tag, Upload, message } from "antd";
+import { AutoComplete, Button, Form, Input, Progress, Select, Tag, Upload, message } from "antd";
 import type { UploadProps } from "antd";
 import React, { useEffect, useMemo, useState } from "react";
 import {
@@ -11,6 +11,7 @@ import { useAuthInitialized } from "@/contexts/AuthInitContext";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ClipboardCheck, FileSearch, Paperclip, Sparkles, UploadCloud, X } from "lucide-react";
 import { useSelector } from "react-redux";
+import { INTERVIEW_DEPTH_PRESETS, getInterviewDepthMeta, normalizeInterviewDepthPresetRounds } from "@/lib/mockInterview";
 import { RootState } from "@/stores";
 import "./index.css";
 
@@ -180,6 +181,10 @@ const CreateMockInterviewPage: React.FC<Props> = (props) => {
     : techStackOptions.length
       ? "下拉建议来自你的个人资料兴趣标签，也可以继续自由补充技术栈。"
       : "你的个人资料里还没有兴趣标签，当前仍然可以直接输入技术方向。";
+  const selectedDepthMeta = useMemo(
+    () => getInterviewDepthMeta(formValues?.expectedRounds),
+    [formValues?.expectedRounds],
+  );
 
   const interviewTypeOptions = [
     { label: "技术深挖", value: "技术深挖" },
@@ -204,7 +209,10 @@ const CreateMockInterviewPage: React.FC<Props> = (props) => {
     }
     try {
       const parsedDraft = JSON.parse(savedDraft);
-      form.setFieldsValue(parsedDraft);
+      form.setFieldsValue({
+        ...parsedDraft,
+        expectedRounds: normalizeInterviewDepthPresetRounds(Number(parsedDraft?.expectedRounds || 5)),
+      });
       message.success("已恢复你上次未完成的面试配置");
     } catch {
       window.localStorage.removeItem(CREATE_DRAFT_STORAGE_KEY);
@@ -229,7 +237,7 @@ const CreateMockInterviewPage: React.FC<Props> = (props) => {
           techStack: res.data.techStack,
           resumeText: res.data.resumeText,
           difficulty: res.data.difficulty,
-          expectedRounds: res.data.expectedRounds,
+          expectedRounds: normalizeInterviewDepthPresetRounds(Number(res.data.expectedRounds || 5)),
         });
         if (typeof window !== "undefined") {
           window.localStorage.removeItem(CREATE_DRAFT_STORAGE_KEY);
@@ -354,7 +362,7 @@ const CreateMockInterviewPage: React.FC<Props> = (props) => {
           <div className="eyebrow">AI Mock Interview</div>
           <h2>创建更像真实现场的模拟面试</h2>
           <p>
-            补充岗位、面试类型、技术方向和项目背景后，系统会按轮次追问，并在结束时生成结构化复盘报告。
+            补充岗位、面试类型、技术方向和项目背景后，系统会按你选择的深度逐步追问，并在结束时生成结构化复盘报告。
           </p>
           {fromInterviewId ? (
             <p>
@@ -417,8 +425,18 @@ const CreateMockInterviewPage: React.FC<Props> = (props) => {
             <Select options={difficultyOptions} placeholder="请选择面试难度" />
           </Form.Item>
 
-          <Form.Item label="计划轮次" name="expectedRounds">
-            <InputNumber min={3} max={8} style={{ width: "100%" }} />
+          <Form.Item
+            label="面试深度"
+            name="expectedRounds"
+            extra={`${selectedDepthMeta.description} ${selectedDepthMeta.durationText}`}
+          >
+            <Select
+              options={INTERVIEW_DEPTH_PRESETS.map((item) => ({
+                label: `${item.label} · ${item.durationText}`,
+                value: item.rounds,
+              }))}
+              placeholder="请选择这场模拟的深度"
+            />
           </Form.Item>
         </div>
 

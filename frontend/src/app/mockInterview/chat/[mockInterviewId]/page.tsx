@@ -27,6 +27,7 @@ import {
   streamMockInterviewEventUsingPost,
   transcribeMockInterviewAudioUsingPost,
 } from "@/api/mockInterviewController";
+import { getInterviewDepthMeta } from "@/lib/mockInterview";
 import "./index.css";
 
 const { Title, Paragraph, Text } = Typography;
@@ -566,6 +567,7 @@ export default function InterviewRoomPage({ params }: { params: { mockInterviewI
   const report = interview?.parsedReport;
   const expectedRounds = interview?.expectedRounds || report?.expectedRounds || 5;
   const currentRound = interview?.currentRound || report?.completedRounds || 0;
+  const depthMeta = getInterviewDepthMeta(expectedRounds);
   const progressPercent = Math.min(100, Math.round((currentRound / Math.max(1, expectedRounds)) * 100));
 
   const latestQuestionMessage = useMemo(() => {
@@ -1204,10 +1206,10 @@ export default function InterviewRoomPage({ params }: { params: { mockInterviewI
                 继续面试
               </Button>
               <Popconfirm
-                title={currentRound < expectedRounds ? "还没完成计划轮次，确定结束吗？" : "确定结束并生成报告？"}
+                title={currentRound < expectedRounds ? "还没走完主要考察主题，确定结束吗？" : "确定结束并生成报告？"}
                 description={
                   currentRound < expectedRounds
-                    ? `当前只完成 ${currentRound}/${expectedRounds} 轮，报告可信度会受影响。`
+                    ? `当前只完成 ${currentRound}/${expectedRounds} 个主要考察主题，报告可信度会受影响。`
                     : "结束后会生成最终复盘，当前会话将不能继续作答。"
                 }
                 okText="确认结束"
@@ -1246,7 +1248,7 @@ export default function InterviewRoomPage({ params }: { params: { mockInterviewI
                 </Title>
               </div>
               <Text className="text-slate-400">
-                当前已完成 {currentRound} / {expectedRounds} 轮
+                当前已完成 {currentRound} / {expectedRounds} 个主要考察主题
               </Text>
             </div>
 
@@ -1530,7 +1532,7 @@ export default function InterviewRoomPage({ params }: { params: { mockInterviewI
               <div>
                 <div className="section-eyebrow">Progress</div>
                 <Title level={5} className="!mb-0 !mt-2">
-                  轮次进度
+                  模拟进度
                 </Title>
               </div>
               <span className="score-pill">{progressPercent}%</span>
@@ -1538,20 +1540,20 @@ export default function InterviewRoomPage({ params }: { params: { mockInterviewI
             <Progress percent={progressPercent} showInfo={false} strokeColor="#1677ff" />
             <div className="metric-grid">
               <div className="metric-card">
-                <span>计划轮次</span>
-                <strong>{expectedRounds}</strong>
+                <span>面试深度</span>
+                <strong>{depthMeta.label}</strong>
               </div>
               <div className="metric-card">
-                <span>已完成</span>
-                <strong>{currentRound}</strong>
+                <span>预计时长</span>
+                <strong>{depthMeta.durationText}</strong>
+              </div>
+              <div className="metric-card">
+                <span>已完成主题</span>
+                <strong>{currentRound}/{expectedRounds}</strong>
               </div>
               <div className="metric-card">
                 <span>当前状态</span>
                 <strong>{status.text}</strong>
-              </div>
-              <div className="metric-card">
-                <span>建议作答时长</span>
-                <strong>{recommendedAnswerSeconds}s</strong>
               </div>
             </div>
           </Card>

@@ -1,5 +1,5 @@
 "use client";
-import { Button, Form, Input, InputNumber, Progress, Select, Tag, Upload, message } from "antd";
+import { AutoComplete, Button, Form, Input, InputNumber, Progress, Select, Tag, Upload, message } from "antd";
 import type { UploadProps } from "antd";
 import React, { useEffect, useMemo, useState } from "react";
 import {
@@ -7,8 +7,11 @@ import {
   getMockInterviewByIdUsingGet,
 } from "@/api/mockInterviewController";
 import { recommendQuestionsByResumeFileUsingPost } from "@/api/questionController";
+import { useAuthInitialized } from "@/contexts/AuthInitContext";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ClipboardCheck, FileSearch, Paperclip, Sparkles, UploadCloud, X } from "lucide-react";
+import { useSelector } from "react-redux";
+import { RootState } from "@/stores";
 import "./index.css";
 
 interface Props {}
@@ -23,6 +26,24 @@ const workExperienceOptions = [
   { label: "5 - 10 年", value: "5 - 10 年" },
   { label: "10 年以上", value: "10 年以上" },
 ];
+
+function splitCandidateValues(value?: string, delimiters = /[、,，/|\n]+/) {
+  return Array.from(
+    new Set(
+      String(value || "")
+        .split(delimiters)
+        .map((item) => item.trim())
+        .filter(Boolean),
+    ),
+  );
+}
+
+function buildAutoCompleteOptions(values: string[]) {
+  return values.map((value) => ({
+    value,
+    label: value,
+  }));
+}
 
 function buildBackgroundTemplate(values?: Partial<API.MockInterviewAddRequest>) {
   const position = values?.jobPosition || "目标岗位";
@@ -111,6 +132,8 @@ function buildImportedResumeText(result?: API.ResumeQuestionRecommendVO) {
 const CreateMockInterviewPage: React.FC<Props> = (props) => {
   const [form] = Form.useForm();
   const formValues = Form.useWatch([], form);
+  const loginUser = useSelector((state: RootState) => state.loginUser);
+  const authInitialized = useAuthInitialized();
   const [loading, setLoading] = useState(false);
   const [prefillLoading, setPrefillLoading] = useState(false);
   const [resumeFile, setResumeFile] = useState<File | null>(null);
@@ -123,6 +146,40 @@ const CreateMockInterviewPage: React.FC<Props> = (props) => {
   const qualityScore = Math.round((qualityItems.filter((item) => item.matched).length / qualityItems.length) * 100);
   const interviewPreview = useMemo(() => buildInterviewPreview(formValues), [formValues]);
   const missingQualityItems = qualityItems.filter((item) => !item.matched).slice(0, 3);
+  const profileJobPositionOptions = useMemo(
+    () => splitCandidateValues(loginUser?.careerDirection),
+    [loginUser?.careerDirection],
+  );
+  const jobPositionOptions = useMemo(
+    () => buildAutoCompleteOptions(profileJobPositionOptions),
+    [profileJobPositionOptions],
+  );
+  const techStackOptions = useMemo(
+    () =>
+      buildAutoCompleteOptions(
+        Array.from(
+          new Set(
+            [
+              ...(loginUser?.interestTagList || []),
+              ...splitCandidateValues(formValues?.techStack, /[、,，/\s]+/),
+            ]
+              .map((item) => item?.trim())
+              .filter(Boolean) as string[],
+          ),
+        ),
+      ),
+    [formValues?.techStack, loginUser?.interestTagList],
+  );
+  const jobPositionExtra = !authInitialized
+    ? "正在读取你的个人资料建议..."
+    : profileJobPositionOptions.length
+      ? "下拉建议来自你的个人资料就业方向，也可以直接输入新的目标岗位。"
+      : "你的个人资料里还没有填写就业方向，当前仍然可以直接输入。";
+  const techStackExtra = !authInitialized
+    ? "正在读取你的个人资料建议..."
+    : techStackOptions.length
+      ? "下拉建议来自你的个人资料兴趣标签，也可以继续自由补充技术栈。"
+      : "你的个人资料里还没有兴趣标签，当前仍然可以直接输入技术方向。";
 
   const interviewTypeOptions = [
     { label: "技术深挖", value: "技术深挖" },
@@ -322,12 +379,20 @@ const CreateMockInterviewPage: React.FC<Props> = (props) => {
         <Form.Item
           label="目标岗位"
           name="jobPosition"
+          extra={jobPositionExtra}
           rules={[
             { required: true, message: "请输入目标岗位" },
             { max: 80, message: "目标岗位不能超过 80 个字符" },
           ]}
         >
-          <Input maxLength={80} showCount placeholder="请输入工作岗位，例如：Java 开发工程师" />
+          <AutoComplete
+            options={jobPositionOptions}
+            filterOption={(inputValue, option) =>
+              String(option?.value || "").toLowerCase().includes(inputValue.toLowerCase())
+            }
+          >
+            <Input maxLength={80} showCount placeholder="请输入或选择目标岗位，例如：Java 开发工程师" />
+          </AutoComplete>
         </Form.Item>
 
         {/* 工作年限 */}
@@ -360,13 +425,21 @@ const CreateMockInterviewPage: React.FC<Props> = (props) => {
         <Form.Item
           label="技术方向 / 技术栈"
           name="techStack"
+          extra={techStackExtra}
           rules={[{ max: 256, message: "技术方向不能超过 256 个字符" }]}
         >
-          <Input
-            maxLength={256}
-            showCount
-            placeholder="例如：Java、Spring Boot、MySQL、Redis、消息队列"
-          />
+          <AutoComplete
+            options={techStackOptions}
+            filterOption={(inputValue, option) =>
+              String(option?.value || "").toLowerCase().includes(inputValue.toLowerCase())
+            }
+          >
+            <Input
+              maxLength={256}
+              showCount
+              placeholder="例如：Java、Spring Boot、MySQL、Redis、消息队列"
+            />
+          </AutoComplete>
         </Form.Item>
 
         <div className="resume-import-card">

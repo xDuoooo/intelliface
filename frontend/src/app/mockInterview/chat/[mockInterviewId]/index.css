@@ -7,9 +7,16 @@
 
 .interview-shell {
     display: grid;
-    grid-template-columns: minmax(0, 1.18fr) minmax(420px, 0.92fr);
     gap: 28px;
     align-items: start;
+}
+
+.interview-shell.with-side {
+    grid-template-columns: minmax(0, 1.34fr) minmax(300px, 360px);
+}
+
+.interview-shell.without-side {
+    grid-template-columns: minmax(0, 1fr);
 }
 
 .review-board-section {
@@ -31,6 +38,16 @@
     border-radius: 28px !important;
     border: 1px solid rgba(226, 232, 240, 0.9) !important;
     box-shadow: 0 20px 50px rgba(15, 23, 42, 0.08) !important;
+}
+
+.context-grid {
+    display: grid;
+    grid-template-columns: minmax(280px, 0.95fr) minmax(0, 1.25fr);
+    gap: 18px;
+}
+
+.context-card {
+    height: 100%;
 }
 
 .hero-header,
@@ -406,6 +423,10 @@
     grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
     gap: 12px;
     margin-top: 18px;
+}
+
+.context-card .metric-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .metric-card {
@@ -1153,7 +1174,11 @@
 }
 
 @media (max-width: 1220px) {
-    .interview-shell {
+    .interview-shell.with-side {
+        grid-template-columns: 1fr;
+    }
+
+    .context-grid {
         grid-template-columns: 1fr;
     }
 

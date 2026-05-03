@@ -913,6 +913,7 @@ export default function InterviewRoomPage({ params }: { params: { mockInterviewI
   const canAnswer = isStarted && !isEnded;
   const isStreaming = submitting && Boolean(streamAbortControllerRef.current);
   const latestRoundScoreItems = buildRoundScoreItems(latestRoundRecord);
+  const hasSideRail = isEnded || (report?.agenda || []).length > 0;
   const canSendAnswer = canAnswer
     && Boolean(inputMessage.trim())
     && !submitting
@@ -940,7 +941,7 @@ export default function InterviewRoomPage({ params }: { params: { mockInterviewI
 
   return (
     <div id="interviewRoomPage" className="max-width-content">
-      <div className="interview-shell">
+      <div className={`interview-shell ${hasSideRail ? "with-side" : "without-side"}`}>
         <section className="interview-main">
           <Card className="hero-card">
             <div className="hero-header">
@@ -1036,6 +1037,61 @@ export default function InterviewRoomPage({ params }: { params: { mockInterviewI
               </Button>
             </div>
           </Card>
+
+          <div className="context-grid">
+            <Card className="side-card context-card">
+              <div className="section-heading compact">
+                <div>
+                  <div className="section-eyebrow">Progress</div>
+                  <Title level={5} className="!mb-0 !mt-2">
+                    模拟进度
+                  </Title>
+                </div>
+                <span className="score-pill">{progressPercent}%</span>
+              </div>
+              <Progress percent={progressPercent} showInfo={false} strokeColor="#1677ff" />
+              <div className="metric-grid">
+                <div className="metric-card">
+                  <span>面试深度</span>
+                  <strong>{depthMeta.label}</strong>
+                </div>
+                <div className="metric-card">
+                  <span>预计时长</span>
+                  <strong>{depthMeta.durationText}</strong>
+                </div>
+                <div className="metric-card">
+                  <span>已完成主题</span>
+                  <strong>{currentRound}/{expectedRounds}</strong>
+                </div>
+                <div className="metric-card">
+                  <span>当前状态</span>
+                  <strong>{status.text}</strong>
+                </div>
+              </div>
+            </Card>
+
+            <Card className="side-card context-card">
+              <div className="section-heading compact">
+                <div>
+                  <div className="section-eyebrow">Live Cue</div>
+                  <Title level={5} className="!mb-0 !mt-2">
+                    当前考察点
+                  </Title>
+                </div>
+                <span className="score-pill subtle">
+                  {formatDuration(questionElapsedSeconds)}
+                </span>
+              </div>
+              <div className="live-cue-panel">
+                <div className="cue-tag">{currentQuestionStyle}</div>
+                <div className="cue-focus">{currentFocus}</div>
+                <div className="cue-hint">{currentActionHint}</div>
+                {isPaused ? (
+                  <div className="cue-paused-banner">面试已暂停，继续后会从当前考察点接着追问。</div>
+                ) : null}
+              </div>
+            </Card>
+          </div>
 
           <Card className="message-card">
             <div className="section-heading">
@@ -1263,191 +1319,139 @@ export default function InterviewRoomPage({ params }: { params: { mockInterviewI
           </Card>
         </section>
 
-        <aside className="interview-side">
-          <Card className="side-card">
-            <div className="section-heading compact">
-              <div>
-                <div className="section-eyebrow">Progress</div>
-                <Title level={5} className="!mb-0 !mt-2">
-                  模拟进度
-                </Title>
-              </div>
-              <span className="score-pill">{progressPercent}%</span>
-            </div>
-            <Progress percent={progressPercent} showInfo={false} strokeColor="#1677ff" />
-            <div className="metric-grid">
-              <div className="metric-card">
-                <span>面试深度</span>
-                <strong>{depthMeta.label}</strong>
-              </div>
-              <div className="metric-card">
-                <span>预计时长</span>
-                <strong>{depthMeta.durationText}</strong>
-              </div>
-              <div className="metric-card">
-                <span>已完成主题</span>
-                <strong>{currentRound}/{expectedRounds}</strong>
-              </div>
-              <div className="metric-card">
-                <span>当前状态</span>
-                <strong>{status.text}</strong>
-              </div>
-            </div>
-          </Card>
-
-          <Card className="side-card">
-            <div className="section-heading compact">
-              <div>
-                <div className="section-eyebrow">Live Cue</div>
-                <Title level={5} className="!mb-0 !mt-2">
-                  当前考察点
-                </Title>
-              </div>
-              <span className="score-pill subtle">
-                {formatDuration(questionElapsedSeconds)}
-              </span>
-            </div>
-            <div className="live-cue-panel">
-              <div className="cue-tag">{currentQuestionStyle}</div>
-              <div className="cue-focus">{currentFocus}</div>
-              <div className="cue-hint">{currentActionHint}</div>
-              {isPaused ? (
-                <div className="cue-paused-banner">面试已暂停，继续后会从当前考察点接着追问。</div>
-              ) : null}
-            </div>
-          </Card>
-
-          {isEnded ? (
-            <Card className="side-card">
-              <div className="section-heading compact">
-                <div>
-                  <div className="section-eyebrow">Round Insight</div>
-                  <Title level={5} className="!mb-0 !mt-2">
-                    最近一轮反馈
-                  </Title>
-                </div>
-                <ClipboardCheck size={18} className="text-primary" />
-              </div>
-              {latestRoundRecord ? (
-                <div className="round-feedback">
-                  <div className="feedback-score">
-                    <span>本轮评分</span>
-                    <strong>{latestRoundRecord.score || 0}</strong>
+        {hasSideRail ? (
+          <aside className="interview-side">
+            {isEnded ? (
+              <Card className="side-card">
+                <div className="section-heading compact">
+                  <div>
+                    <div className="section-eyebrow">Round Insight</div>
+                    <Title level={5} className="!mb-0 !mt-2">
+                      最近一轮反馈
+                    </Title>
                   </div>
-                  {latestRoundRecord.verdict ? (
-                    <div className="feedback-verdict">{latestRoundRecord.verdict}</div>
-                  ) : null}
-                  <Paragraph className="!mb-3 text-slate-600">
-                    {latestRoundRecord.shortComment || "这一轮重点反馈会显示在这里。"}
-                  </Paragraph>
-                  {latestRoundRecord.responseSeconds ? (
-                    <div className="feedback-meta">本轮作答用时 {latestRoundRecord.responseSeconds}s</div>
-                  ) : null}
-                  {latestRoundScoreItems.some((item) => item.value > 0) ? (
-                    <div className="round-score-mini-grid">
-                      {latestRoundScoreItems.map((item) => (
-                        <div className="round-score-mini" key={item.label}>
-                          <div className="round-score-mini-head">
-                            <span>{item.label}</span>
-                            <strong>{item.value}</strong>
+                  <ClipboardCheck size={18} className="text-primary" />
+                </div>
+                {latestRoundRecord ? (
+                  <div className="round-feedback">
+                    <div className="feedback-score">
+                      <span>本轮评分</span>
+                      <strong>{latestRoundRecord.score || 0}</strong>
+                    </div>
+                    {latestRoundRecord.verdict ? (
+                      <div className="feedback-verdict">{latestRoundRecord.verdict}</div>
+                    ) : null}
+                    <Paragraph className="!mb-3 text-slate-600">
+                      {latestRoundRecord.shortComment || "这一轮重点反馈会显示在这里。"}
+                    </Paragraph>
+                    {latestRoundRecord.responseSeconds ? (
+                      <div className="feedback-meta">本轮作答用时 {latestRoundRecord.responseSeconds}s</div>
+                    ) : null}
+                    {latestRoundScoreItems.some((item) => item.value > 0) ? (
+                      <div className="round-score-mini-grid">
+                        {latestRoundScoreItems.map((item) => (
+                          <div className="round-score-mini" key={item.label}>
+                            <div className="round-score-mini-head">
+                              <span>{item.label}</span>
+                              <strong>{item.value}</strong>
+                            </div>
+                            <Progress percent={item.value} showInfo={false} strokeColor="#1677ff" />
                           </div>
-                          <Progress percent={item.value} showInfo={false} strokeColor="#1677ff" />
-                        </div>
-                      ))}
-                    </div>
-                  ) : null}
-                  {(latestRoundRecord.scoreReasons || []).length ? (
-                    <div className="score-reason-list">
-                      {(latestRoundRecord.scoreReasons || []).map((item) => (
-                        <div className="score-reason" key={item}>{item}</div>
-                      ))}
-                    </div>
-                  ) : null}
-                  {(latestRoundRecord.improvementTags || []).length ? (
-                    <div className="feedback-tags">
-                      {(latestRoundRecord.improvementTags || []).map((tag) => (
-                        <span className="feedback-tag" key={tag}>{tag}</span>
-                      ))}
-                    </div>
-                  ) : null}
-                  {(latestRoundRecord.missingPoints || []).length ? (
-                    <div className="missing-point-list">
-                      {(latestRoundRecord.missingPoints || []).map((item) => (
-                        <span className="missing-point" key={item}>{item}</span>
-                      ))}
-                    </div>
-                  ) : null}
-                  {(latestRoundRecord.answerQualitySignals || []).length ? (
-                    <div className="diagnostic-signal-panel">
-                      <div className="focus-label">诊断信号</div>
-                      <div className="diagnostic-signal-list">
-                        {(latestRoundRecord.answerQualitySignals || []).map((item) => (
-                          <span className="diagnostic-signal" key={item}>{item}</span>
                         ))}
                       </div>
-                    </div>
-                  ) : null}
-                  {latestRoundRecord.interviewerObservation ? (
-                    <div className="feedback-focus neutral">
-                      <div className="focus-label">面试官观察</div>
-                      <div className="focus-text">{latestRoundRecord.interviewerObservation}</div>
-                    </div>
-                  ) : null}
-                  <div className="feedback-focus">
-                    <div className="focus-label">这一轮主要问题：</div>
-                    <div className="focus-text">{latestRoundRecord.focus || "继续补充项目细节和设计取舍。"}</div>
-                  </div>
-                  {latestRoundRecord.followUpReason ? (
-                    <div className="feedback-focus neutral">
-                      <div className="focus-label">追问理由</div>
-                      <div className="focus-text">{latestRoundRecord.followUpReason}</div>
-                    </div>
-                  ) : null}
-                  {latestRoundRecord.answerRewriteSuggestion ? (
-                    <div className="rewrite-suggestion">
-                      <div className="focus-label">改进版回答骨架</div>
-                      <div>{latestRoundRecord.answerRewriteSuggestion}</div>
-                    </div>
-                  ) : null}
-                </div>
-              ) : (
-                <Empty description="报告生成后，这里会显示最后一轮重点反馈" image={Empty.PRESENTED_IMAGE_SIMPLE} />
-              )}
-            </Card>
-          ) : null}
-
-          {(report?.agenda || []).length ? (
-            <Card className="side-card">
-              <div className="section-heading compact">
-                <div>
-                  <div className="section-eyebrow">Interview Agenda</div>
-                  <Title level={5} className="!mb-0 !mt-2">
-                    面试议程
-                  </Title>
-                </div>
-              </div>
-              <div className="agenda-list">
-                {(report?.agenda || []).map((item) => {
-                  const isActive = !isEnded && item.round === activeAgendaRound;
-                  const isCompleted = (item.round || 0) <= currentRound;
-                  return (
-                    <div
-                      key={`${item.round}-${item.label}`}
-                      className={`agenda-item ${isActive ? "active" : ""} ${isCompleted ? "done" : ""}`}
-                    >
-                      <div className="agenda-index">{item.round}</div>
-                      <div className="agenda-content">
-                        <div className="agenda-title">{item.label}</div>
-                        <div className="agenda-desc">{item.focusTopic}</div>
+                    ) : null}
+                    {(latestRoundRecord.scoreReasons || []).length ? (
+                      <div className="score-reason-list">
+                        {(latestRoundRecord.scoreReasons || []).map((item) => (
+                          <div className="score-reason" key={item}>{item}</div>
+                        ))}
                       </div>
+                    ) : null}
+                    {(latestRoundRecord.improvementTags || []).length ? (
+                      <div className="feedback-tags">
+                        {(latestRoundRecord.improvementTags || []).map((tag) => (
+                          <span className="feedback-tag" key={tag}>{tag}</span>
+                        ))}
+                      </div>
+                    ) : null}
+                    {(latestRoundRecord.missingPoints || []).length ? (
+                      <div className="missing-point-list">
+                        {(latestRoundRecord.missingPoints || []).map((item) => (
+                          <span className="missing-point" key={item}>{item}</span>
+                        ))}
+                      </div>
+                    ) : null}
+                    {(latestRoundRecord.answerQualitySignals || []).length ? (
+                      <div className="diagnostic-signal-panel">
+                        <div className="focus-label">诊断信号</div>
+                        <div className="diagnostic-signal-list">
+                          {(latestRoundRecord.answerQualitySignals || []).map((item) => (
+                            <span className="diagnostic-signal" key={item}>{item}</span>
+                          ))}
+                        </div>
+                      </div>
+                    ) : null}
+                    {latestRoundRecord.interviewerObservation ? (
+                      <div className="feedback-focus neutral">
+                        <div className="focus-label">面试官观察</div>
+                        <div className="focus-text">{latestRoundRecord.interviewerObservation}</div>
+                      </div>
+                    ) : null}
+                    <div className="feedback-focus">
+                      <div className="focus-label">这一轮主要问题：</div>
+                      <div className="focus-text">{latestRoundRecord.focus || "继续补充项目细节和设计取舍。"}</div>
                     </div>
-                  );
-                })}
-              </div>
-            </Card>
-          ) : null}
+                    {latestRoundRecord.followUpReason ? (
+                      <div className="feedback-focus neutral">
+                        <div className="focus-label">追问理由</div>
+                        <div className="focus-text">{latestRoundRecord.followUpReason}</div>
+                      </div>
+                    ) : null}
+                    {latestRoundRecord.answerRewriteSuggestion ? (
+                      <div className="rewrite-suggestion">
+                        <div className="focus-label">改进版回答骨架</div>
+                        <div>{latestRoundRecord.answerRewriteSuggestion}</div>
+                      </div>
+                    ) : null}
+                  </div>
+                ) : (
+                  <Empty description="报告生成后，这里会显示最后一轮重点反馈" image={Empty.PRESENTED_IMAGE_SIMPLE} />
+                )}
+              </Card>
+            ) : null}
 
-        </aside>
+            {(report?.agenda || []).length ? (
+              <Card className="side-card">
+                <div className="section-heading compact">
+                  <div>
+                    <div className="section-eyebrow">Interview Agenda</div>
+                    <Title level={5} className="!mb-0 !mt-2">
+                      面试议程
+                    </Title>
+                  </div>
+                </div>
+                <div className="agenda-list">
+                  {(report?.agenda || []).map((item) => {
+                    const isActive = !isEnded && item.round === activeAgendaRound;
+                    const isCompleted = (item.round || 0) <= currentRound;
+                    return (
+                      <div
+                        key={`${item.round}-${item.label}`}
+                        className={`agenda-item ${isActive ? "active" : ""} ${isCompleted ? "done" : ""}`}
+                      >
+                        <div className="agenda-index">{item.round}</div>
+                        <div className="agenda-content">
+                          <div className="agenda-title">{item.label}</div>
+                          <div className="agenda-desc">{item.focusTopic}</div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </Card>
+            ) : null}
+          </aside>
+        ) : null}
       </div>
 
       <section className="review-board-section">

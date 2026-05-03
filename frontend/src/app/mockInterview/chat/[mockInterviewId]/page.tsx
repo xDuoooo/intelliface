@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Button, Card, Empty, Input, List, Popconfirm, Progress, Skeleton, Tag, Typography, message } from "antd";
+import { Button, Card, Empty, Input, List, Popconfirm, Progress, Segmented, Skeleton, Tag, Typography, message } from "antd";
 import {
   Briefcase,
   BrainCircuit,
@@ -152,7 +152,9 @@ const statusMap: Record<number, { text: string; color: string }> = {
 };
 
 const AUTO_SPEAK_STORAGE_KEY = "mockInterview:autoSpeakEnabled";
+const ROOM_MODE_STORAGE_KEY = "mockInterview:roomMode";
 const MAX_ANSWER_LENGTH = 4000;
+type RoomMode = "interview" | "coach";
 
 function buildAnswerCoachHints(answer: string) {
   const normalized = answer.trim();
@@ -433,6 +435,7 @@ export default function InterviewRoomPage({ params }: { params: { mockInterviewI
   const [isRecording, setIsRecording] = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [voiceStatus, setVoiceStatus] = useState("");
+  const [roomMode, setRoomMode] = useState<RoomMode>("interview");
 
   const speechRecognitionRef = useRef<SpeechRecognitionLike | null>(null);
   const streamAbortControllerRef = useRef<AbortController | null>(null);
@@ -486,6 +489,10 @@ export default function InterviewRoomPage({ params }: { params: { mockInterviewI
     const savedAutoSpeak = window.localStorage.getItem(AUTO_SPEAK_STORAGE_KEY);
     if (savedAutoSpeak === "0") {
       setAutoSpeakEnabled(false);
+    }
+    const savedRoomMode = window.localStorage.getItem(ROOM_MODE_STORAGE_KEY);
+    if (savedRoomMode === "coach" || savedRoomMode === "interview") {
+      setRoomMode(savedRoomMode);
     }
     return () => {
       speechRecognitionRef.current?.abort();
@@ -544,6 +551,13 @@ export default function InterviewRoomPage({ params }: { params: { mockInterviewI
     }
     window.localStorage.setItem(AUTO_SPEAK_STORAGE_KEY, autoSpeakEnabled ? "1" : "0");
   }, [autoSpeakEnabled]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+    window.localStorage.setItem(ROOM_MODE_STORAGE_KEY, roomMode);
+  }, [roomMode]);
 
   const status = statusMap[interview?.status ?? 0] || statusMap[0];
   const isStarted = interview?.status === 1;
@@ -1066,6 +1080,7 @@ export default function InterviewRoomPage({ params }: { params: { mockInterviewI
   );
   const answerOvertime = questionElapsedSeconds > recommendedAnswerSeconds;
   const canAnswer = isStarted && !isEnded;
+  const coachMode = roomMode === "coach";
   const isStreaming = submitting && Boolean(streamAbortControllerRef.current);
   const answerCoachHints = useMemo(() => buildAnswerCoachHints(inputMessage), [inputMessage]);
   const answerRecoveryHint = useMemo(() => buildAnswerRecoveryHint(inputMessage), [inputMessage]);
@@ -1147,6 +1162,15 @@ export default function InterviewRoomPage({ params }: { params: { mockInterviewI
             </div>
 
             <div className="hero-actions">
+              <Segmented
+                className="mode-segment"
+                options={[
+                  { label: "面试模式", value: "interview" },
+                  { label: "训练模式", value: "coach" },
+                ]}
+                value={roomMode}
+                onChange={(value) => setRoomMode(value as RoomMode)}
+              />
               <Link href={`/mockInterview/add?from=${interview.id}`}>
                 <Button className="action-button secondary">
                   <RefreshCw size={16} />
@@ -1300,11 +1324,13 @@ export default function InterviewRoomPage({ params }: { params: { mockInterviewI
                     strokeColor={answerOvertime ? "#f59e0b" : "#1677ff"}
                     trailColor="rgba(203, 213, 225, 0.8)"
                   />
-                  <div className="active-question-footer">
-                    {liveAnswerChecklist.map((item) => (
-                      <span key={item}>{item}</span>
-                    ))}
-                  </div>
+                  {coachMode ? (
+                    <div className="active-question-footer">
+                      {liveAnswerChecklist.map((item) => (
+                        <span key={item}>{item}</span>
+                      ))}
+                    </div>
+                  ) : null}
                 </div>
               ) : null}
               <Input.TextArea
@@ -1335,30 +1361,32 @@ export default function InterviewRoomPage({ params }: { params: { mockInterviewI
                   }
                 }}
               />
-              <div className="template-row">
-                <Button
-                  className="template-button"
-                  onClick={() => appendAnswerTemplate(contextualAnswerTemplate)}
-                  disabled={!canAnswer}
-                >
-                  插入本轮回答骨架
-                </Button>
-                <Button
-                  className="template-button"
-                  onClick={() => appendAnswerTemplate("背景：\n职责：\n方案：\n结果：\n复盘：")}
-                  disabled={!canAnswer}
-                >
-                  插入项目回答模板
-                </Button>
-                <Button
-                  className="template-button"
-                  onClick={() => appendAnswerTemplate("Situation：\nTask：\nAction：\nResult：")}
-                  disabled={!canAnswer}
-                >
-                  插入 STAR 模板
-                </Button>
-              </div>
-              {answerRecoveryHint ? (
+              {coachMode ? (
+                <div className="template-row">
+                  <Button
+                    className="template-button"
+                    onClick={() => appendAnswerTemplate(contextualAnswerTemplate)}
+                    disabled={!canAnswer}
+                  >
+                    插入本轮回答骨架
+                  </Button>
+                  <Button
+                    className="template-button"
+                    onClick={() => appendAnswerTemplate("背景：\n职责：\n方案：\n结果：\n复盘：")}
+                    disabled={!canAnswer}
+                  >
+                    插入项目回答模板
+                  </Button>
+                  <Button
+                    className="template-button"
+                    onClick={() => appendAnswerTemplate("Situation：\nTask：\nAction：\nResult：")}
+                    disabled={!canAnswer}
+                  >
+                    插入 STAR 模板
+                  </Button>
+                </div>
+              ) : null}
+              {coachMode && answerRecoveryHint ? (
                 <div className="answer-risk-card">
                   <div>
                     <div className="answer-risk-title">回答风险提示</div>
@@ -1373,7 +1401,7 @@ export default function InterviewRoomPage({ params }: { params: { mockInterviewI
                   </Button>
                 </div>
               ) : null}
-              {canAnswer ? (
+              {coachMode && canAnswer ? (
                 <div className="answer-coverage-card">
                   <div className="answer-coverage-head">
                     <span>作答覆盖度</span>
@@ -1391,7 +1419,7 @@ export default function InterviewRoomPage({ params }: { params: { mockInterviewI
                   ) : null}
                 </div>
               ) : null}
-              {answerCoachHints.length ? (
+              {coachMode && answerCoachHints.length ? (
                 <div className="answer-coach-card">
                   <div className="answer-coach-title">发出前再补一口</div>
                   <ul>
@@ -1484,7 +1512,7 @@ export default function InterviewRoomPage({ params }: { params: { mockInterviewI
                   onClick={() => void sendMessage()}
                   loading={submitting}
                   disabled={!canSendAnswer}
-                  className={`send-button ${answerCoverageCount < 3 && inputMessage.trim() ? "needs-more" : ""}`}
+                  className={`send-button ${coachMode && answerCoverageCount < 3 && inputMessage.trim() ? "needs-more" : ""}`}
                 >
                   发送回答
                 </Button>
@@ -1544,16 +1572,20 @@ export default function InterviewRoomPage({ params }: { params: { mockInterviewI
               <div className="cue-tag">{currentQuestionStyle}</div>
               <div className="cue-focus">{currentFocus}</div>
               <div className="cue-hint">{currentActionHint}</div>
-              <div className="cue-observation">
-                <div className="cue-checklist-title">面试官观察</div>
-                <div>{latestInterviewerObservation}</div>
-              </div>
-              <div className="cue-checklist">
-                <div className="cue-checklist-title">本轮回答抓手</div>
-                {liveAnswerChecklist.map((item) => (
-                  <div className="cue-checklist-item" key={item}>{item}</div>
-                ))}
-              </div>
+              {coachMode ? (
+                <>
+                  <div className="cue-observation">
+                    <div className="cue-checklist-title">面试官观察</div>
+                    <div>{latestInterviewerObservation}</div>
+                  </div>
+                  <div className="cue-checklist">
+                    <div className="cue-checklist-title">本轮回答抓手</div>
+                    {liveAnswerChecklist.map((item) => (
+                      <div className="cue-checklist-item" key={item}>{item}</div>
+                    ))}
+                  </div>
+                </>
+              ) : null}
               {isPaused ? (
                 <div className="cue-paused-banner">面试已暂停，继续后会从当前考察点接着追问。</div>
               ) : null}
@@ -1570,7 +1602,7 @@ export default function InterviewRoomPage({ params }: { params: { mockInterviewI
               </div>
               <ClipboardCheck size={18} className="text-primary" />
             </div>
-            {latestRoundRecord ? (
+            {latestRoundRecord && (coachMode || isEnded) ? (
               <div className="round-feedback">
                 {isEnded ? (
                   <div className="feedback-score">
@@ -1654,8 +1686,13 @@ export default function InterviewRoomPage({ params }: { params: { mockInterviewI
                   </div>
                 ) : null}
               </div>
-            ) : (
+            ) : coachMode || isEnded ? (
               <Empty description="回答第一轮后，这里会显示本轮反馈" image={Empty.PRESENTED_IMAGE_SIMPLE} />
+            ) : (
+              <div className="feedback-held-panel">
+                <div className="feedback-held-title">反馈暂存中</div>
+                <div className="feedback-held-text">面试结束后统一展示完整复盘。</div>
+              </div>
             )}
           </Card>
 

@@ -90,6 +90,18 @@
     margin-top: 24px;
 }
 
+.mode-segment {
+    align-self: center;
+    border-radius: 14px;
+    background: #f8fafc;
+    padding: 4px;
+}
+
+.mode-segment .ant-segmented-item {
+    border-radius: 10px;
+    font-weight: 800;
+}
+
 .action-button {
     height: 46px !important;
     border-radius: 16px !important;
@@ -786,6 +798,28 @@
     line-height: 1.8;
 }
 
+.feedback-held-panel {
+    margin-top: 16px;
+    border-radius: 18px;
+    background: #f8fafc;
+    border: 1px solid rgba(226, 232, 240, 0.9);
+    padding: 18px;
+}
+
+.feedback-held-title {
+    color: #0f172a;
+    font-size: 14px;
+    font-weight: 900;
+}
+
+.feedback-held-text {
+    margin-top: 8px;
+    color: #64748b;
+    line-height: 1.7;
+    font-size: 13px;
+    font-weight: 700;
+}
+
 .report-overview {
     display: grid;
     grid-template-columns: 88px minmax(0, 1fr);
@@ -1273,6 +1307,10 @@
 
     .hero-actions {
         flex-direction: column;
+    }
+
+    .mode-segment {
+        width: 100%;
     }
 
     .input-toolbar,

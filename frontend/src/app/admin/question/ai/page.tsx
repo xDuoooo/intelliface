@@ -6,12 +6,9 @@ import {
   Alert,
   Badge,
   Button,
-  Card,
-  Col,
   Form,
   Input,
   InputNumber,
-  Row,
   Tag,
   Typography,
   message,
@@ -91,9 +88,9 @@ const AiGenerateQuestionPage: React.FC = () => {
   };
 
   return (
-    <div className="mx-auto max-w-6xl space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div className="space-y-3">
+    <div className="mx-auto max-w-7xl space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-700">
+      <div className="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
+        <div className="space-y-2">
           <Link
             href="/admin/question"
             className="group inline-flex items-center gap-2 text-sm font-bold text-slate-500 transition-colors hover:text-primary"
@@ -108,233 +105,226 @@ const AiGenerateQuestionPage: React.FC = () => {
               </Title>
               <Badge count="Beta" color="#2563eb" />
             </div>
-            <Paragraph className="!mb-0 !mt-2 max-w-3xl text-base font-medium text-slate-500">
-              用更清晰的输入方向快速批量生成题目、标签和参考答案，直接补充到平台题库里。
+            <Paragraph className="!mb-0 !mt-2 max-w-4xl text-base font-medium leading-7 text-slate-500">
+              这是给题目管理用的批量生成工作台。输入一个明确方向，系统会直接生成题目、标签和详细参考答案并入库，适合补齐专题内容后再回到题目管理做筛选和复核。
             </Paragraph>
           </div>
         </div>
-        <div className="inline-flex items-center gap-2 rounded-full border border-primary/15 bg-primary/5 px-4 py-2 text-xs font-black uppercase tracking-[0.18em] text-primary">
-          <Sparkles className="h-3.5 w-3.5" />
-          Intelligent Content Generator
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-600 shadow-sm">
+            <Sparkles className="h-4 w-4 text-primary" />
+            生成后直接进入题目管理
+          </div>
+          <Link
+            href="/admin/question"
+            className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-slate-900 px-4 py-3 text-sm font-bold text-white transition hover:bg-slate-800"
+          >
+            查看题目列表
+          </Link>
         </div>
       </div>
 
-      <Card
-        className="overflow-hidden rounded-[2.5rem] border border-slate-200/70 bg-gradient-to-br from-slate-50 via-white to-sky-50 shadow-xl shadow-slate-200/40"
-        bodyStyle={{ padding: "2rem" }}
-      >
-        <div className="grid gap-6 xl:grid-cols-[1.25fr_0.95fr]">
-          <div className="space-y-5">
-            <div className="inline-flex items-center gap-2 rounded-full bg-slate-900 px-4 py-2 text-xs font-black uppercase tracking-[0.18em] text-white">
-              <BrainCircuit className="h-3.5 w-3.5" />
-              生成工作台
-            </div>
-            <div className="space-y-3">
-              <Text className="block text-xl font-black text-slate-900 sm:text-2xl">
-                一次配置，完成题目生成、标签整理和答案入库
-              </Text>
-              <Text className="block max-w-2xl text-sm font-medium leading-7 text-slate-500 sm:text-base">
-                这页更适合做“明确方向的小批量生成”。输入越具体，生成结果越稳定，后续人工筛选和审核的成本也越低。
-              </Text>
-            </div>
-          </div>
-
-          <div className="grid gap-3 sm:grid-cols-3 xl:grid-cols-1">
-            {workflowHighlights.map((item) => (
-              <div
-                key={item.title}
-                className="rounded-[1.75rem] border border-slate-200/80 bg-white/85 p-4 shadow-sm shadow-slate-100"
-              >
-                <div className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-400">{item.title}</div>
-                <div className="mt-2 text-2xl font-black tracking-tight text-slate-900">{item.value}</div>
-                <div className="mt-1 text-xs font-semibold leading-6 text-slate-500">{item.description}</div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </Card>
-
-      <Row gutter={[24, 24]} align="stretch">
-        <Col xs={24} xl={15}>
-          <Card
-            className="h-full rounded-[2.5rem] border-slate-100 shadow-xl shadow-slate-200/50"
-            bodyStyle={{ padding: "2rem" }}
+      <div className="grid gap-3 md:grid-cols-3">
+        {workflowHighlights.map((item) => (
+          <section
+            key={item.title}
+            className="rounded-[1.75rem] border border-slate-200 bg-white px-5 py-5 shadow-sm shadow-slate-200/50"
           >
-            <div className="mb-8 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+            <div className="flex items-center justify-between gap-3">
+              <div className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-400">{item.title}</div>
+              <div className="text-lg font-black tracking-tight text-slate-900">{item.value}</div>
+            </div>
+            <div className="mt-3 text-sm font-medium leading-6 text-slate-500">{item.description}</div>
+          </section>
+        ))}
+      </div>
+
+      {successCount !== null && (
+        <Alert
+          message={
+            <div className="flex items-start gap-3 py-1">
+              <CheckCircle2 className="mt-0.5 h-5 w-5 text-emerald-500" />
               <div>
-                <div className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400">Generation Form</div>
-                <Title level={3} className="!mb-1 !mt-2 !text-2xl !font-black tracking-tight !text-slate-900">
-                  配置本次题目生成任务
-                </Title>
-                <Text className="text-sm font-medium text-slate-500">
-                  先输入题目方向，再决定本次生成数量。建议少量多次，方便挑选优质题目。
-                </Text>
-              </div>
-              <div className="rounded-full border border-emerald-200 bg-emerald-50 px-4 py-2 text-xs font-bold text-emerald-600">
-                结果会直接进入题目管理
+                <div className="text-base font-black text-emerald-800">生成成功</div>
+                <div className="mt-1 text-sm font-medium leading-6 text-emerald-700">
+                  已成功生成 {successCount} 道题目。建议现在回到题目管理查看结果，优先筛掉重复题和表达不稳的题干。
+                </div>
               </div>
             </div>
+          }
+          type="success"
+          className="rounded-[1.75rem] border-emerald-200 bg-emerald-50"
+          showIcon={false}
+        />
+      )}
 
-            <Form
-              form={form}
-              layout="vertical"
-              onFinish={doSubmit}
-              initialValues={{ number: 10 }}
-              requiredMark={false}
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
+        <section className="rounded-[2.25rem] border border-slate-200 bg-white px-6 py-6 shadow-xl shadow-slate-200/40 sm:px-8 sm:py-8">
+          <div className="mb-8 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.18em] text-slate-400">
+                <BrainCircuit className="h-3.5 w-3.5 text-primary" />
+                生成配置
+              </div>
+              <Title level={3} className="!mb-1 !mt-3 !text-2xl !font-black tracking-tight !text-slate-900">
+                配置本次题目生成任务
+              </Title>
+              <Text className="text-sm font-medium leading-6 text-slate-500">
+                先确定一个足够具体的技术方向，再决定本次数量。这个页面更适合少量多次生成，方便你后续筛题和复核答案质量。
+              </Text>
+            </div>
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-600">
+              默认会同时生成题干、标签和详细参考答案
+            </div>
+          </div>
+
+          <Form
+            form={form}
+            layout="vertical"
+            onFinish={doSubmit}
+            initialValues={{ number: 10 }}
+            requiredMark={false}
+          >
+            <Form.Item
+              label={<span className="font-bold text-slate-700">知识点 / 技术方向</span>}
+              name="questionType"
+              extra="输入越具体，生成结果越稳定。优先使用明确专题，不建议只写很大的技术名词。"
+              rules={[{ required: true, message: "请输入题目方向，如 Java、Spring Boot" }]}
             >
+              <Input
+                placeholder="例如：Redis 分布式锁实现、Kafka 消息可靠性保障..."
+                className="h-14 rounded-2xl border-slate-200 bg-slate-50 px-5 text-base font-medium transition-colors focus:bg-white"
+              />
+            </Form.Item>
+
+            <div className="grid gap-6 lg:grid-cols-[220px_minmax(0,1fr)]">
               <Form.Item
-                label={<span className="font-bold text-slate-700">知识点 / 技术方向</span>}
-                name="questionType"
-                rules={[{ required: true, message: "请输入题目方向，如 Java、Spring Boot" }]}
+                label={<span className="font-bold text-slate-700">生成数量</span>}
+                name="number"
+                extra="单次支持 1 - 20 道"
+                rules={[{ required: true }]}
               >
-                <Input
-                  placeholder="例如：Redis 分布式锁实现、Kafka 消息可靠性保障..."
-                  className="h-14 rounded-2xl border-slate-200 bg-slate-50 px-5 text-base font-medium transition-colors focus:bg-white"
+                <InputNumber
+                  min={1}
+                  max={20}
+                  className="h-14 w-full rounded-2xl border-slate-200 bg-slate-50 px-4"
+                  size="large"
                 />
               </Form.Item>
 
-              <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_220px]">
-                <Form.Item
-                  label={<span className="font-bold text-slate-700">生成数量</span>}
-                  name="number"
-                  rules={[{ required: true }]}
-                >
-                  <InputNumber
-                    min={1}
-                    max={20}
-                    className="h-14 w-full rounded-2xl border-slate-200 bg-slate-50 px-4"
-                    size="large"
-                  />
-                </Form.Item>
-
-                <div className="rounded-[1.75rem] border border-slate-200 bg-slate-50/80 p-4">
-                  <div className="text-xs font-black uppercase tracking-[0.18em] text-slate-400">快速数量</div>
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    {quickCounts.map((count) => {
-                      const active = selectedCount === count;
-                      return (
-                        <button
-                          key={count}
-                          type="button"
-                          onClick={() => form.setFieldValue("number", count)}
-                          className={`rounded-full px-3 py-2 text-sm font-bold transition ${
-                            active
-                              ? "bg-primary text-white shadow-lg shadow-primary/20"
-                              : "border border-slate-200 bg-white text-slate-500 hover:border-primary/30 hover:text-primary"
-                          }`}
-                        >
-                          {count} 道
-                        </button>
-                      );
-                    })}
+              <div className="rounded-[1.75rem] border border-slate-200 bg-slate-50/80 p-5">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <div className="text-sm font-black text-slate-800">快速数量</div>
+                    <div className="mt-1 text-xs font-medium text-slate-500">常用批量规模，点一下即可填充到表单</div>
+                  </div>
+                  <div className="rounded-full bg-white px-3 py-1 text-xs font-bold text-slate-500 ring-1 ring-slate-200">
+                    当前 {selectedCount || 10} 道
                   </div>
                 </div>
-              </div>
-
-              <div className="mt-2 rounded-[1.75rem] border border-slate-200 bg-slate-50/70 p-5">
-                <div className="text-xs font-black uppercase tracking-[0.18em] text-slate-400">生成建议</div>
-                <div className="mt-3 grid gap-3 sm:grid-cols-3">
-                  <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
-                    <div className="text-sm font-black text-slate-800">输入越聚焦越好</div>
-                    <div className="mt-1 text-xs font-medium leading-6 text-slate-500">优先输入具体专题，不要只写大类技术名词。</div>
-                  </div>
-                  <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
-                    <div className="text-sm font-black text-slate-800">建议分批生成</div>
-                    <div className="mt-1 text-xs font-medium leading-6 text-slate-500">一次 5-15 道更容易控制质量，也方便审核。</div>
-                  </div>
-                  <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
-                    <div className="text-sm font-black text-slate-800">生成后继续筛题</div>
-                    <div className="mt-1 text-xs font-medium leading-6 text-slate-500">生成结果会自动入库，但仍建议回到题目管理做复核。</div>
-                  </div>
+                <div className="mt-4 flex flex-wrap gap-2">
+                  {quickCounts.map((count) => {
+                    const active = selectedCount === count;
+                    return (
+                      <button
+                        key={count}
+                        type="button"
+                        onClick={() => form.setFieldValue("number", count)}
+                        className={`rounded-full px-4 py-2 text-sm font-bold transition ${
+                          active
+                            ? "bg-slate-900 text-white"
+                            : "border border-slate-200 bg-white text-slate-600 hover:border-primary/30 hover:text-primary"
+                        }`}
+                      >
+                        {count} 道
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
+            </div>
 
-              <div className="pt-8">
-                <Button
-                  loading={loading}
-                  type="primary"
-                  htmlType="submit"
-                  size="large"
-                  className="h-16 w-full whitespace-nowrap rounded-[1.3rem] border-none bg-primary text-lg font-black shadow-xl shadow-primary/20 hover:scale-[1.01] active:scale-[0.99] [&>span]:inline-flex [&>span]:items-center [&>span]:justify-center [&>span]:gap-2"
-                >
-                  {loading ? "正在生成题目..." : (
-                    <span className="inline-flex items-center gap-2 whitespace-nowrap">
-                      <Wand2 className="h-5 w-5" />
-                      立即开始生成
-                    </span>
-                  )}
-                </Button>
-              </div>
-            </Form>
-          </Card>
-        </Col>
-
-        <Col xs={24} xl={9}>
-          <div className="space-y-6">
-            {successCount !== null && (
-              <Alert
-                message={
-                  <div className="flex items-start gap-3 py-1">
-                    <CheckCircle2 className="mt-0.5 h-5 w-5 text-emerald-500" />
-                    <div>
-                      <div className="text-base font-black text-emerald-800">生成成功</div>
-                      <div className="mt-1 text-sm font-medium leading-6 text-emerald-700">
-                        已成功生成 {successCount} 道题目，建议直接回到题目管理查看生成结果并做进一步筛选。
-                      </div>
-                    </div>
-                  </div>
-                }
-                type="success"
-                className="rounded-[1.75rem] border-emerald-200 bg-emerald-50"
-                showIcon={false}
-              />
-            )}
-
-            <Card
-              className="rounded-[2rem] border-slate-100 shadow-xl shadow-slate-200/40"
-              bodyStyle={{ padding: "1.75rem" }}
-            >
-              <div className="flex items-center gap-2">
-                <Database className="h-5 w-5 text-primary" />
-                <Title level={4} className="!mb-0 !text-lg !font-black !text-slate-800">
-                  使用指南
-                </Title>
-              </div>
-              <div className="mt-5 space-y-4">
-                {generateRules.map((rule, index) => (
-                  <div key={rule} className="flex gap-3 rounded-[1.3rem] border border-slate-200 bg-slate-50/80 px-4 py-4">
-                    <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-slate-900 text-xs font-black text-white">
-                      {index + 1}
-                    </div>
-                    <Text className="text-sm font-medium leading-7 text-slate-600">{rule}</Text>
-                  </div>
-                ))}
-              </div>
-            </Card>
-
-            <Card
-              className="rounded-[2rem] border-slate-100 shadow-xl shadow-slate-200/40"
-              bodyStyle={{ padding: "1.75rem" }}
-            >
-              <div className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400">Example Topics</div>
-              <Title level={4} className="!mb-0 !mt-2 !text-lg !font-black !text-slate-800">
-                推荐输入示例
-              </Title>
-              <div className="mt-4 flex flex-wrap gap-2">
-                {exampleTopics.map((topic) => (
-                  <Tag
-                    key={topic}
-                    className="cursor-pointer rounded-full border-slate-200 px-3 py-1 text-sm font-semibold text-slate-600 transition hover:border-primary/30 hover:text-primary"
-                    onClick={() => form.setFieldValue("questionType", topic)}
+            <div className="mt-2 rounded-[1.75rem] border border-slate-200 bg-slate-50/70 p-5">
+              <div className="text-sm font-black text-slate-800">这次会一起生成</div>
+              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                {[
+                  "结构清晰的题目标题",
+                  "便于直接入库的题干内容",
+                  "可用于检索和筛选的标签",
+                  "尽量详细的结构化参考答案",
+                ].map((item) => (
+                  <div
+                    key={item}
+                    className="flex items-start gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3"
                   >
-                    {topic}
-                  </Tag>
+                    <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-500" />
+                    <span className="text-sm font-medium leading-6 text-slate-600">{item}</span>
+                  </div>
                 ))}
               </div>
-            </Card>
-          </div>
-        </Col>
-      </Row>
+            </div>
+
+            <div className="flex flex-col gap-4 pt-8 lg:flex-row lg:items-center lg:justify-between">
+              <div className="text-sm font-medium leading-6 text-slate-500">
+                建议先生成一小批，筛掉不满意的题目后，再继续补相邻专题。
+              </div>
+              <Button
+                loading={loading}
+                type="primary"
+                htmlType="submit"
+                size="large"
+                className="h-14 min-w-[220px] rounded-2xl border-none bg-slate-900 px-8 text-base font-black shadow-lg shadow-slate-300/60 hover:bg-slate-800 [&>span]:inline-flex [&>span]:items-center [&>span]:gap-2"
+              >
+                {loading ? "正在生成题目..." : (
+                  <span className="inline-flex items-center gap-2 whitespace-nowrap">
+                    <Wand2 className="h-5 w-5" />
+                    开始生成
+                  </span>
+                )}
+              </Button>
+            </div>
+          </Form>
+        </section>
+
+        <aside className="space-y-6">
+          <section className="rounded-[2rem] border border-slate-200 bg-white px-5 py-5 shadow-lg shadow-slate-200/40">
+            <div className="flex items-center gap-2">
+              <Database className="h-5 w-5 text-primary" />
+              <Title level={4} className="!mb-0 !text-lg !font-black !text-slate-800">
+                使用建议
+              </Title>
+            </div>
+            <div className="mt-5 space-y-3">
+              {generateRules.map((rule, index) => (
+                <div key={rule} className="flex gap-3 rounded-[1.3rem] border border-slate-200 bg-slate-50/80 px-4 py-4">
+                  <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-slate-900 text-xs font-black text-white">
+                    {index + 1}
+                  </div>
+                  <Text className="text-sm font-medium leading-7 text-slate-600">{rule}</Text>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          <section className="rounded-[2rem] border border-slate-200 bg-white px-5 py-5 shadow-lg shadow-slate-200/40">
+            <div className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400">Example Topics</div>
+            <Title level={4} className="!mb-0 !mt-2 !text-lg !font-black !text-slate-800">
+              推荐输入示例
+            </Title>
+            <div className="mt-4 flex flex-wrap gap-2">
+              {exampleTopics.map((topic) => (
+                <Tag
+                  key={topic}
+                  className="cursor-pointer rounded-full border-slate-200 px-3 py-1 text-sm font-semibold text-slate-600 transition hover:border-primary/30 hover:text-primary"
+                  onClick={() => form.setFieldValue("questionType", topic)}
+                >
+                  {topic}
+                </Tag>
+              ))}
+            </div>
+          </section>
+        </aside>
+      </div>
     </div>
   );
 };

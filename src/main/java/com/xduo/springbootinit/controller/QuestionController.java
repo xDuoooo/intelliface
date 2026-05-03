@@ -78,6 +78,7 @@ public class QuestionController {
     private static final long MAX_RESUME_FILE_SIZE = 2 * 1024 * 1024L;
     private static final long MAX_AUDIO_FILE_SIZE = 8 * 1024 * 1024L;
     private static final int MAX_ANSWER_EVALUATE_LENGTH = 5000;
+    private static final int AI_GENERATE_ANSWER_BATCH_SIZE = 5;
     private static final Set<String> SUPPORTED_RESUME_FILE_SUFFIX_SET = Set.of("txt", "md", "markdown", "docx", "pdf");
     private static final Set<String> SUPPORTED_AUDIO_FILE_SUFFIX_SET = Set.of("webm", "wav", "mp3", "m4a", "mp4", "ogg", "oga");
 
@@ -652,23 +653,21 @@ public class QuestionController {
         // 获取登录用户
         User loginUser = userService.getLoginUser(request);
 
-        // 构造 Prompt
+        // 第一步：先生成题目骨架（不直接写答案）
         String systemPrompt = "你是一位资深技术面试官，负责为面试题库生产可直接入库的高质量题目。"
                 + "请严格输出 JSON 数组，不要输出 Markdown 代码块，不要输出额外解释。"
-                + "数组中的每个对象必须包含 title、content、tags、answer、difficulty 五个字段。"
+                + "数组中的每个对象必须包含 title、content、tags、difficulty 四个字段。"
                 + "其中 tags 必须是字符串数组，title 简洁明确，content 描述题目要求。"
                 + "difficulty 必须且只能是：简单、中等、困难 三者之一，要根据题目考察深度、候选人经验要求和作答复杂度合理判断。"
-                + "answer 必须给出尽可能详细、可直接用于学习和复习的结构化参考答案，不能只写几句概括，也不能只堆关键词。"
-                + "每个 answer 默认按照以下结构展开：核心结论、底层原理、实现步骤或执行流程、工程实践或示例、常见问题/边界条件/性能影响、面试作答总结。"
-                + "对于原理题，要解释为什么；对于场景题，要写清分析过程、方案取舍和落地细节；对于设计题，要覆盖约束、方案、优缺点和扩展性。"
-                + "除非题目天然非常简单，否则 answer 请尽量写成 300 字以上，多分点展开，保证信息充分、细节充足、可读性强。";
-        String userPrompt = String.format("知识点：%s，数量：%d。请优先生成中高级技术面试里高频、能区分候选人水平、适合配详细参考答案的题目。", questionType, number);
+                + "请优先生成中高级技术面试里高频、能区分候选人水平、适合配详细参考答案的题目。";
+        String userPrompt = String.format("知识点：%s，数量：%d。请输出适合直接入库的题目骨架。", questionType, number);
 
         // 调用 AI
         String result = aiManager.doChat(systemPrompt, userPrompt);
 
         try {
             List<AiGeneratedQuestion> generatedQuestionList = parseAiGeneratedQuestions(result);
+            enrichGeneratedQuestionAnswers(generatedQuestionList);
             int successCount = 0;
             for (AiGeneratedQuestion generatedQuestion : generatedQuestionList) {
                 if (StringUtils.isAnyBlank(generatedQuestion.getTitle(), generatedQuestion.getContent(), generatedQuestion.getAnswer())) {
@@ -696,6 +695,148 @@ public class QuestionController {
             log.error("AI 结果解析失败", e);
             throw new BusinessException(ErrorCode.SYSTEM_ERROR, "AI 生成数据格式不正确");
         }
+    }
+
+    private void enrichGeneratedQuestionAnswers(List<AiGeneratedQuestion> generatedQuestionList) {
+        if (generatedQuestionList == null || generatedQuestionList.isEmpty()) {
+            return;
+        }
+        for (int start = 0; start < generatedQuestionList.size(); start += AI_GENERATE_ANSWER_BATCH_SIZE) {
+            int end = Math.min(generatedQuestionList.size(), start + AI_GENERATE_ANSWER_BATCH_SIZE);
+            List<AiGeneratedQuestion> batch = generatedQuestionList.subList(start, end);
+            List<AiGeneratedAnswerPlan> answerPlanList = generateAnswerPlans(batch);
+            List<AiGeneratedAnswerResult> answerResultList = generateAnswersByPlans(batch, answerPlanList);
+            for (int i = 0; i < batch.size(); i++) {
+                AiGeneratedQuestion question = batch.get(i);
+                AiGeneratedAnswerResult answerResult = findAnswerResultByIndex(answerResultList, i);
+                if (answerResult != null && StringUtils.isNotBlank(answerResult.getAnswer())) {
+                    question.setAnswer(answerResult.getAnswer().trim());
+                }
+            }
+        }
+    }
+
+    private List<AiGeneratedAnswerPlan> generateAnswerPlans(List<AiGeneratedQuestion> questionBatch) {
+        String systemPrompt = "你是一位技术题解编辑，当前任务不是直接写答案，而是先判断每道题最适合拆成几部分回答。"
+                + "请严格输出 JSON 数组，不要输出 Markdown 代码块，不要输出额外解释。"
+                + "数组中的每个对象必须包含 index、partTitles、guidance 三个字段。"
+                + "index 是题目序号；partTitles 是字符串数组，表示这道题最适合拆分成的回答部分标题，数量建议 2 到 6 个；guidance 是一句话说明这道题作答时的重点。"
+                + "请根据每道题的题型自定义 partTitles，不要所有题都复用同一套标题。"
+                + "如果是原理题，更适合按概念、机制、场景、误区来拆；如果是设计题，更适合按目标、方案、取舍、风险来拆；如果是场景题，更适合按背景、分析、动作、结果来拆。";
+        String userPrompt = buildAnswerPlanUserPrompt(questionBatch);
+        String result = aiManager.doChat(systemPrompt, userPrompt);
+        List<AiGeneratedAnswerPlan> planList = parseAiGeneratedAnswerPlans(result);
+        for (int i = 0; i < questionBatch.size(); i++) {
+            AiGeneratedAnswerPlan plan = findAnswerPlanByIndex(planList, i);
+            if (plan == null || plan.getPartTitles() == null || plan.getPartTitles().isEmpty()) {
+                planList.add(buildFallbackAnswerPlan(i, questionBatch.get(i)));
+            }
+        }
+        return planList;
+    }
+
+    private List<AiGeneratedAnswerResult> generateAnswersByPlans(List<AiGeneratedQuestion> questionBatch,
+                                                                 List<AiGeneratedAnswerPlan> answerPlanList) {
+        String systemPrompt = "你是一位资深技术面试官，负责为题库撰写详细参考答案。"
+                + "你会先收到每道题的回答拆分方案，请基于对应的 partTitles 和 guidance 写答案。"
+                + "请严格输出 JSON 数组，不要输出 Markdown 代码块，不要输出额外解释。"
+                + "数组中的每个对象必须包含 index、answer 两个字段。"
+                + "answer 要尽可能详细、可直接用于学习复习和面试作答，优先 300 字以上。"
+                + "每道题的结构要贴合它自己的题型，不要所有题都套用同一组标题。"
+                + "可以使用小标题、编号或自然分段，但要围绕对应的 partTitles 展开，写清原因、步骤、取舍、边界条件、工程示例和常见坑点。";
+        String userPrompt = buildAnswerGenerationUserPrompt(questionBatch, answerPlanList);
+        String result = aiManager.doChat(systemPrompt, userPrompt);
+        return parseAiGeneratedAnswerResults(result);
+    }
+
+    private String buildAnswerPlanUserPrompt(List<AiGeneratedQuestion> questionBatch) {
+        StringBuilder promptBuilder = new StringBuilder("请为下面每道题设计最适合的回答拆分方案：\n");
+        for (int i = 0; i < questionBatch.size(); i++) {
+            AiGeneratedQuestion question = questionBatch.get(i);
+            promptBuilder.append("\n题目序号：").append(i)
+                    .append("\n标题：").append(StringUtils.defaultString(question.getTitle()))
+                    .append("\n难度：").append(normalizeGeneratedDifficulty(question.getDifficulty()))
+                    .append("\n题干：").append(StringUtils.defaultString(question.getContent()))
+                    .append("\n标签：").append(question.getTags() == null ? "[]" : JSONUtil.toJsonStr(question.getTags()))
+                    .append("\n");
+        }
+        return promptBuilder.toString();
+    }
+
+    private String buildAnswerGenerationUserPrompt(List<AiGeneratedQuestion> questionBatch,
+                                                   List<AiGeneratedAnswerPlan> answerPlanList) {
+        StringBuilder promptBuilder = new StringBuilder("请根据每道题的回答拆分方案生成最终参考答案：\n");
+        for (int i = 0; i < questionBatch.size(); i++) {
+            AiGeneratedQuestion question = questionBatch.get(i);
+            AiGeneratedAnswerPlan answerPlan = findAnswerPlanByIndex(answerPlanList, i);
+            if (answerPlan == null) {
+                answerPlan = buildFallbackAnswerPlan(i, question);
+            }
+            promptBuilder.append("\n题目序号：").append(i)
+                    .append("\n标题：").append(StringUtils.defaultString(question.getTitle()))
+                    .append("\n难度：").append(normalizeGeneratedDifficulty(question.getDifficulty()))
+                    .append("\n题干：").append(StringUtils.defaultString(question.getContent()))
+                    .append("\n标签：").append(question.getTags() == null ? "[]" : JSONUtil.toJsonStr(question.getTags()))
+                    .append("\n回答分段：").append(JSONUtil.toJsonStr(answerPlan.getPartTitles()))
+                    .append("\n作答重点：").append(StringUtils.defaultString(answerPlan.getGuidance()))
+                    .append("\n");
+        }
+        return promptBuilder.toString();
+    }
+
+    private AiGeneratedAnswerPlan buildFallbackAnswerPlan(int index, AiGeneratedQuestion question) {
+        String titleAndContent = StringUtils.defaultString(question == null ? null : question.getTitle())
+                + " " + StringUtils.defaultString(question == null ? null : question.getContent());
+        List<String> partTitles = new ArrayList<>();
+        String guidance;
+        if (titleAndContent.contains("设计") || titleAndContent.contains("架构") || titleAndContent.contains("系统")) {
+            partTitles.add("问题背景与目标");
+            partTitles.add("核心方案设计");
+            partTitles.add("关键取舍与风险");
+            partTitles.add("落地优化方向");
+            guidance = "重点写清业务约束、方案结构、优缺点和扩展性。";
+        } else if (titleAndContent.contains("场景") || titleAndContent.contains("如何") || titleAndContent.contains("怎么")) {
+            partTitles.add("场景与核心问题");
+            partTitles.add("分析思路");
+            partTitles.add("解决方案");
+            partTitles.add("常见风险与实践建议");
+            guidance = "重点写清判断过程、处理步骤和工程化经验。";
+        } else {
+            partTitles.add("核心结论");
+            partTitles.add("关键机制");
+            partTitles.add("应用场景");
+            partTitles.add("常见问题与边界");
+            guidance = "重点写清原理解释、适用场景和常见误区。";
+        }
+        AiGeneratedAnswerPlan plan = new AiGeneratedAnswerPlan();
+        plan.setIndex(index);
+        plan.setPartTitles(partTitles);
+        plan.setGuidance(guidance);
+        return plan;
+    }
+
+    private AiGeneratedAnswerPlan findAnswerPlanByIndex(List<AiGeneratedAnswerPlan> answerPlanList, int index) {
+        if (answerPlanList == null) {
+            return null;
+        }
+        for (AiGeneratedAnswerPlan answerPlan : answerPlanList) {
+            if (answerPlan != null && Objects.equals(answerPlan.getIndex(), index)) {
+                return answerPlan;
+            }
+        }
+        return null;
+    }
+
+    private AiGeneratedAnswerResult findAnswerResultByIndex(List<AiGeneratedAnswerResult> answerResultList, int index) {
+        if (answerResultList == null) {
+            return null;
+        }
+        for (AiGeneratedAnswerResult answerResult : answerResultList) {
+            if (answerResult != null && Objects.equals(answerResult.getIndex(), index)) {
+                return answerResult;
+            }
+        }
+        return null;
     }
 
     /**
@@ -1158,6 +1299,34 @@ public class QuestionController {
         return content.trim();
     }
 
+    private List<AiGeneratedAnswerPlan> parseAiGeneratedAnswerPlans(String rawContent) {
+        String jsonText = normalizeAiJson(rawContent);
+        if (jsonText.startsWith("[")) {
+            return JSONUtil.toList(jsonText, AiGeneratedAnswerPlan.class);
+        }
+        if (jsonText.startsWith("{")) {
+            JSONObject jsonObject = JSONUtil.parseObj(jsonText);
+            JSONArray plans = jsonObject.getJSONArray("plans");
+            ThrowUtils.throwIf(plans == null || plans.isEmpty(), ErrorCode.SYSTEM_ERROR, "AI 未返回答案拆分方案");
+            return JSONUtil.toList(plans, AiGeneratedAnswerPlan.class);
+        }
+        throw new BusinessException(ErrorCode.SYSTEM_ERROR, "AI 返回的答案拆分方案不是合法 JSON");
+    }
+
+    private List<AiGeneratedAnswerResult> parseAiGeneratedAnswerResults(String rawContent) {
+        String jsonText = normalizeAiJson(rawContent);
+        if (jsonText.startsWith("[")) {
+            return JSONUtil.toList(jsonText, AiGeneratedAnswerResult.class);
+        }
+        if (jsonText.startsWith("{")) {
+            JSONObject jsonObject = JSONUtil.parseObj(jsonText);
+            JSONArray answers = jsonObject.getJSONArray("answers");
+            ThrowUtils.throwIf(answers == null || answers.isEmpty(), ErrorCode.SYSTEM_ERROR, "AI 未返回参考答案");
+            return JSONUtil.toList(answers, AiGeneratedAnswerResult.class);
+        }
+        throw new BusinessException(ErrorCode.SYSTEM_ERROR, "AI 返回的参考答案不是合法 JSON");
+    }
+
     private String normalizeGeneratedDifficulty(String difficulty) {
         String normalized = StringUtils.trimToEmpty(difficulty);
         if (StringUtils.isBlank(normalized)) {
@@ -1183,6 +1352,19 @@ public class QuestionController {
         private List<String> tags;
         private String answer;
         private String difficulty;
+    }
+
+    @Data
+    private static class AiGeneratedAnswerPlan {
+        private Integer index;
+        private List<String> partTitles;
+        private String guidance;
+    }
+
+    @Data
+    private static class AiGeneratedAnswerResult {
+        private Integer index;
+        private String answer;
     }
 
 }

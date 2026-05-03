@@ -655,8 +655,9 @@ public class QuestionController {
         // 构造 Prompt
         String systemPrompt = "你是一位资深技术面试官，负责为面试题库生产可直接入库的高质量题目。"
                 + "请严格输出 JSON 数组，不要输出 Markdown 代码块，不要输出额外解释。"
-                + "数组中的每个对象必须包含 title、content、tags、answer 四个字段。"
+                + "数组中的每个对象必须包含 title、content、tags、answer、difficulty 五个字段。"
                 + "其中 tags 必须是字符串数组，title 简洁明确，content 描述题目要求。"
+                + "difficulty 必须且只能是：简单、中等、困难 三者之一，要根据题目考察深度、候选人经验要求和作答复杂度合理判断。"
                 + "answer 必须给出尽可能详细、可直接用于学习和复习的结构化参考答案，不能只写几句概括，也不能只堆关键词。"
                 + "每个 answer 默认按照以下结构展开：核心结论、底层原理、实现步骤或执行流程、工程实践或示例、常见问题/边界条件/性能影响、面试作答总结。"
                 + "对于原理题，要解释为什么；对于场景题，要写清分析过程、方案取舍和落地细节；对于设计题，要覆盖约束、方案、优缺点和扩展性。"
@@ -677,6 +678,7 @@ public class QuestionController {
                 question.setTitle(generatedQuestion.getTitle().trim());
                 question.setContent(generatedQuestion.getContent().trim());
                 question.setAnswer(generatedQuestion.getAnswer().trim());
+                question.setDifficulty(normalizeGeneratedDifficulty(generatedQuestion.getDifficulty()));
                 if (generatedQuestion.getTags() != null) {
                     question.setTags(JSONUtil.toJsonStr(generatedQuestion.getTags()));
                 }
@@ -1156,12 +1158,31 @@ public class QuestionController {
         return content.trim();
     }
 
+    private String normalizeGeneratedDifficulty(String difficulty) {
+        String normalized = StringUtils.trimToEmpty(difficulty);
+        if (StringUtils.isBlank(normalized)) {
+            return QuestionConstant.DIFFICULTY_MEDIUM;
+        }
+        if (QuestionConstant.ALLOWED_DIFFICULTY_SET.contains(normalized)) {
+            return normalized;
+        }
+        String lower = normalized.toLowerCase(Locale.ROOT);
+        if (normalized.contains("简") || lower.contains("easy") || lower.contains("junior") || lower.contains("basic")) {
+            return QuestionConstant.DIFFICULTY_EASY;
+        }
+        if (normalized.contains("难") || lower.contains("hard") || lower.contains("senior") || lower.contains("advanced")) {
+            return QuestionConstant.DIFFICULTY_HARD;
+        }
+        return QuestionConstant.DIFFICULTY_MEDIUM;
+    }
+
     @Data
     private static class AiGeneratedQuestion {
         private String title;
         private String content;
         private List<String> tags;
         private String answer;
+        private String difficulty;
     }
 
 }

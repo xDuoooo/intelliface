@@ -36,7 +36,7 @@ const workflowHighlights = [
   {
     title: "自动入库",
     value: "JSON",
-    description: "题目、标签、参考答案会一起落库，减少人工整理成本。",
+    description: "题目、标签、难度、参考答案会一起落库，减少人工整理成本。",
   },
   {
     title: "结果可追溯",
@@ -106,7 +106,7 @@ const AiGenerateQuestionPage: React.FC = () => {
               <Badge count="Beta" color="#2563eb" />
             </div>
             <Paragraph className="!mb-0 !mt-2 max-w-4xl text-base font-medium leading-7 text-slate-500">
-              这是给题目管理用的批量生成工作台。输入一个明确方向，系统会直接生成题目、标签和详细参考答案并入库，适合补齐专题内容后再回到题目管理做筛选和复核。
+              这是给题目管理用的批量生成工作台。输入一个明确方向，系统会直接生成题目、标签、难度和详细参考答案并入库，适合补齐专题内容后再回到题目管理做筛选和复核。
             </Paragraph>
           </div>
         </div>
@@ -174,7 +174,7 @@ const AiGenerateQuestionPage: React.FC = () => {
               </Text>
             </div>
             <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-600">
-              默认会同时生成题干、标签和详细参考答案
+              默认会同时生成题干、标签、难度和详细参考答案
             </div>
           </div>
 
@@ -251,6 +251,7 @@ const AiGenerateQuestionPage: React.FC = () => {
                   "结构清晰的题目标题",
                   "便于直接入库的题干内容",
                   "可用于检索和筛选的标签",
+                  "简单 / 中等 / 困难 难度",
                   "尽量详细的结构化参考答案",
                 ].map((item) => (
                   <div

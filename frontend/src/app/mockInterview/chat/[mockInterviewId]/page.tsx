@@ -440,9 +440,14 @@ export default function InterviewRoomPage({ params }: { params: { mockInterviewI
     return null;
   }, [messages]);
 
+  const shouldPauseQuestionTimer = submitting && isStarted && !isEnded;
+
   useEffect(() => {
     if (!latestQuestionMessage?.timestamp || isEnded || !isStarted) {
       setQuestionElapsedSeconds(0);
+      return;
+    }
+    if (shouldPauseQuestionTimer) {
       return;
     }
     const updateElapsed = () => {
@@ -451,7 +456,7 @@ export default function InterviewRoomPage({ params }: { params: { mockInterviewI
     updateElapsed();
     const timer = window.setInterval(updateElapsed, 1000);
     return () => window.clearInterval(timer);
-  }, [isEnded, isStarted, latestQuestionMessage?.timestamp]);
+  }, [isEnded, isStarted, latestQuestionMessage?.timestamp, shouldPauseQuestionTimer]);
 
   const stopSpeaking = useCallback(() => {
     if (typeof window !== "undefined" && "speechSynthesis" in window) {

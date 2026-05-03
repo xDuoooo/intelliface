@@ -1060,33 +1060,47 @@ export default function InterviewRoomPage({ params }: { params: { mockInterviewI
                       <List.Item
                         className={item.isAI ? "message-row ai" : "message-row user"}
                       >
-                        <div className={`message-bubble ${item.isAI ? "ai" : "user"}`}>
-                          <div className="message-head">
-                            <span className="speaker">{item.isAI ? "面试官" : "候选人"}</span>
-                            {formatMessageStage(item.stage) ? (
-                              <span className={`stage-tag ${item.stage || ""}`}>{formatMessageStage(item.stage)}</span>
-                            ) : null}
-                            {item.round ? <span className="round-tag">第 {item.round} 轮</span> : null}
+                        <div className={`message-shell ${item.isAI ? "ai" : "user"}`}>
+                          <div className={`message-avatar ${item.isAI ? "ai" : "user"}`}>
+                            {item.isAI ? <BrainCircuit size={16} /> : "你"}
                           </div>
-                          <div className="message-content">{item.content}</div>
-                          <div className="message-time">{formatTime(item.timestamp)}</div>
+                          <div className={`message-stack ${item.isAI ? "ai" : "user"}`}>
+                            <div className="message-meta">
+                              <span className="speaker">{item.isAI ? "面试官" : "候选人"}</span>
+                              {formatMessageStage(item.stage) ? (
+                                <span className={`stage-tag ${item.stage || ""}`}>{formatMessageStage(item.stage)}</span>
+                              ) : null}
+                              {item.round ? <span className="round-tag">第 {item.round} 轮</span> : null}
+                              <span className="message-time">{formatTime(item.timestamp)}</span>
+                            </div>
+                            <div className={`message-bubble ${item.isAI ? "ai" : "user"}`}>
+                              <div className="message-content">{item.content}</div>
+                            </div>
+                          </div>
                         </div>
                       </List.Item>
                     )}
                   />
                   {streamingReply?.content ? (
                     <div className="message-row ai">
-                      <div className="message-bubble ai streaming">
-                        <div className="message-head">
-                          <span className="speaker">面试官输入中</span>
-                          {formatMessageStage(streamingReply.stage) ? (
-                            <span className={`stage-tag ${streamingReply.stage || ""}`}>{formatMessageStage(streamingReply.stage)}</span>
-                          ) : null}
-                          {streamingReply.round ? (
-                            <span className="round-tag">第 {streamingReply.round} 轮</span>
-                          ) : null}
+                      <div className="message-shell ai">
+                        <div className="message-avatar ai">
+                          <BrainCircuit size={16} />
                         </div>
-                        <div className="message-content">{streamingReply.content}</div>
+                        <div className="message-stack ai">
+                          <div className="message-meta">
+                            <span className="speaker">面试官输入中</span>
+                            {formatMessageStage(streamingReply.stage) ? (
+                              <span className={`stage-tag ${streamingReply.stage || ""}`}>{formatMessageStage(streamingReply.stage)}</span>
+                            ) : null}
+                            {streamingReply.round ? (
+                              <span className="round-tag">第 {streamingReply.round} 轮</span>
+                            ) : null}
+                          </div>
+                          <div className="message-bubble ai streaming">
+                            <div className="message-content">{streamingReply.content}</div>
+                          </div>
+                        </div>
                       </div>
                     </div>
                   ) : null}

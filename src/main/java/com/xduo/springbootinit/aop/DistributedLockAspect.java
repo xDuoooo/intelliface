@@ -1,6 +1,8 @@
 package com.xduo.springbootinit.aop;
 
 import com.xduo.springbootinit.annotation.DistributedLock;
+import com.xduo.springbootinit.common.ErrorCode;
+import com.xduo.springbootinit.exception.BusinessException;
 import jakarta.annotation.Resource;
 import org.aspectj.lang.ProceedingJoinPoint;
 import org.aspectj.lang.annotation.Around;
@@ -19,30 +21,29 @@ public class DistributedLockAspect {
     private RedissonClient redissonClient;
 
     @Around("@annotation(distributedLock)")
-    public Object around(ProceedingJoinPoint joinPoint, DistributedLock distributedLock) throws Exception {
+    public Object around(ProceedingJoinPoint joinPoint, DistributedLock distributedLock) throws Throwable {
         String lockKey = distributedLock.key();
         long waitTime = distributedLock.waitTime();
         long leaseTime = distributedLock.leaseTime();
         TimeUnit timeUnit = distributedLock.timeUnit();
 
         RLock lock = redissonClient.getLock(lockKey);
-
-        boolean acquired = false;
+        boolean acquired;
         try {
-            // 尝试获取锁
             acquired = lock.tryLock(waitTime, leaseTime, timeUnit);
-            if (acquired) {
-                // 获取锁成功，执行目标方法
-                return joinPoint.proceed();
-            } else {
-                // 获取锁失败，抛出异常或处理逻辑
-                throw new RuntimeException("Could not acquire lock: " + lockKey);
-            }
-        } catch (Throwable e) {
-            throw new Exception(e);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new BusinessException(ErrorCode.OPERATION_ERROR, "获取分布式锁被中断，请稍后重试");
+        }
+
+        if (!acquired) {
+            throw new BusinessException(ErrorCode.OPERATION_ERROR, "系统繁忙，请稍后重试");
+        }
+
+        try {
+            return joinPoint.proceed();
         } finally {
-            if (acquired) {
-                // 释放锁
+            if (lock.isHeldByCurrentThread()) {
                 lock.unlock();
             }
         }

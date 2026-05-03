@@ -31,7 +31,7 @@ import java.util.Calendar;
 import java.util.Date;
 
 /**
- * 管理员操作日志接口
+ * Admin operation log APIs.
  */
 @RestController
 @RequestMapping("/admin/log")
@@ -41,9 +41,6 @@ public class AdminOperationLogController {
     @Resource
     private AdminOperationLogService adminOperationLogService;
 
-    /**
-     * 分页查询操作日志（仅管理员可用）
-     */
     @PostMapping("/list/page")
     @SaCheckRole(UserConstant.ADMIN_ROLE)
     public BaseResponse<Page<AdminOperationLog>> listAdminOperationLogByPage(@RequestBody AdminOperationLogQueryRequest queryRequest) {
@@ -61,9 +58,6 @@ public class AdminOperationLogController {
         return ResultUtils.success(logPage);
     }
 
-    /**
-     * 导出操作日志（仅管理员可用）
-     */
     @PostMapping("/export")
     @SaCheckRole(UserConstant.ADMIN_ROLE)
     public void exportAdminOperationLog(@RequestBody(required = false) AdminOperationLogQueryRequest queryRequest,
@@ -71,12 +65,14 @@ public class AdminOperationLogController {
         AdminOperationLogQueryRequest safeQuery = queryRequest == null ? new AdminOperationLogQueryRequest() : queryRequest;
         QueryWrapper<AdminOperationLog> queryWrapper = buildQueryWrapper(safeQuery);
         queryWrapper.last("limit 1000");
+
         String fileName = URLEncoder.encode("admin-operation-log.csv", StandardCharsets.UTF_8);
         response.setCharacterEncoding(StandardCharsets.UTF_8.name());
         response.setContentType("text/csv;charset=UTF-8");
         response.setHeader("Content-Disposition", "attachment; filename*=UTF-8''" + fileName);
+
         StringBuilder csvBuilder = new StringBuilder("\uFEFF");
-        csvBuilder.append("ID,操作者ID,操作者名称,操作描述,方法名,IP地址,操作时间,请求参数\n");
+        csvBuilder.append("ID,操作员ID,操作员名称,操作描述,方法名,IP地址,操作时间,请求参数\n");
         adminOperationLogService.list(queryWrapper).forEach(item -> csvBuilder
                 .append(csvEscape(item.getId()))
                 .append(',')
@@ -171,6 +167,22 @@ public class AdminOperationLogController {
 
     private String csvEscape(Object value) {
         String text = value == null ? "" : String.valueOf(value);
+        text = neutralizeCsvFormula(text);
         return "\"" + text.replace("\"", "\"\"") + "\"";
+    }
+
+    private String neutralizeCsvFormula(String text) {
+        if (StringUtils.isBlank(text)) {
+            return text;
+        }
+        String trimmed = StringUtils.stripStart(text, null);
+        if (StringUtils.isBlank(trimmed)) {
+            return text;
+        }
+        char firstChar = trimmed.charAt(0);
+        if (firstChar == '=' || firstChar == '+' || firstChar == '-' || firstChar == '@') {
+            return "'" + text;
+        }
+        return text;
     }
 }

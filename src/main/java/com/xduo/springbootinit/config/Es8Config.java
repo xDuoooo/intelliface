@@ -9,6 +9,7 @@ import org.apache.http.conn.ssl.NoopHostnameVerifier;
 import org.apache.http.conn.ssl.TrustAllStrategy;
 import org.apache.http.impl.client.BasicCredentialsProvider;
 import org.apache.http.ssl.SSLContextBuilder;
+import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.elasticsearch.RestClientBuilderCustomizer;
 import org.springframework.context.annotation.Bean;
@@ -22,10 +23,10 @@ import javax.net.ssl.SSLContext;
 @Configuration
 public class Es8Config {
 
-    @Value("${spring.elasticsearch.username}")
+    @Value("${spring.elasticsearch.username:}")
     private String username;
 
-    @Value("${spring.elasticsearch.password}")
+    @Value("${spring.elasticsearch.password:}")
     private String password;
 
     @Value("${app.elasticsearch.connect-timeout-ms:1000}")
@@ -51,8 +52,15 @@ public class Es8Config {
                         .build();
 
                 // 2. 构造身份认证信息
+                boolean hasUsername = StringUtils.isNotBlank(username);
+                boolean hasPassword = StringUtils.isNotBlank(password);
+                if (hasUsername != hasPassword) {
+                    throw new IllegalStateException("spring.elasticsearch.username and password must be configured together");
+                }
                 final CredentialsProvider credentialsProvider = new BasicCredentialsProvider();
-                credentialsProvider.setCredentials(AuthScope.ANY, new UsernamePasswordCredentials(username, password));
+                if (hasUsername) {
+                    credentialsProvider.setCredentials(AuthScope.ANY, new UsernamePasswordCredentials(username, password));
+                }
 
                 // 3. 应用配置
                 // 注意：在 SB3 中，如果手动 setHttpClientConfigCallback，会覆盖自动配置的逻辑
@@ -61,10 +69,15 @@ public class Es8Config {
                         .setConnectTimeout(connectTimeoutMs)
                         .setSocketTimeout(socketTimeoutMs)
                         .setConnectionRequestTimeout(connectionRequestTimeoutMs));
-                builder.setHttpClientConfigCallback(httpClientBuilder -> httpClientBuilder
-                        .setSSLContext(sslContext)
-                        .setSSLHostnameVerifier(NoopHostnameVerifier.INSTANCE)
-                        .setDefaultCredentialsProvider(credentialsProvider));
+                builder.setHttpClientConfigCallback(httpClientBuilder -> {
+                    httpClientBuilder
+                            .setSSLContext(sslContext)
+                            .setSSLHostnameVerifier(NoopHostnameVerifier.INSTANCE);
+                    if (hasUsername) {
+                        httpClientBuilder.setDefaultCredentialsProvider(credentialsProvider);
+                    }
+                    return httpClientBuilder;
+                });
                 
             } catch (Exception e) {
                 throw new RuntimeException("ES 客户端配置失败", e);

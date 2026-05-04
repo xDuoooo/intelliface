@@ -440,7 +440,7 @@ const CreateMockInterviewPage: React.FC<Props> = (props) => {
             <Select options={difficultyOptions} placeholder="请选择面试难度" />
           </Form.Item>
 
-          <Form.Item label="面试深度" name="expectedRounds">
+          <Form.Item className="depth-field" label="面试深度" name="expectedRounds">
             <Select
               options={INTERVIEW_DEPTH_PRESETS.map((item) => ({
                 label: `${item.label} · ${item.durationText}`,

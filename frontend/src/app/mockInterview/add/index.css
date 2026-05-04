@@ -62,6 +62,10 @@
     gap: 16px;
 }
 
+#createMockInterviewPage .create-grid .depth-field {
+    grid-column: 1 / -1;
+}
+
 #createMockInterviewPage .resume-import-card {
     border-radius: 22px;
     background: #f8fafc;

@@ -18,6 +18,13 @@ public class SqlUtils {
         if (StringUtils.isBlank(sortField)) {
             return false;
         }
-        return !StringUtils.containsAny(sortField, "=", "(", ")", " ");
+        String normalizedSortField = StringUtils.trim(sortField);
+        if (StringUtils.equalsAnyIgnoreCase(normalizedSortField, "undefined", "null")) {
+            return false;
+        }
+        if (StringUtils.containsAny(normalizedSortField, "=", "(", ")", " ")) {
+            return false;
+        }
+        return normalizedSortField.matches("^[A-Za-z0-9_]+$");
     }
 }

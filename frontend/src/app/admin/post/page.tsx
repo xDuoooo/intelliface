@@ -19,6 +19,7 @@ import {
   reviewPostUsingPost,
 } from "@/api/postController";
 import { POST_REVIEW_STATUS_COLOR_MAP, POST_REVIEW_STATUS_TEXT_MAP } from "@/constants/post";
+import { extractSortParams } from "@/lib/utils";
 
 const PostEditorForm = dynamic(() => import("@/components/PostEditorForm"), {
   ssr: false,
@@ -69,8 +70,7 @@ const PostAdminPage: React.FC = () => {
   };
 
   const buildPostQueryRequest = (params: Record<string, any>, sort: Record<string, any>) => {
-    const sortField = Object.keys(sort || {})?.[0];
-    const sortOrder = sortField ? sort?.[sortField] : undefined;
+    const { sortField, sortOrder } = extractSortParams(sort);
     return {
       current: Number(params.current) || 1,
       pageSize: Number(params.pageSize) || 10,

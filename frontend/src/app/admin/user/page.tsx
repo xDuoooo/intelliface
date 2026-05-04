@@ -11,6 +11,7 @@ import { message, Space, Tag, Popconfirm } from "antd";
 import { useSelector } from "react-redux";
 import { RootState } from "@/stores";
 import { CITY_GROUP_OPTIONS, CITY_VALUE_ENUM } from "@/config/cityOptions";
+import { extractSortParams } from "@/lib/utils";
 
 const CreateModal = dynamic(() => import("./components/CreateModal"));
 const UpdateModal = dynamic(() => import("./components/UpdateModal"));
@@ -198,8 +199,7 @@ const UserAdminPage: React.FC = () => {
           }}
           request={async (params, sort, filter) => {
             try {
-              const sortField = Object.keys(sort)?.[0];
-              const sortOrder = sort?.[sortField] ?? undefined;
+              const { sortField, sortOrder } = extractSortParams(sort as Record<string, "ascend" | "descend" | null>);
               // @ts-ignore
               const res = await listUserByPageUsingPost({
                 ...params,

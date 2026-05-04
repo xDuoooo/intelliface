@@ -131,3 +131,32 @@ export function formatRelativeTime(value?: string | number | Date | null, fallba
     locale: zhCN,
   });
 }
+
+/**
+ * 从 ProTable / Table 的 sort 对象中安全提取排序参数
+ */
+export function extractSortParams(
+  sort?: Record<string, "ascend" | "descend" | null | undefined>,
+): {
+  sortField?: string;
+  sortOrder?: "ascend" | "descend";
+} {
+  const rawSortField = Object.keys(sort || {}).find((key) => {
+    const normalizedKey = String(key || "").trim();
+    return Boolean(normalizedKey)
+      && normalizedKey !== "undefined"
+      && normalizedKey !== "null"
+      && /^[A-Za-z0-9_]+$/.test(normalizedKey);
+  });
+  if (!rawSortField) {
+    return {};
+  }
+  const sortOrder = sort?.[rawSortField];
+  if (sortOrder !== "ascend" && sortOrder !== "descend") {
+    return {};
+  }
+  return {
+    sortField: rawSortField,
+    sortOrder,
+  };
+}

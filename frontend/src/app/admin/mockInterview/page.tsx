@@ -10,7 +10,7 @@ import {
   downloadMockInterviewReviewUsingGet,
   listMockInterviewByPageUsingPost,
 } from "@/api/mockInterviewController";
-import { formatDateTime } from "@/lib/utils";
+import { extractSortParams, formatDateTime } from "@/lib/utils";
 
 const { Text } = Typography;
 
@@ -41,8 +41,7 @@ export default function AdminMockInterviewPage() {
   };
 
   const buildMockInterviewQueryRequest = (params: Record<string, any>, sort: Record<string, any>) => {
-    const sortField = Object.keys(sort || {})[0];
-    const sortOrder = sortField ? sort?.[sortField] : undefined;
+    const { sortField, sortOrder } = extractSortParams(sort);
     return {
       current: Number(params.current) || 1,
       pageSize: Number(params.pageSize) || 10,

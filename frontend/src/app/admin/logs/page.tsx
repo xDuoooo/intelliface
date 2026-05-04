@@ -15,7 +15,7 @@ import {
   User as UserIcon,
 } from "lucide-react";
 import request, { buildApiUrl } from "@/libs/request";
-import { formatDateTime } from "@/lib/utils";
+import { extractSortParams, formatDateTime } from "@/lib/utils";
 
 const { Text } = Typography;
 
@@ -240,8 +240,7 @@ export default function AdminLogsPage() {
           }}
           request={async (params, sort) => {
             try {
-              const sortField = Object.keys(sort || {})[0];
-              const sortOrder = sortField ? (sort as Record<string, "ascend" | "descend">)[sortField] : undefined;
+              const { sortField, sortOrder } = extractSortParams(sort as Record<string, "ascend" | "descend" | null>);
               latestQueryRef.current = {
                 userName: params.userName,
                 operation: params.operation,

@@ -14,6 +14,7 @@ import type { ActionType, ProColumns } from "@ant-design/pro-components";
 import { Button, message, Popconfirm, Skeleton, Space, Table, Tag } from "antd";
 import TagList from "@/components/TagList";
 import Link from "next/link";
+import { extractSortParams } from "@/lib/utils";
 import {
   QUESTION_DIFFICULTY_COLOR_MAP,
   QUESTION_DIFFICULTY_OPTIONS,
@@ -84,8 +85,7 @@ const buildQuestionQueryRequest = (
   params: Record<string, any>,
   sort: Record<string, "ascend" | "descend" | null>,
 ) => {
-  const sortField = Object.keys(sort)?.[0];
-  const sortOrder = sortField ? sort?.[sortField] ?? undefined : undefined;
+  const { sortField, sortOrder } = extractSortParams(sort);
   const reviewStatus = normalizeScalar(params.reviewStatus);
   const userId = normalizeScalar(params.userId);
   const id = normalizeScalar(params.id);

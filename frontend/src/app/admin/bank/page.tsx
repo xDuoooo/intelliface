@@ -17,6 +17,7 @@ import {
   QUESTION_REVIEW_STATUS_TEXT_MAP,
   QUESTION_REVIEW_STATUS_VALUE_ENUM,
 } from "@/constants/question";
+import { extractSortParams } from "@/lib/utils";
 
 const CreateModal = dynamic(() => import("./components/CreateModal"));
 const UpdateModal = dynamic(() => import("./components/UpdateModal"));
@@ -39,8 +40,7 @@ const buildQuestionBankQueryRequest = (
   params: Record<string, any>,
   sort: Record<string, "ascend" | "descend" | null>,
 ) => {
-  const sortField = Object.keys(sort)?.[0];
-  const sortOrder = sortField ? sort?.[sortField] ?? undefined : undefined;
+  const { sortField, sortOrder } = extractSortParams(sort);
   const reviewStatus = normalizeScalar(params.reviewStatus);
   const id = normalizeScalar(params.id);
 

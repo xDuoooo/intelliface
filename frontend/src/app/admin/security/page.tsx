@@ -10,7 +10,7 @@ import {
   ignoreAlertUsingPost,
   listAlertByPageUsingPost,
 } from "@/api/securityAlertController";
-import { formatDateTime } from "@/lib/utils";
+import { extractSortParams, formatDateTime } from "@/lib/utils";
 
 const { Text } = Typography;
 
@@ -260,8 +260,7 @@ export default function AdminSecurityPage() {
           columns={columns}
           request={async (params, sort) => {
             try {
-              const sortField = Object.keys(sort || {})[0];
-              const sortOrder = sortField ? (sort as Record<string, "ascend" | "descend">)[sortField] : undefined;
+              const { sortField, sortOrder } = extractSortParams(sort as Record<string, "ascend" | "descend" | null>);
               const res = await listAlertByPageUsingPost({
                 current: params.current,
                 pageSize: params.pageSize,

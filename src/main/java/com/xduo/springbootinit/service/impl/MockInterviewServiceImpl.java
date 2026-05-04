@@ -246,15 +246,9 @@ public class MockInterviewServiceImpl extends ServiceImpl<MockInterviewMapper, M
             case "resume":
                 ThrowUtils.throwIf(mockInterview.getStatus() == null || mockInterview.getStatus() != 3,
                         ErrorCode.OPERATION_ERROR, "当前面试不处于暂停状态");
-                InterviewReport resumeReport = parseReport(mockInterview.getReport(), mockInterview);
                 mockInterview.setStatus(1);
-                String resumeMessage = buildResumePrompt(resumeReport);
-                messageList.add(new InterviewMessage(resumeMessage, true, System.currentTimeMillis(),
-                        Math.max(mockInterview.getCurrentRound() == null ? 1 : mockInterview.getCurrentRound(), 1), "resume"));
-                mockInterview.setMessages(JSONUtil.toJsonStr(messageList));
-                mockInterview.setReport(JSONUtil.toJsonStr(resumeReport));
                 this.updateById(mockInterview);
-                return resumeMessage;
+                return "已继续面试";
             case "end":
                 ThrowUtils.throwIf(mockInterview.getStatus() != null && mockInterview.getStatus() == 2,
                         ErrorCode.OPERATION_ERROR, "当前面试已结束");
@@ -1085,13 +1079,6 @@ public class MockInterviewServiceImpl extends ServiceImpl<MockInterviewMapper, M
                 .filter(message -> round.equals(message.round))
                 .filter(message -> stage.equals(message.stage))
                 .count();
-    }
-
-    private String buildResumePrompt(InterviewReport interviewReport) {
-        String focus = StringUtils.defaultIfBlank(interviewReport.getCurrentFocus(), "当前轮次重点");
-        String style = StringUtils.defaultIfBlank(interviewReport.getCurrentQuestionStyle(), "继续追问");
-        String hint = StringUtils.defaultIfBlank(interviewReport.getNextActionHint(), "这次请尽量把背景、方案、结果和复盘讲完整。");
-        return String.format("我们继续。刚才停在“%s”这一块，我会按“%s”的方式继续追问。%s", focus, style, hint);
     }
 
     private String buildOpeningFallback(MockInterview mockInterview, InterviewPlanItem planItem) {

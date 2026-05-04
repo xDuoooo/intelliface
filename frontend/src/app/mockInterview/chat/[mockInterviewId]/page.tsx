@@ -157,6 +157,10 @@ const statusMap: Record<number, { text: string; color: string }> = {
 const AUTO_SPEAK_STORAGE_KEY = "mockInterview:autoSpeakEnabled";
 const MAX_ANSWER_LENGTH = 4000;
 
+type BrowserWindowWithAudioContext = Window & {
+  webkitAudioContext?: typeof AudioContext;
+};
+
 function safeParseJson<T>(value?: string | null): T | null {
   if (!value) {
     return null;
@@ -334,6 +338,7 @@ export default function InterviewRoomPage({ params }: { params: { mockInterviewI
   const [streamStatus, setStreamStatus] = useState("");
   const [streamingReply, setStreamingReply] = useState<StreamingReply | null>(null);
   const [autoSpeakEnabled, setAutoSpeakEnabled] = useState(true);
+  const [audioAutoplayReady, setAudioAutoplayReady] = useState(false);
   const [speechRecognitionSupported, setSpeechRecognitionSupported] = useState(false);
   const [audioPlaybackSupported, setAudioPlaybackSupported] = useState(false);
   const [audioRecordingSupported, setAudioRecordingSupported] = useState(false);
@@ -357,6 +362,7 @@ export default function InterviewRoomPage({ params }: { params: { mockInterviewI
   const recordedChunksRef = useRef<BlobPart[]>([]);
   const recordMimeTypeRef = useRef("audio/webm");
   const activeAudioRef = useRef<HTMLAudioElement | null>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
   const speechAbortControllerRef = useRef<AbortController | null>(null);
   const speakingTaskIdRef = useRef(0);
 
@@ -430,6 +436,8 @@ export default function InterviewRoomPage({ params }: { params: { mockInterviewI
         activeAudio.src = "";
       }
       activeAudioRef.current = null;
+      audioContextRef.current?.close().catch(() => {});
+      audioContextRef.current = null;
     };
   }, []);
 
@@ -477,7 +485,7 @@ export default function InterviewRoomPage({ params }: { params: { mockInterviewI
   const latestQuestionMessage = useMemo(() => {
     for (let i = messages.length - 1; i >= 0; i -= 1) {
       const item = messages[i];
-      if (item.isAI && (item.stage === "question" || item.stage === "probe" || item.stage === "resume")) {
+      if (item.isAI && (item.stage === "question" || item.stage === "probe")) {
         return item;
       }
     }
@@ -502,7 +510,7 @@ export default function InterviewRoomPage({ params }: { params: { mockInterviewI
   const latestSpeakableMessage = useMemo(() => {
     for (let i = messages.length - 1; i >= 0; i -= 1) {
       const item = messages[i];
-      if (item.isAI && ["question", "probe", "resume", "summary"].includes(item.stage || "")) {
+      if (item.isAI && ["question", "probe", "summary"].includes(item.stage || "")) {
         return item;
       }
     }
@@ -510,6 +518,44 @@ export default function InterviewRoomPage({ params }: { params: { mockInterviewI
   }, [messages]);
 
   const shouldPauseQuestionTimer = submitting && isStarted && !isEnded;
+
+  const unlockAudioPlayback = useCallback(async (silent = false) => {
+    if (typeof window === "undefined" || typeof window.Audio === "undefined") {
+      return false;
+    }
+    try {
+      const audioWindow = window as BrowserWindowWithAudioContext;
+      const AudioContextConstructor = globalThis.AudioContext || audioWindow.webkitAudioContext;
+      if (AudioContextConstructor) {
+        const context = audioContextRef.current ?? new AudioContextConstructor();
+        audioContextRef.current = context;
+        if (context.state === "suspended") {
+          await context.resume();
+        }
+        const oscillator = context.createOscillator();
+        const gain = context.createGain();
+        gain.gain.value = 0.00001;
+        oscillator.connect(gain);
+        gain.connect(context.destination);
+        oscillator.start();
+        oscillator.stop(context.currentTime + 0.02);
+      }
+      setAudioAutoplayReady(true);
+      setVoiceStatus("已启用自动播报，后续新题会尽量自动朗读");
+      if (!silent) {
+        message.success("已启用自动播报");
+      }
+      return true;
+    } catch (error: any) {
+      setAudioAutoplayReady(false);
+      const errorText = error?.message || "浏览器暂时未开放自动播报";
+      setVoiceStatus(`${errorText}，请先手动点击“播报当前题目”`);
+      if (!silent) {
+        message.warning("当前浏览器还没有开放自动播报，请先手动点击“播报当前题目”");
+      }
+      return false;
+    }
+  }, []);
 
   useEffect(() => {
     if (!latestQuestionMessage?.timestamp || isEnded || !isStarted) {
@@ -594,6 +640,7 @@ export default function InterviewRoomPage({ params }: { params: { mockInterviewI
             };
             audio.onerror = () => reject(new Error("音频播放失败"));
             audio.play().then(() => {
+              setAudioAutoplayReady(true);
               if (segments.length > 1) {
                 setVoiceStatus(`豆包语音播报中（${index + 1}/${segments.length}）...`);
               }
@@ -615,8 +662,11 @@ export default function InterviewRoomPage({ params }: { params: { mockInterviewI
         return;
       }
       const blocked = error?.name === "NotAllowedError";
+      if (blocked) {
+        setAudioAutoplayReady(false);
+      }
       const errorText = blocked && !manual
-        ? "浏览器拦截了自动播放，请点击“播报当前题目”手动收听"
+        ? "浏览器拦截了自动播放，请先点一次“启用自动播报”"
         : error?.message || "豆包语音播报失败";
       setVoiceStatus(errorText);
       if (manual || !blocked) {
@@ -649,6 +699,39 @@ export default function InterviewRoomPage({ params }: { params: { mockInterviewI
       stopSpeaking();
     }
   }, [autoSpeakEnabled, stopSpeaking]);
+
+  const handleManualSpeak = useCallback(async () => {
+    const unlocked = await unlockAudioPlayback(true);
+    if (!unlocked) {
+      return;
+    }
+    await speakText(latestSpeakableMessage?.content, true);
+  }, [latestSpeakableMessage?.content, speakText, unlockAudioPlayback]);
+
+  const handleAutoSpeakToggle = useCallback(async () => {
+    if (!audioPlaybackSupported) {
+      return;
+    }
+    if (autoSpeakEnabled && audioAutoplayReady) {
+      setAutoSpeakEnabled(false);
+      setVoiceStatus("已关闭自动播报");
+      stopSpeaking();
+      return;
+    }
+    setAutoSpeakEnabled(true);
+    const unlocked = await unlockAudioPlayback();
+    if (unlocked && latestSpeakableMessage?.content) {
+      await speakText(latestSpeakableMessage.content, true);
+    }
+  }, [
+    audioAutoplayReady,
+    audioPlaybackSupported,
+    autoSpeakEnabled,
+    latestSpeakableMessage?.content,
+    speakText,
+    stopSpeaking,
+    unlockAudioPlayback,
+  ]);
 
   useEffect(() => {
     if (!messageEndRef.current) {
@@ -1232,7 +1315,7 @@ export default function InterviewRoomPage({ params }: { params: { mockInterviewI
                   模拟面试 #{interview.id}
                 </Title>
                 <Paragraph className="!mb-0 text-slate-500">
-                  这一轮会尽量按真实面试节奏追问。你可以直接说话作答，也可以开启自动播报来模拟面试官口头发问。
+                  这一轮会尽量按真实面试节奏追问。你可以直接说话作答；如果想让每次新题自动朗读，先点一次“启用自动播报”。
                 </Paragraph>
               </div>
               <Tag color={status.color} className="status-tag">
@@ -1581,7 +1664,7 @@ export default function InterviewRoomPage({ params }: { params: { mockInterviewI
                     </Button>
                     <Button
                       onClick={() => {
-                        void speakText(latestSpeakableMessage?.content, true);
+                        void handleManualSpeak();
                       }}
                       disabled={!audioPlaybackSupported || !latestSpeakableMessage?.content}
                       className="tool-button"
@@ -1622,13 +1705,17 @@ export default function InterviewRoomPage({ params }: { params: { mockInterviewI
                     </Button>
                     <Button
                       onClick={() => {
-                        setAutoSpeakEnabled((prev) => !prev);
+                        void handleAutoSpeakToggle();
                       }}
                       disabled={!audioPlaybackSupported}
                       className={`tool-button compact ${autoSpeakEnabled ? "active" : ""}`}
                     >
-                      {autoSpeakEnabled ? <Volume2 size={14} /> : <VolumeX size={14} />}
-                      {autoSpeakEnabled ? "自动播报已开" : "自动播报已关"}
+                      {autoSpeakEnabled && audioAutoplayReady ? <Volume2 size={14} /> : <VolumeX size={14} />}
+                      {autoSpeakEnabled
+                        ? audioAutoplayReady
+                          ? "自动播报已开"
+                          : "启用自动播报"
+                        : "自动播报已关"}
                     </Button>
                     {isStreaming ? (
                       <Button

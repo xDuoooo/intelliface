@@ -1645,7 +1645,7 @@ export default function InterviewRoomPage({ params }: { params: { mockInterviewI
                       <span>{item.label}</span>
                       <strong>{item.value}</strong>
                     </div>
-                    <Progress percent={item.value} showInfo={false} strokeColor="#0f172a" />
+                    <Progress percent={item.value} showInfo={false} strokeColor="#1677ff" />
                   </div>
                 ))}
               </div>

@@ -53,6 +53,7 @@ public class QuestionBankServiceImpl extends ServiceImpl<QuestionBankMapper, Que
     @Override
     public void validQuestionBank(QuestionBank questionBank, boolean add) {
         ThrowUtils.throwIf(questionBank == null, ErrorCode.PARAMS_ERROR);
+        questionBank.setPicture(cosManager.normalizeStoredPath(StringUtils.trimToNull(questionBank.getPicture())));
         String title = questionBank.getTitle();
         // 创建数据时，参数不能为空
         if (add) {
@@ -62,6 +63,8 @@ public class QuestionBankServiceImpl extends ServiceImpl<QuestionBankMapper, Que
         if (StringUtils.isNotBlank(title)) {
             ThrowUtils.throwIf(title.length() > 80, ErrorCode.PARAMS_ERROR, "标题过长");
         }
+        ThrowUtils.throwIf(StringUtils.length(questionBank.getDescription()) > 300, ErrorCode.PARAMS_ERROR, "描述过长");
+        ThrowUtils.throwIf(StringUtils.length(questionBank.getPicture()) > 1024, ErrorCode.PARAMS_ERROR, "封面地址过长");
     }
 
     /**

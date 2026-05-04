@@ -84,6 +84,17 @@ public class CosManager {
         return rawUrl;
     }
 
+    public String normalizeStoredPath(String rawUrl) {
+        if (StringUtils.isBlank(rawUrl) || isLocalStaticAsset(rawUrl)) {
+            return rawUrl;
+        }
+        if (rawUrl.startsWith("/") && !rawUrl.startsWith("http")) {
+            return rawUrl;
+        }
+        String key = extractCosKeyFromUrl(rawUrl);
+        return key != null ? key : rawUrl;
+    }
+
     private COSClient getRequiredCosClient() {
         if (!isCosConfiguredWithoutClient()) {
             throw new BusinessException(ErrorCode.SYSTEM_ERROR, "COS 未正确配置，无法执行文件操作");

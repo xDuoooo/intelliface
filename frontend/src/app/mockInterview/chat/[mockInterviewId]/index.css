@@ -78,6 +78,11 @@
     box-shadow: 0 20px 50px rgba(15, 23, 42, 0.08) !important;
 }
 
+.sticky-side-card {
+    position: sticky !important;
+    top: 92px;
+}
+
 .context-grid {
     display: grid;
     grid-template-columns: minmax(280px, 0.95fr) minmax(0, 1.25fr);
@@ -1439,6 +1444,11 @@
 @media (max-width: 1220px) {
     .interview-shell.with-side {
         grid-template-columns: 1fr;
+    }
+
+    .sticky-side-card {
+        position: static !important;
+        top: auto;
     }
 
     .context-grid {

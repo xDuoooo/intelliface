@@ -1533,15 +1533,17 @@ public class QuestionController {
     }
 
     private QuestionAnswerEvaluateVO buildQuestionAnswerEvaluateVO(Question question, String answerContent) {
+        QuestionAnswerEvaluateVO evaluateResult;
         try {
             String aiContent = aiManager.doChat(buildAnswerEvaluateSystemPrompt(), buildAnswerEvaluateUserPrompt(question, answerContent));
-            QuestionAnswerEvaluateVO aiEvaluateResult = parseQuestionAnswerEvaluate(aiContent);
-            aiEvaluateResult.setAnalysisSource("ai");
-            return aiEvaluateResult;
+            evaluateResult = parseQuestionAnswerEvaluate(aiContent);
+            evaluateResult.setAnalysisSource("ai");
         } catch (Exception e) {
             log.warn("AI 判题失败，已自动切换到本地兜底分析，questionId={}", question.getId(), e);
-            return buildHeuristicEvaluateResult(question, answerContent);
+            evaluateResult = buildHeuristicEvaluateResult(question, answerContent);
         }
+        applyAnswerEvaluateGuard(evaluateResult, question, answerContent);
+        return evaluateResult;
     }
 
     private String buildAnswerEvaluateSystemPrompt() {
@@ -1550,15 +1552,20 @@ public class QuestionController {
                 + "JSON 必须包含 score、level、summary、strengthList、improvementList、missedPointList、followUpQuestionList、referenceSuggestion 八个字段。"
                 + "score 为 0 到 100 的整数；level 只能是“优秀”“良好”“合格”“待加强”之一；"
                 + "strengthList、improvementList、missedPointList、followUpQuestionList 都必须是字符串数组，每个数组给出 2 到 4 条内容。"
-                + "请重点对比标准答案与用户回答之间的覆盖度、结构性、表达清晰度和技术深度。";
+                + "请重点对比标准答案与用户回答之间的覆盖度、结构性、表达清晰度和技术深度。"
+                + "评分必须保守且有证据：如果用户只是罗列关键词、数据类型、结论或名词，没有分别展开解释、步骤、场景或取舍，即使列对了一部分，score 通常也不应高于 45。"
+                + "如果题目本身包含多个子问题，例如“有哪些 + 应用场景”“原理 + 优缺点”“是什么 + 怎么做”，少答任何一个维度都不能给 80 分以上。"
+                + "80 分以上只给覆盖完整、解释清楚且有一定技术细节的回答。";
     }
 
     private String buildAnswerEvaluateUserPrompt(Question question, String answerContent) {
         List<String> tagList = JSONUtil.toList(StringUtils.defaultIfBlank(question.getTags(), "[]"), String.class);
+        String focusHint = buildAnswerEvaluateFocusHint(question);
         return "题目标题：\n" + StringUtils.defaultString(question.getTitle())
                 + "\n\n题目难度：\n" + StringUtils.defaultIfBlank(question.getDifficulty(), "未设置")
                 + "\n\n题目标签：\n" + String.join("、", tagList)
                 + "\n\n题目内容：\n" + safeAiText(question.getContent(), 2500)
+                + focusHint
                 + "\n\n参考答案：\n" + safeAiText(question.getAnswer(), 2500)
                 + "\n\n用户回答：\n" + safeAiText(answerContent, 2500);
     }
@@ -1600,6 +1607,223 @@ public class QuestionController {
             evaluateVO.setFollowUpQuestionList(List.of("如果面试官继续追问，请你补充为什么这样设计以及有哪些替代方案。"));
         }
         return evaluateVO;
+    }
+
+    private String buildAnswerEvaluateFocusHint(Question question) {
+        String questionText = (StringUtils.defaultString(question.getTitle()) + " " + StringUtils.defaultString(question.getContent()))
+                .toLowerCase(Locale.ROOT);
+        List<String> focusList = new ArrayList<>();
+        if (containsAnyIgnoreCase(questionText, "哪些", "列举", "枚举", "类型", "分类")) {
+            focusList.add("先尽量列全核心项");
+        }
+        if (containsAnyIgnoreCase(questionText, "分别", "各自", "对应")) {
+            focusList.add("不要只给总括性结论，要把每一项分别说明");
+        }
+        if (containsAnyIgnoreCase(questionText, "场景", "用途", "适用", "什么情况下", "应用")) {
+            focusList.add("说明每一项适合什么场景或用来解决什么问题");
+        }
+        if (containsAnyIgnoreCase(questionText, "原理", "机制", "为什么", "底层")) {
+            focusList.add("解释为什么这样设计或底层机制是什么");
+        }
+        if (containsAnyIgnoreCase(questionText, "实现", "怎么做", "如何", "步骤", "流程")) {
+            focusList.add("说明具体做法、关键步骤或执行流程");
+        }
+        if (containsAnyIgnoreCase(questionText, "区别", "对比", "优缺点", "取舍", "选型")) {
+            focusList.add("补充比较维度、优缺点或技术取舍");
+        }
+        if (focusList.isEmpty()) {
+            return "";
+        }
+        return "\n\n本题显式要求至少覆盖：\n- " + String.join("\n- ", focusList);
+    }
+
+    private void applyAnswerEvaluateGuard(QuestionAnswerEvaluateVO evaluateVO, Question question, String answerContent) {
+        if (evaluateVO == null) {
+            return;
+        }
+        int currentScore = Math.max(0, Math.min(100, evaluateVO.getScore() == null ? 0 : evaluateVO.getScore()));
+        SingleQuestionAnswerSignals signals = analyzeSingleQuestionAnswer(question, answerContent);
+        int scoreCap = 100;
+        List<String> blockingIssues = new ArrayList<>();
+        List<String> missingDimensionHints = new ArrayList<>();
+
+        if (signals.getAnswerLength() < 12) {
+            scoreCap = Math.min(scoreCap, 28);
+            blockingIssues.add("当前回答只有极少几个词，还没有形成可得高分的完整作答。");
+        } else if (signals.getAnswerLength() < 24) {
+            scoreCap = Math.min(scoreCap, 38);
+            blockingIssues.add("当前回答过短，更像关键词罗列，面试里通常只能拿到较低分。");
+        } else if (signals.getAnswerLength() < 40 && !signals.isHasExplanation()) {
+            scoreCap = Math.min(scoreCap, 46);
+            blockingIssues.add("回答虽然提到了一些点，但还没有展开说明这些点分别是什么意思。");
+        } else if (signals.getAnswerLength() < 80
+                && (!signals.isHasExplanation() || (!signals.isHasStructure() && !signals.isHasUseCaseExpression()))) {
+            scoreCap = Math.min(scoreCap, 64);
+            blockingIssues.add("当前作答还比较简略，细节和结构都不足以支撑高分。");
+        }
+
+        if (signals.isListOnlyAnswer()) {
+            scoreCap = Math.min(scoreCap, 42);
+            blockingIssues.add("当前回答更像在罗列名词，没有把每一项分别展开说明。");
+        }
+
+        if (signals.isRequiresSeparateCoverage() && signals.getAnswerTokenCount() <= 2) {
+            scoreCap = Math.min(scoreCap, 45);
+            blockingIssues.add("题目明显要求分项作答，但当前覆盖到的点还太少。");
+        }
+
+        if (signals.isRequiresUseCase() && !signals.isHasUseCaseExpression()) {
+            scoreCap = Math.min(scoreCap, signals.getAnswerLength() < 60 ? 46 : 58);
+            blockingIssues.add("题目要求说明应用场景，但当前还没有讲清“什么场景用什么”。");
+            missingDimensionHints.add("应用场景 / 适用条件");
+        }
+
+        if (signals.isRequiresReasonOrMechanism() && !signals.isHasExplanation()) {
+            scoreCap = Math.min(scoreCap, 58);
+            blockingIssues.add("题目要求解释原理或原因，但当前回答还停留在结论层。");
+            missingDimensionHints.add("原理 / 原因解释");
+        }
+
+        if (signals.isRequiresProcedure() && !signals.isHasProcess()) {
+            scoreCap = Math.min(scoreCap, 60);
+            blockingIssues.add("题目要求说明做法或步骤，但当前没有把流程讲出来。");
+            missingDimensionHints.add("步骤 / 流程");
+        }
+
+        if (signals.isRequiresComparison() && !signals.isHasComparison()) {
+            scoreCap = Math.min(scoreCap, 60);
+            blockingIssues.add("题目要求比较或取舍，但当前没有给出比较维度。");
+            missingDimensionHints.add("对比维度 / 技术取舍");
+        }
+
+        if (signals.getReferenceKeywordCount() >= 6) {
+            if (signals.getHitKeywordCount() <= 1) {
+                scoreCap = Math.min(scoreCap, 52);
+                blockingIssues.add("和参考答案相比，当前覆盖到的关键点还非常少。");
+            } else if (signals.getKeywordCoverageRatio() < 0.35d) {
+                scoreCap = Math.min(scoreCap, 68);
+                blockingIssues.add("当前只覆盖了部分关键点，暂时不适合给到高分。");
+            }
+        }
+
+        if (blockingIssues.size() >= 2) {
+            scoreCap = Math.min(scoreCap, 58);
+        }
+
+        if (currentScore > scoreCap) {
+            evaluateVO.setScore(scoreCap);
+            evaluateVO.setLevel(normalizeEvaluateLevel(null, scoreCap));
+            evaluateVO.setSummary(buildGuardedEvaluateSummary(signals, blockingIssues, scoreCap));
+        }
+
+        if (!blockingIssues.isEmpty()) {
+            evaluateVO.setImprovementList(mergePriorityItems(blockingIssues, evaluateVO.getImprovementList(), 4));
+        }
+        if (!missingDimensionHints.isEmpty()) {
+            List<String> missingPointList = new ArrayList<>(mergePriorityItems(
+                    List.of("建议优先补齐这些题目要求的维度：" + String.join("、", new LinkedHashSet<>(missingDimensionHints))),
+                    evaluateVO.getMissedPointList(),
+                    4
+            ));
+            evaluateVO.setMissedPointList(missingPointList);
+        }
+        if (StringUtils.isBlank(evaluateVO.getReferenceSuggestion()) || currentScore > scoreCap) {
+            evaluateVO.setReferenceSuggestion(buildGuardedReferenceSuggestion(signals, missingDimensionHints));
+        }
+    }
+
+    private SingleQuestionAnswerSignals analyzeSingleQuestionAnswer(Question question, String answerContent) {
+        String normalizedAnswer = StringUtils.trimToEmpty(answerContent);
+        String normalizedQuestion = (StringUtils.defaultString(question.getTitle()) + " " + StringUtils.defaultString(question.getContent()))
+                .toLowerCase(Locale.ROOT);
+        List<String> referenceKeywordList = buildReferenceKeywordList(question);
+        String lowerCaseAnswer = normalizedAnswer.toLowerCase(Locale.ROOT);
+        int hitKeywordCount = (int) referenceKeywordList.stream().filter(lowerCaseAnswer::contains).count();
+        int referenceKeywordCount = referenceKeywordList.size();
+        int answerTokenCount = tokenizeText(answerContent).size();
+        boolean hasStructure = containsAnyIgnoreCase(normalizedAnswer, "首先", "然后", "最后", "一是", "二是", "三是", "1.", "2.", "3.", "第一", "第二", "第三");
+        boolean hasProcess = containsAnyIgnoreCase(normalizedAnswer, "步骤", "流程", "先", "再", "然后", "最后", "落地", "执行", "实现");
+        boolean hasComparison = containsAnyIgnoreCase(normalizedAnswer, "优点", "缺点", "区别", "相比", "对比", "取舍", "成本", "风险", "更适合");
+        boolean hasExplanation = containsAnyIgnoreCase(normalizedAnswer, "因为", "所以", "本质", "原理", "机制", "通过", "会", "可以", "用于", "用来", "适合", "保存", "表示", "实现", "支持", "说明", "代表", "负责");
+        boolean hasUseCaseExpression = containsAnyIgnoreCase(normalizedAnswer, "用于", "用来", "适合", "场景", "比如", "例如", "常用", "通常", "一般", "保存", "存储", "存", "缓存", "队列", "消息", "对象", "会话", "排行", "计数", "时间线");
+        int separatorCount = countOccurrences(normalizedAnswer, ',')
+                + countOccurrences(normalizedAnswer, '，')
+                + countOccurrences(normalizedAnswer, '、')
+                + countOccurrences(normalizedAnswer, ';')
+                + countOccurrences(normalizedAnswer, '；')
+                + countOccurrences(normalizedAnswer, '/');
+        boolean listOnlyAnswer = normalizedAnswer.length() < 60
+                && answerTokenCount >= 2
+                && separatorCount > 0
+                && !hasProcess
+                && !hasComparison
+                && !hasUseCaseExpression
+                && !hasExplanation;
+
+        SingleQuestionAnswerSignals signals = new SingleQuestionAnswerSignals();
+        signals.setAnswerLength(normalizedAnswer.length());
+        signals.setAnswerTokenCount(answerTokenCount);
+        signals.setHasStructure(hasStructure);
+        signals.setHasProcess(hasProcess);
+        signals.setHasComparison(hasComparison);
+        signals.setHasExplanation(hasExplanation);
+        signals.setHasUseCaseExpression(hasUseCaseExpression);
+        signals.setListOnlyAnswer(listOnlyAnswer);
+        signals.setHitKeywordCount(hitKeywordCount);
+        signals.setReferenceKeywordCount(referenceKeywordCount);
+        signals.setKeywordCoverageRatio(referenceKeywordCount == 0 ? 0d : hitKeywordCount * 1.0d / referenceKeywordCount);
+        signals.setRequiresSeparateCoverage(containsAnyIgnoreCase(normalizedQuestion, "分别", "各自", "对应", "逐个", "依次"));
+        signals.setRequiresUseCase(containsAnyIgnoreCase(normalizedQuestion, "场景", "用途", "应用", "适用", "什么时候用", "什么场景"));
+        signals.setRequiresReasonOrMechanism(containsAnyIgnoreCase(normalizedQuestion, "原理", "机制", "为什么", "底层"));
+        signals.setRequiresProcedure(containsAnyIgnoreCase(normalizedQuestion, "如何", "怎么", "实现", "步骤", "流程"));
+        signals.setRequiresComparison(containsAnyIgnoreCase(normalizedQuestion, "区别", "对比", "优缺点", "取舍", "选型", "比较"));
+        return signals;
+    }
+
+    private String buildGuardedEvaluateSummary(SingleQuestionAnswerSignals signals, List<String> blockingIssues, int score) {
+        if (signals.isListOnlyAnswer() || signals.getAnswerLength() < 24) {
+            return "当前回答更像在列关键词，还没有形成一段能在面试里拿高分的完整作答。建议把每个点分别解释清楚，再补上题目要求的场景、原理或做法。";
+        }
+        if (!blockingIssues.isEmpty() && score <= 58) {
+            return "当前回答已经有一点方向，但离合格的面试作答还有明显距离。主要问题不是完全答错，而是覆盖不全、展开不够，很多关键维度还没讲出来。";
+        }
+        return "这次回答已经碰到部分重点，但还没有把题目要求的关键维度讲完整。建议先补齐漏答点，再用更结构化的方式重新组织一遍答案。";
+    }
+
+    private String buildGuardedReferenceSuggestion(SingleQuestionAnswerSignals signals, List<String> missingDimensionHints) {
+        if (signals.isListOnlyAnswer() || signals.getAnswerLength() < 24) {
+            return "建议不要只列关键词。可以按“先列全核心项 -> 每一项各自是什么意思 -> 分别适用在什么场景 -> 最后补一句取舍”这个顺序重答一遍。";
+        }
+        if (!missingDimensionHints.isEmpty()) {
+            return "建议先补齐这些题目要求的维度：" + String.join("、", new LinkedHashSet<>(missingDimensionHints))
+                    + "，再对照参考答案检查是否覆盖了关键原理、步骤和适用场景。";
+        }
+        return "建议对照参考答案重新补齐关键点，并把“是什么、怎么做、什么场景用、有什么取舍”这几层意思明确拆开。";
+    }
+
+    private List<String> mergePriorityItems(List<String> priorityItems, List<String> originalItems, int limit) {
+        LinkedHashSet<String> mergedSet = new LinkedHashSet<>();
+        priorityItems.stream()
+                .map(StringUtils::trimToEmpty)
+                .filter(StringUtils::isNotBlank)
+                .forEach(mergedSet::add);
+        if (originalItems != null) {
+            originalItems.stream()
+                    .map(StringUtils::trimToEmpty)
+                    .filter(StringUtils::isNotBlank)
+                    .forEach(mergedSet::add);
+        }
+        return mergedSet.stream().limit(limit).collect(Collectors.toList());
+    }
+
+    private int countOccurrences(String text, char target) {
+        int count = 0;
+        for (int i = 0; i < text.length(); i++) {
+            if (text.charAt(i) == target) {
+                count++;
+            }
+        }
+        return count;
     }
 
     private String extractAudioAnswerText(MultipartFile audioFile, Question question) {
@@ -1908,6 +2132,26 @@ public class QuestionController {
         private List<String> tags;
         private String answer;
         private String difficulty;
+    }
+
+    @Data
+    private static class SingleQuestionAnswerSignals {
+        private int answerLength;
+        private int answerTokenCount;
+        private boolean hasStructure;
+        private boolean hasProcess;
+        private boolean hasComparison;
+        private boolean hasExplanation;
+        private boolean hasUseCaseExpression;
+        private boolean listOnlyAnswer;
+        private int hitKeywordCount;
+        private int referenceKeywordCount;
+        private double keywordCoverageRatio;
+        private boolean requiresSeparateCoverage;
+        private boolean requiresUseCase;
+        private boolean requiresReasonOrMechanism;
+        private boolean requiresProcedure;
+        private boolean requiresComparison;
     }
 
     @Data

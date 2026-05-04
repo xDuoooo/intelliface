@@ -277,6 +277,7 @@ export default function QuestionAnswerEvaluator({ questionId, questionTitle }: P
               <div className="font-bold text-slate-700">作答建议</div>
               <div className="mt-2">
                 先用 3 到 5 句话回答“核心原理是什么、怎么做、适用在什么场景、有什么取舍”，这样 AI 给出的反馈会更准确。
+                只列几个关键词或数据类型，系统会按覆盖不足处理，不会给高分。
                 {questionTitle ? ` 当前题目：${questionTitle}` : ""}
               </div>
             </div>

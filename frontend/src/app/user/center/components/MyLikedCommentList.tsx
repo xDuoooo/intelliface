@@ -4,6 +4,7 @@ import { CalendarClock, Heart, MessageCircle } from "lucide-react";
 import { Empty, Pagination, Spin, Tag, message } from "antd";
 import { listMyLikedCommentsByPage, type UserCommentActivityVO } from "@/api/commentController";
 import { formatIpLocation } from "@/lib/location";
+import { formatDateTime } from "@/lib/utils";
 
 function buildCommentLink(item: UserCommentActivityVO) {
   return `/question/${item.questionId}#comment-${item.id}`;
@@ -72,7 +73,7 @@ export default function MyLikedCommentList() {
                 <div className="flex flex-wrap items-center gap-4 text-sm text-slate-400">
                   <span className="inline-flex items-center gap-1.5">
                     <CalendarClock size={14} />
-                    {item.actionTime ? new Date(item.actionTime).toLocaleString("zh-CN") : "刚刚"}
+                    {formatDateTime(item.actionTime, "刚刚")}
                   </span>
                   <span className="inline-flex items-center gap-1.5">
                     <Heart size={14} />

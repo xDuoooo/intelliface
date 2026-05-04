@@ -8,7 +8,7 @@ import { Activity, BookOpen, Flame, MapPin, PenSquare, Sparkles } from "lucide-r
 import { getUserProfileVoByIdUsingGet } from "@/api/userController";
 import UserFollowButton from "@/components/UserFollowButton";
 import { formatIpLocation } from "@/lib/location";
-import { cn } from "@/lib/utils";
+import { cn, formatDate } from "@/lib/utils";
 import UserAvatar from "@/components/UserAvatar";
 import { RootState } from "@/stores";
 
@@ -71,15 +71,7 @@ function formatJoinDate(date?: string) {
   if (!date) {
     return "最近加入";
   }
-  try {
-    return new Date(date).toLocaleDateString("zh-CN", {
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-    });
-  } catch {
-    return date;
-  }
+  return formatDate(date, date);
 }
 
 function isProfileFieldVisible(profile: API.UserProfileVO | undefined, field: string) {

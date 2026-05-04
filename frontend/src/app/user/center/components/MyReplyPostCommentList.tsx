@@ -7,6 +7,7 @@ import {
   type PostCommentActivityVO,
 } from "@/api/postCommentController";
 import { formatIpLocation } from "@/lib/location";
+import { formatDateTime } from "@/lib/utils";
 import RecordFilterToolbar from "./RecordFilterToolbar";
 
 type StatusFilter = "all" | 0 | 1 | 2;
@@ -115,7 +116,7 @@ export default function MyReplyPostCommentList() {
                 <div className="flex flex-wrap items-center gap-4 text-sm text-slate-400">
                   <span className="inline-flex items-center gap-1.5">
                     <CalendarClock size={14} />
-                    {item.actionTime ? new Date(item.actionTime).toLocaleString("zh-CN") : "刚刚"}
+                    {formatDateTime(item.actionTime, "刚刚")}
                   </span>
                   <span className="inline-flex items-center gap-1.5">
                     <MessageCircleReply size={14} />

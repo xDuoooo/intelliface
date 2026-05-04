@@ -5,6 +5,7 @@ import dynamic from "next/dynamic";
 import { Tag } from "antd";
 import { CalendarClock } from "lucide-react";
 import { formatIpLocation } from "@/lib/location";
+import { formatDateTime } from "@/lib/utils";
 import UserAvatar from "@/components/UserAvatar";
 import UserProfileHoverCard from "@/components/UserProfileHoverCard";
 
@@ -99,7 +100,7 @@ export default function PostDetailContent({ post, relatedPostList = [] }: Props)
             <div className="flex flex-wrap items-center gap-4 text-sm text-slate-400">
               <span className="inline-flex items-center gap-1">
                 <CalendarClock className="h-4 w-4" />
-                {post.createTime ? new Date(post.createTime).toLocaleString("zh-CN") : "刚刚"}
+                {formatDateTime(post.createTime, "刚刚")}
               </span>
               {post.ipLocation ? (
                 <span className="text-xs font-medium text-slate-400">{formatIpLocation(post.ipLocation)}</span>

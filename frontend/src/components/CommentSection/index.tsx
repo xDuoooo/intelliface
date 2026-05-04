@@ -19,9 +19,7 @@ import {
   setOfficialAnswer,
 } from "@/api/commentController";
 import { formatIpLocation } from "@/lib/location";
-import { cn } from "@/lib/utils";
-import { formatDistanceToNow } from "date-fns";
-import { zhCN } from "date-fns/locale";
+import { cn, formatDateTime, formatRelativeTime } from "@/lib/utils";
 import UserAvatar from "@/components/UserAvatar";
 import UserProfileHoverCard from "@/components/UserProfileHoverCard";
 
@@ -30,15 +28,6 @@ interface Props {
 }
 
 type SortField = "createTime" | "likeNum";
-
-// ---------------------- 时间格式化 ----------------------
-function timeAgo(dateStr: string) {
-  try {
-    return formatDistanceToNow(new Date(dateStr), { addSuffix: true, locale: zhCN });
-  } catch {
-    return dateStr;
-  }
-}
 
 function mapCommentTree(
   list: CommentVO[] = [],
@@ -227,7 +216,10 @@ function CommentCard({ comment, loginUser, onLike, onDelete, onPin, onOfficial, 
             {comment.ipLocation ? (
               <span className="text-xs font-medium text-slate-400">{formatIpLocation(comment.ipLocation)}</span>
             ) : null}
-            <span className="text-xs text-slate-400 font-medium ml-auto">{timeAgo(comment.createTime)}</span>
+            <span className="ml-auto text-xs font-medium text-slate-400">
+              {formatDateTime(comment.createTime, "刚刚")}
+              <span className="text-slate-300"> · {formatRelativeTime(comment.createTime, "刚刚")}</span>
+            </span>
           </div>
 
           {/* Content */}

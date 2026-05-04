@@ -16,26 +16,13 @@ import {
 import UserAvatar from "@/components/UserAvatar";
 import UserProfileHoverCard from "@/components/UserProfileHoverCard";
 import { formatIpLocation } from "@/lib/location";
-import { cn } from "@/lib/utils";
-import { formatDistanceToNow } from "date-fns";
-import { zhCN } from "date-fns/locale";
+import { cn, formatDateTime, formatRelativeTime } from "@/lib/utils";
 
 interface Props {
   postId: number | string;
 }
 
 type SortField = "createTime" | "likeNum";
-
-function timeAgo(dateStr?: string) {
-  if (!dateStr) {
-    return "刚刚";
-  }
-  try {
-    return formatDistanceToNow(new Date(dateStr), { addSuffix: true, locale: zhCN });
-  } catch {
-    return dateStr;
-  }
-}
 
 function mapCommentTree(
   list: PostCommentVO[] = [],
@@ -182,7 +169,10 @@ function PostCommentCard({ comment, loginUser, onLike, onDelete, onReply, depth 
             {comment.ipLocation ? (
               <span className="text-xs font-medium text-slate-400">{formatIpLocation(comment.ipLocation)}</span>
             ) : null}
-            <span className="ml-auto text-xs font-medium text-slate-400">{timeAgo(comment.createTime)}</span>
+            <span className="ml-auto text-xs font-medium text-slate-400">
+              {formatDateTime(comment.createTime, "刚刚")}
+              <span className="text-slate-300"> · {formatRelativeTime(comment.createTime, "刚刚")}</span>
+            </span>
           </div>
 
           <div

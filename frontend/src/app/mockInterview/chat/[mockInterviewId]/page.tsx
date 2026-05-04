@@ -1158,7 +1158,25 @@ export default function InterviewRoomPage({ params }: { params: { mockInterviewI
   if (!interview) {
     return (
       <div id="interviewRoomPage" className="max-width-content">
-        <Empty description="这场模拟面试不存在或无法访问" />
+        <div className="interview-empty-state">
+          <div className="interview-empty-illustration">
+            <BrainCircuit size={28} />
+          </div>
+          <Title level={3} className="!mb-2 !mt-0">
+            这场模拟面试不存在或暂时无法访问
+          </Title>
+          <Paragraph className="interview-empty-text">
+            可能是记录已被删除、当前账号没有权限查看，或者链接已经失效。你可以回到模拟面试列表重新进入，或者直接发起一场新的面试。
+          </Paragraph>
+          <div className="interview-empty-actions">
+            <Link href="/mockInterview">
+              <Button className="action-button secondary">返回模拟面试</Button>
+            </Link>
+            <Link href="/mockInterview/add">
+              <Button type="primary" className="action-button">发起新面试</Button>
+            </Link>
+          </div>
+        </div>
       </div>
     );
   }
@@ -1612,6 +1630,20 @@ export default function InterviewRoomPage({ params }: { params: { mockInterviewI
                       {report.recommendedNextAction || "继续围绕项目细节、技术取舍和量化结果做口头表达训练。"}
                     </div>
                   </div>
+                  <div className="review-stat-grid">
+                    <div className="review-stat-card">
+                      <span>已完成主题</span>
+                      <strong>{currentRound}/{expectedRounds}</strong>
+                    </div>
+                    <div className="review-stat-card">
+                      <span>面试深度</span>
+                      <strong>{depthMeta.label}</strong>
+                    </div>
+                    <div className="review-stat-card">
+                      <span>最终状态</span>
+                      <strong>{status.text}</strong>
+                    </div>
+                  </div>
                 </div>
               </div>
 
@@ -1705,7 +1737,9 @@ export default function InterviewRoomPage({ params }: { params: { mockInterviewI
                     ))}
                   </ul>
                 </div>
-                <div className="review-detail-panel">
+              </div>
+              {(report.suggestedTopics || []).length ? (
+                <div className="review-topic-panel">
                   <div className="block-title">建议继续准备</div>
                   <div className="topic-list">
                     {(report.suggestedTopics || []).map((item) => (
@@ -1715,7 +1749,7 @@ export default function InterviewRoomPage({ params }: { params: { mockInterviewI
                     ))}
                   </div>
                 </div>
-              </div>
+              ) : null}
               {(report.practicePlan || []).length ? (
                 <div className="practice-plan-panel">
                   <div className="block-title">下一步训练计划</div>

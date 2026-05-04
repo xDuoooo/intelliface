@@ -790,7 +790,7 @@ export default function InterviewRoomPage({ params }: { params: { mockInterviewI
     speechRecognitionRef.current.stop();
     speechRecognitionRef.current = null;
     setIsListening(false);
-    setVoiceStatus("已停止语音输入");
+    setVoiceStatus("已停止实时转文字");
   }, []);
 
   const transcribeRecordedAudio = useCallback(
@@ -842,7 +842,7 @@ export default function InterviewRoomPage({ params }: { params: { mockInterviewI
   const startVoiceInput = useCallback(() => {
     const SpeechRecognition = getSpeechRecognitionConstructor();
     if (!SpeechRecognition) {
-      message.warning("当前浏览器不支持语音输入");
+      message.warning("当前浏览器不支持实时转文字");
       return;
     }
     stopSpeaking();
@@ -878,7 +878,7 @@ export default function InterviewRoomPage({ params }: { params: { mockInterviewI
       setInputMessage(parts.join(" "));
     };
     recognition.onerror = (event) => {
-      const errorText = event?.error === "not-allowed" ? "麦克风权限被拒绝" : "语音输入不可用";
+      const errorText = event?.error === "not-allowed" ? "麦克风权限被拒绝" : "实时转文字不可用";
       setVoiceStatus(errorText);
       setIsListening(false);
       speechRecognitionRef.current = null;
@@ -888,17 +888,17 @@ export default function InterviewRoomPage({ params }: { params: { mockInterviewI
       if (speechRecognitionRef.current === recognition) {
         speechRecognitionRef.current = null;
       }
-      setVoiceStatus((current) => (current.includes("拒绝") || current.includes("不可用") ? current : "已结束语音输入"));
+      setVoiceStatus((current) => (current.includes("拒绝") || current.includes("不可用") ? current : "已结束实时转文字"));
     };
     recognition.start();
     speechRecognitionRef.current = recognition;
     setIsListening(true);
-    setVoiceStatus("正在听你说话...");
+    setVoiceStatus("正在实时转文字...");
   }, [cancelStreaming, inputMessage, stopSpeaking, submitting]);
 
   const startAudioRecording = useCallback(async () => {
     if (typeof window === "undefined" || typeof MediaRecorder === "undefined" || !navigator.mediaDevices?.getUserMedia) {
-      message.warning("当前浏览器不支持录音转写");
+      message.warning("当前浏览器不支持录音后转写");
       return;
     }
     stopSpeaking();
@@ -1652,7 +1652,7 @@ export default function InterviewRoomPage({ params }: { params: { mockInterviewI
                       className="tool-button"
                     >
                       {isListening ? <MicOff size={16} /> : <Mic size={16} />}
-                      {isListening ? "停止收音" : "语音输入"}
+                      {isListening ? "停止转写" : "实时转文字"}
                     </Button>
                     <Button
                       onClick={isRecording ? stopAudioRecording : () => void startAudioRecording()}
@@ -1660,7 +1660,7 @@ export default function InterviewRoomPage({ params }: { params: { mockInterviewI
                       className={`tool-button ${isRecording ? "active" : ""}`}
                     >
                       {isRecording ? <Square size={16} /> : <Mic size={16} />}
-                      {isTranscribing ? "转写中" : isRecording ? "停止录音" : "录音转写"}
+                      {isTranscribing ? "转写中" : isRecording ? "停止录音" : "录音后转写"}
                     </Button>
                     <Button
                       onClick={() => {
@@ -1701,7 +1701,7 @@ export default function InterviewRoomPage({ params }: { params: { mockInterviewI
                       }}
                     >
                       <Mic size={14} />
-                      按住说话
+                      按住转写
                     </Button>
                     <Button
                       onClick={() => {

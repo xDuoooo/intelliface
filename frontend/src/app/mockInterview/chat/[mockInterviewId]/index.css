@@ -73,6 +73,7 @@
     position: sticky;
     top: 92px;
     align-self: start;
+    height: fit-content;
 }
 
 .hero-card,
@@ -205,6 +206,11 @@
     max-height: 74vh;
     overflow-y: auto;
     padding: 8px 4px 8px 0;
+}
+
+.message-end-anchor {
+    width: 100%;
+    height: 1px;
 }
 
 .message-row {
@@ -1444,6 +1450,13 @@
     40% {
         opacity: 1;
         transform: scale(1);
+    }
+}
+
+@media (min-width: 1221px) {
+    .interview-shell.with-side .message-list {
+        max-height: none;
+        overflow: visible;
     }
 }
 

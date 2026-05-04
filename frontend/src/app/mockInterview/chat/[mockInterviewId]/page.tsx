@@ -348,6 +348,7 @@ export default function InterviewRoomPage({ params }: { params: { mockInterviewI
   const streamAbortControllerRef = useRef<AbortController | null>(null);
   const refreshAfterAbortTimerRef = useRef<number | null>(null);
   const messageListRef = useRef<HTMLDivElement | null>(null);
+  const messageEndRef = useRef<HTMLDivElement | null>(null);
   const voiceBaseInputRef = useRef("");
   const lastSpokenKeyRef = useRef("");
   const draftHydratedKeyRef = useRef<string>();
@@ -650,12 +651,12 @@ export default function InterviewRoomPage({ params }: { params: { mockInterviewI
   }, [autoSpeakEnabled, stopSpeaking]);
 
   useEffect(() => {
-    if (!messageListRef.current) {
+    if (!messageEndRef.current) {
       return;
     }
-    messageListRef.current.scrollTo({
-      top: messageListRef.current.scrollHeight,
+    messageEndRef.current.scrollIntoView({
       behavior: "smooth",
+      block: "end",
     });
   }, [messages.length, streamingReply?.content]);
 
@@ -1502,6 +1503,7 @@ export default function InterviewRoomPage({ params }: { params: { mockInterviewI
                       <span>{streamStatus || "面试官正在整理下一轮追问..."}</span>
                     </div>
                   ) : null}
+                  <div ref={messageEndRef} className="message-end-anchor" />
                 </>
               ) : (
                 <Empty description="还没有开始这场面试" image={Empty.PRESENTED_IMAGE_SIMPLE} />

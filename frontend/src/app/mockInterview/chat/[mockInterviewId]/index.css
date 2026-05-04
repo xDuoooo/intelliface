@@ -121,23 +121,42 @@
     border-radius: 999px !important;
 }
 
-.hero-meta {
-    display: flex;
-    flex-wrap: wrap;
+.hero-meta-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 12px;
     margin-top: 20px;
 }
 
-.meta-pill {
-    display: inline-flex;
+.meta-card {
+    border-radius: 18px;
+    background: #f8fafc;
+    padding: 14px 16px;
+}
+
+.meta-card-head {
+    display: flex;
     align-items: center;
     gap: 8px;
-    border-radius: 999px;
-    background: #f8fafc;
-    color: #475569;
-    font-size: 13px;
-    font-weight: 600;
-    padding: 10px 14px;
+    color: #64748b;
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.meta-card-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: #1677ff;
+}
+
+.meta-card strong {
+    display: block;
+    margin-top: 10px;
+    color: #0f172a;
+    font-size: 15px;
+    line-height: 1.6;
+    font-weight: 700;
 }
 
 .hero-actions {
@@ -145,6 +164,18 @@
     flex-wrap: wrap;
     gap: 12px;
     margin-top: 24px;
+}
+
+.hero-action-panel {
+    margin-top: 24px;
+}
+
+.hero-action-note {
+    color: #64748b;
+    font-size: 13px;
+    line-height: 1.75;
+    font-weight: 600;
+    margin-bottom: 12px;
 }
 
 .action-button {
@@ -398,6 +429,17 @@
     flex-wrap: wrap;
 }
 
+.tool-group.secondary {
+    gap: 8px;
+}
+
+.tool-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    min-width: 0;
+}
+
 .tool-button {
     height: 42px !important;
     border-radius: 14px !important;
@@ -406,10 +448,24 @@
     gap: 8px;
 }
 
+.tool-button.compact {
+    height: 34px !important;
+    border-radius: 999px !important;
+    padding: 0 12px !important;
+    font-size: 12px !important;
+    color: #64748b !important;
+}
+
 .tool-button.active {
     border-color: rgba(22, 119, 255, 0.45) !important;
     background: rgba(22, 119, 255, 0.08) !important;
     color: #1677ff !important;
+}
+
+.tool-button.danger-soft {
+    border-color: rgba(248, 113, 113, 0.28) !important;
+    background: rgba(248, 113, 113, 0.08) !important;
+    color: #dc2626 !important;
 }
 
 .send-button {
@@ -508,6 +564,14 @@
     padding: 18px;
 }
 
+.cue-topline {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
 .cue-tag {
     display: inline-flex;
     align-items: center;
@@ -521,15 +585,47 @@
     padding: 8px 12px;
 }
 
+.cue-meta-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.cue-meta-pill {
+    display: inline-flex;
+    align-items: center;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.82);
+    border: 1px solid rgba(226, 232, 240, 0.95);
+    color: #64748b;
+    font-size: 12px;
+    font-weight: 700;
+    padding: 6px 10px;
+}
+
 .cue-focus {
     margin-top: 14px;
-    font-size: 18px;
+    font-size: 17px;
     font-weight: 800;
-    line-height: 1.7;
+    line-height: 1.65;
+}
+
+.cue-guidance {
+    margin-top: 14px;
+    padding-top: 14px;
+    border-top: 1px solid rgba(191, 219, 254, 0.65);
+}
+
+.cue-guidance-label {
+    color: #94a3b8;
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    margin-bottom: 8px;
 }
 
 .cue-hint {
-    margin-top: 12px;
     color: #475569;
     line-height: 1.8;
     font-size: 13px;
@@ -750,10 +846,39 @@
 .dimension-head {
     display: flex;
     justify-content: space-between;
+    align-items: flex-start;
     margin-bottom: 10px;
     color: #475569;
     font-size: 13px;
     font-weight: 700;
+}
+
+.dimension-score-stack {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 4px;
+}
+
+.dimension-score-stack strong {
+    color: #0f172a;
+    font-size: 20px;
+    line-height: 1;
+}
+
+.dimension-score-stack em {
+    font-style: normal;
+    color: #1677ff;
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+}
+
+.dimension-hint {
+    color: #64748b;
+    line-height: 1.7;
+    font-size: 13px;
+    margin-bottom: 12px;
 }
 
 .report-block {
@@ -1376,6 +1501,10 @@
     }
 
     .metric-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .hero-meta-grid {
         grid-template-columns: 1fr;
     }
 

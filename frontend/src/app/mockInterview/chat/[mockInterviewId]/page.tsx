@@ -1028,19 +1028,23 @@ export default function InterviewRoomPage({ params }: { params: { mockInterviewI
   const infoItems = [
     {
       icon: <Briefcase size={14} />,
-      label: interview?.jobPosition || "未命名岗位",
+      title: "目标岗位",
+      value: interview?.jobPosition || "未命名岗位",
     },
     {
       icon: <Flag size={14} />,
-      label: interview?.interviewType || "技术深挖",
+      title: "面试方向",
+      value: interview?.interviewType || "技术深挖",
     },
     {
       icon: <Clock3 size={14} />,
-      label: `${interview?.workExperience || "经验不限"} / ${interview?.difficulty || "中等"}`,
+      title: "经验与难度",
+      value: `${interview?.workExperience || "经验不限"} / ${interview?.difficulty || "中等"}`,
     },
     {
       icon: <Radar size={14} />,
-      label: interview?.techStack || "通用后端",
+      title: "技术栈",
+      value: interview?.techStack || "通用后端",
     },
   ];
 
@@ -1067,6 +1071,37 @@ export default function InterviewRoomPage({ params }: { params: { mockInterviewI
     && !submitting
     && !isRecording
     && !isTranscribing;
+  const heroActionHint = !isStarted && !isPaused && !isEnded
+    ? "准备好后开始面试，系统会从第一轮主题进入真实追问节奏。"
+    : isStarted
+      ? "当前面试正在进行。你可以先暂停整理思路，或在完成主要考察主题后结束并生成报告。"
+      : isPaused
+        ? "当前已暂停，继续后会从当前考察点接着追问。"
+        : "这场面试已经结束，建议先导出复盘，再基于这次配置重新来一场。";
+  const cueMetaItems = [
+    { label: "轮次", value: `第 ${activeAgendaRound} 轮` },
+    { label: "建议作答", value: formatDuration(recommendedAnswerSeconds) },
+    ...(isPaused ? [{ label: "状态", value: "已暂停" }] : []),
+  ];
+  const dimensionItems = [
+    { label: "表达能力", value: report?.communicationScore || 0 },
+    { label: "技术深度", value: report?.technicalScore || 0 },
+    { label: "问题分析", value: report?.problemSolvingScore || 0 },
+  ].map((item) => {
+    let tag = "待加强";
+    let hint = "先把结构、例子和关键结论讲稳。";
+    if (item.value >= 85) {
+      tag = "很稳";
+      hint = "已经接近真实面试里的高完成度表达。";
+    } else if (item.value >= 70) {
+      tag = "较强";
+      hint = "核心能力已经在线，再补细节会更有说服力。";
+    } else if (item.value >= 55) {
+      tag = "可继续打磨";
+      hint = "基础是有的，但还需要补足案例和取舍。";
+    }
+    return { ...item, tag, hint };
+  });
 
   useEffect(() => {
     if (!roundRecords.length) {
@@ -1204,79 +1239,124 @@ export default function InterviewRoomPage({ params }: { params: { mockInterviewI
               </Tag>
             </div>
 
-            <div className="hero-meta">
+            <div className="hero-meta-grid">
               {infoItems.map((item) => (
-                <span className="meta-pill" key={item.label}>
-                  {item.icon}
-                  {item.label}
-                </span>
+                <div className="meta-card" key={item.title}>
+                  <div className="meta-card-head">
+                    <span className="meta-card-icon">{item.icon}</span>
+                    <span>{item.title}</span>
+                  </div>
+                  <strong>{item.value}</strong>
+                </div>
               ))}
             </div>
 
-            <div className="hero-actions">
-              <Link href={`/mockInterview/add?from=${interview.id}`}>
-                <Button className="action-button secondary">
-                  <RefreshCw size={16} />
-                  再来一场
-                </Button>
-              </Link>
-              <Button
-                type="primary"
-                onClick={() => void handleEvent("start")}
-                disabled={isStarted || isPaused || isEnded}
-                loading={submitting}
-                className="action-button"
-              >
-                开始面试
-              </Button>
-              <Button
-                onClick={() => void handleEvent("pause")}
-                disabled={!isStarted || isPaused || isEnded}
-                loading={submitting}
-                className="action-button secondary"
-              >
-                暂停面试
-              </Button>
-              <Button
-                type="primary"
-                onClick={() => void handleEvent("resume")}
-                disabled={!isPaused || isEnded}
-                loading={submitting}
-                className="action-button"
-              >
-                继续面试
-              </Button>
-              <Popconfirm
-                title={currentRound < expectedRounds ? "还没走完主要考察主题，确定结束吗？" : "确定结束并生成报告？"}
-                description={
-                  currentRound < expectedRounds
-                    ? `当前只完成 ${currentRound}/${expectedRounds} 个主要考察主题，报告可信度会受影响。`
-                    : "结束后会生成最终复盘，当前会话将不能继续作答。"
-                }
-                okText="确认结束"
-                cancelText="继续面试"
-                okButtonProps={{ danger: true }}
-                disabled={(!isStarted && !isPaused) || isEnded || submitting}
-                onConfirm={() => void handleEvent("end")}
-              >
-                <Button
-                  danger
-                  disabled={(!isStarted && !isPaused) || isEnded}
-                  loading={submitting}
-                  className="action-button"
-                >
-                  结束并生成报告
-                </Button>
-              </Popconfirm>
-              <Button
-                onClick={handleExportReview}
-                disabled={!isEnded}
-                loading={exporting}
-                className="action-button secondary"
-              >
-                <Download size={16} />
-                导出逐题复盘
-              </Button>
+            <div className="hero-action-panel">
+              <div className="hero-action-note">{heroActionHint}</div>
+              <div className="hero-actions">
+                {!isStarted && !isPaused && !isEnded ? (
+                  <>
+                    <Button
+                      type="primary"
+                      onClick={() => void handleEvent("start")}
+                      loading={submitting}
+                      className="action-button"
+                    >
+                      开始面试
+                    </Button>
+                    <Link href={`/mockInterview/add?from=${interview.id}`}>
+                      <Button className="action-button secondary">
+                        <RefreshCw size={16} />
+                        再来一场
+                      </Button>
+                    </Link>
+                  </>
+                ) : null}
+                {isStarted ? (
+                  <>
+                    <Button
+                      onClick={() => void handleEvent("pause")}
+                      loading={submitting}
+                      className="action-button secondary"
+                    >
+                      暂停面试
+                    </Button>
+                    <Popconfirm
+                      title={currentRound < expectedRounds ? "还没走完主要考察主题，确定结束吗？" : "确定结束并生成报告？"}
+                      description={
+                        currentRound < expectedRounds
+                          ? `当前只完成 ${currentRound}/${expectedRounds} 个主要考察主题，报告可信度会受影响。`
+                          : "结束后会生成最终复盘，当前会话将不能继续作答。"
+                      }
+                      okText="确认结束"
+                      cancelText="继续面试"
+                      okButtonProps={{ danger: true }}
+                      disabled={submitting}
+                      onConfirm={() => void handleEvent("end")}
+                    >
+                      <Button
+                        danger
+                        loading={submitting}
+                        className="action-button"
+                      >
+                        结束并生成报告
+                      </Button>
+                    </Popconfirm>
+                  </>
+                ) : null}
+                {isPaused ? (
+                  <>
+                    <Button
+                      type="primary"
+                      onClick={() => void handleEvent("resume")}
+                      loading={submitting}
+                      className="action-button"
+                    >
+                      继续面试
+                    </Button>
+                    <Popconfirm
+                      title={currentRound < expectedRounds ? "还没走完主要考察主题，确定结束吗？" : "确定结束并生成报告？"}
+                      description={
+                        currentRound < expectedRounds
+                          ? `当前只完成 ${currentRound}/${expectedRounds} 个主要考察主题，报告可信度会受影响。`
+                          : "结束后会生成最终复盘，当前会话将不能继续作答。"
+                      }
+                      okText="确认结束"
+                      cancelText="继续面试"
+                      okButtonProps={{ danger: true }}
+                      disabled={submitting}
+                      onConfirm={() => void handleEvent("end")}
+                    >
+                      <Button
+                        danger
+                        loading={submitting}
+                        className="action-button"
+                      >
+                        结束并生成报告
+                      </Button>
+                    </Popconfirm>
+                  </>
+                ) : null}
+                {isEnded ? (
+                  <>
+                    <Button
+                      type="primary"
+                      onClick={handleExportReview}
+                      loading={exporting}
+                      className="action-button"
+                    >
+                      <Download size={16} />
+                      导出逐题复盘
+                    </Button>
+                    <Link href={`/mockInterview/add?from=${interview.id}`}>
+                      <Button className="action-button secondary">
+                        <RefreshCw size={16} />
+                        再来一场
+                      </Button>
+                    </Link>
+                  </>
+                ) : null}
+              </div>
             </div>
           </Card>
 
@@ -1325,9 +1405,21 @@ export default function InterviewRoomPage({ params }: { params: { mockInterviewI
                 </span>
               </div>
               <div className="live-cue-panel">
-                <div className="cue-tag">{currentQuestionStyle}</div>
+                <div className="cue-topline">
+                  <div className="cue-tag">{currentQuestionStyle}</div>
+                  <div className="cue-meta-list">
+                    {cueMetaItems.map((item) => (
+                      <span className="cue-meta-pill" key={item.label}>
+                        {item.label} · {item.value}
+                      </span>
+                    ))}
+                  </div>
+                </div>
                 <div className="cue-focus">{currentFocus}</div>
-                <div className="cue-hint">{currentActionHint}</div>
+                <div className="cue-guidance">
+                  <div className="cue-guidance-label">当前建议</div>
+                  <div className="cue-hint">{currentActionHint}</div>
+                </div>
                 {isPaused ? (
                   <div className="cue-paused-banner">面试已暂停，继续后会从当前考察点接着追问。</div>
                 ) : null}
@@ -1467,84 +1559,88 @@ export default function InterviewRoomPage({ params }: { params: { mockInterviewI
                 }}
               />
               <div className="input-toolbar">
-                <div className="tool-group">
-                  <Button
-                    onClick={isListening ? stopVoiceInput : startVoiceInput}
-                    disabled={!speechRecognitionSupported || !canAnswer || isRecording || isTranscribing}
-                    className="tool-button"
-                  >
-                    {isListening ? <MicOff size={16} /> : <Mic size={16} />}
-                    {isListening ? "停止收音" : "语音输入"}
-                  </Button>
-                  <Button
-                    disabled={!speechRecognitionSupported || !canAnswer || isRecording || isTranscribing}
-                    className={`tool-button ${isListening ? "active" : ""}`}
-                    onMouseDown={(e) => {
-                      e.preventDefault();
-                      if (!isListening) {
-                        startVoiceInput();
-                      }
-                    }}
-                    onMouseUp={stopVoiceInput}
-                    onMouseLeave={() => {
-                      if (isListening) {
-                        stopVoiceInput();
-                      }
-                    }}
-                    onTouchStart={(e) => {
-                      e.preventDefault();
-                      if (!isListening) {
-                        startVoiceInput();
-                      }
-                    }}
-                    onTouchEnd={(e) => {
-                      e.preventDefault();
-                      stopVoiceInput();
-                    }}
-                  >
-                    <Mic size={16} />
-                    按住说话
-                  </Button>
-                  <Button
-                    onClick={isRecording ? stopAudioRecording : () => void startAudioRecording()}
-                    disabled={!audioRecordingSupported || !canAnswer || isListening || isTranscribing}
-                    className={`tool-button ${isRecording ? "active" : ""}`}
-                  >
-                    {isRecording ? <Square size={16} /> : <Mic size={16} />}
-                    {isTranscribing ? "转写中" : isRecording ? "停止录音" : "录音转写"}
-                  </Button>
-                  <Button
-                    onClick={() => {
-                      setAutoSpeakEnabled((prev) => !prev);
-                    }}
-                    disabled={!audioPlaybackSupported}
-                    className="tool-button"
-                  >
-                    {autoSpeakEnabled ? <Volume2 size={16} /> : <VolumeX size={16} />}
-                    {autoSpeakEnabled ? "关闭自动播报" : "开启自动播报"}
-                  </Button>
-                  <Button
-                    onClick={() => {
-                      void speakText(latestSpeakableMessage?.content, true);
-                    }}
-                    disabled={!audioPlaybackSupported || !latestSpeakableMessage?.content}
-                    className="tool-button"
-                  >
-                    <Volume2 size={16} />
-                    播报当前题目
-                  </Button>
-                  {isStreaming ? (
+                <div className="tool-stack">
+                  <div className="tool-group">
                     <Button
-                      danger
-                      onClick={() => {
-                        cancelStreaming();
-                      }}
+                      onClick={isListening ? stopVoiceInput : startVoiceInput}
+                      disabled={!speechRecognitionSupported || !canAnswer || isRecording || isTranscribing}
                       className="tool-button"
                     >
-                      <Square size={16} />
-                      停止实时输出
+                      {isListening ? <MicOff size={16} /> : <Mic size={16} />}
+                      {isListening ? "停止收音" : "语音输入"}
                     </Button>
-                  ) : null}
+                    <Button
+                      onClick={isRecording ? stopAudioRecording : () => void startAudioRecording()}
+                      disabled={!audioRecordingSupported || !canAnswer || isListening || isTranscribing}
+                      className={`tool-button ${isRecording ? "active" : ""}`}
+                    >
+                      {isRecording ? <Square size={16} /> : <Mic size={16} />}
+                      {isTranscribing ? "转写中" : isRecording ? "停止录音" : "录音转写"}
+                    </Button>
+                    <Button
+                      onClick={() => {
+                        void speakText(latestSpeakableMessage?.content, true);
+                      }}
+                      disabled={!audioPlaybackSupported || !latestSpeakableMessage?.content}
+                      className="tool-button"
+                    >
+                      <Volume2 size={16} />
+                      播报当前题目
+                    </Button>
+                  </div>
+                  <div className="tool-group secondary">
+                    <Button
+                      disabled={!speechRecognitionSupported || !canAnswer || isRecording || isTranscribing}
+                      className={`tool-button compact ${isListening ? "active" : ""}`}
+                      onMouseDown={(e) => {
+                        e.preventDefault();
+                        if (!isListening) {
+                          startVoiceInput();
+                        }
+                      }}
+                      onMouseUp={stopVoiceInput}
+                      onMouseLeave={() => {
+                        if (isListening) {
+                          stopVoiceInput();
+                        }
+                      }}
+                      onTouchStart={(e) => {
+                        e.preventDefault();
+                        if (!isListening) {
+                          startVoiceInput();
+                        }
+                      }}
+                      onTouchEnd={(e) => {
+                        e.preventDefault();
+                        stopVoiceInput();
+                      }}
+                    >
+                      <Mic size={14} />
+                      按住说话
+                    </Button>
+                    <Button
+                      onClick={() => {
+                        setAutoSpeakEnabled((prev) => !prev);
+                      }}
+                      disabled={!audioPlaybackSupported}
+                      className={`tool-button compact ${autoSpeakEnabled ? "active" : ""}`}
+                    >
+                      {autoSpeakEnabled ? <Volume2 size={14} /> : <VolumeX size={14} />}
+                      {autoSpeakEnabled ? "自动播报已开" : "自动播报已关"}
+                    </Button>
+                    {isStreaming ? (
+                      <Button
+                        danger
+                        onClick={() => {
+                          cancelStreaming();
+                        }}
+                        className="tool-button compact danger-soft"
+                      >
+                        <Square size={14} />
+                        停止实时输出
+                      </Button>
+                    ) : null}
+                  </div>
                 </div>
                 <Button
                   type="primary"
@@ -1648,16 +1744,16 @@ export default function InterviewRoomPage({ params }: { params: { mockInterviewI
               </div>
 
               <div className="review-dimension-grid">
-                {[
-                  { label: "表达能力", value: report.communicationScore || 0 },
-                  { label: "技术深度", value: report.technicalScore || 0 },
-                  { label: "问题分析", value: report.problemSolvingScore || 0 },
-                ].map((item) => (
+                {dimensionItems.map((item) => (
                   <div className="dimension-item" key={item.label}>
                     <div className="dimension-head">
                       <span>{item.label}</span>
-                      <strong>{item.value}</strong>
+                      <div className="dimension-score-stack">
+                        <strong>{item.value}</strong>
+                        <em>{item.tag}</em>
+                      </div>
                     </div>
+                    <div className="dimension-hint">{item.hint}</div>
                     <Progress percent={item.value} showInfo={false} strokeColor="#1677ff" />
                   </div>
                 ))}

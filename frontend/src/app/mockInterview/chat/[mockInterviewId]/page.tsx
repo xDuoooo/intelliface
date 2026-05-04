@@ -1660,7 +1660,7 @@ export default function InterviewRoomPage({ params }: { params: { mockInterviewI
         </section>
 
         {hasSideRail ? (
-          <aside className="interview-side">
+          <aside className="interview-side sticky-side-rail">
             {agendaItems.length ? (
               <Card className="side-card sticky-side-card">
                 <div className="section-heading compact">

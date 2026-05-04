@@ -69,6 +69,12 @@
     min-width: 0;
 }
 
+.sticky-side-rail {
+    position: sticky;
+    top: 92px;
+    align-self: start;
+}
+
 .hero-card,
 .message-card,
 .side-card,
@@ -79,8 +85,8 @@
 }
 
 .sticky-side-card {
-    position: sticky !important;
-    top: 92px;
+    max-height: calc(100vh - 112px);
+    overflow: auto;
 }
 
 .context-grid {
@@ -1446,9 +1452,15 @@
         grid-template-columns: 1fr;
     }
 
-    .sticky-side-card {
-        position: static !important;
+    .sticky-side-rail {
+        position: static;
         top: auto;
+        align-self: auto;
+    }
+
+    .sticky-side-card {
+        max-height: none;
+        overflow: visible;
     }
 
     .context-grid {

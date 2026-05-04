@@ -1454,13 +1454,6 @@
     }
 }
 
-@media (min-width: 1221px) {
-    .interview-shell.with-side .message-list {
-        max-height: none;
-        overflow: visible;
-    }
-}
-
 @media (max-width: 1220px) {
     .interview-shell.with-side {
         grid-template-columns: 1fr;

@@ -200,6 +200,27 @@ export async function transcribeMockInterviewAudioUsingPost(
   return String(json?.data || '');
 }
 
+export async function synthesizeMockInterviewSpeechUsingPost(
+  body: { id: string | number; text: string },
+  signal?: AbortSignal,
+) {
+  const response = await fetch(buildApiUrl('/api/mockInterview/speech'), {
+    method: 'POST',
+    credentials: 'include',
+    signal,
+    headers: {
+      'Accept': 'audio/mpeg,audio/wav,audio/ogg,audio/pcm,application/json',
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  });
+  const contentType = response.headers.get('content-type') || '';
+  if (!response.ok || contentType.includes('application/json')) {
+    throw new Error(await readResponseError(response, '语音播报失败'));
+  }
+  return response.blob();
+}
+
 export async function downloadMockInterviewReviewUsingGet(id: string | number) {
   const response = await fetch(buildApiUrl(`/api/mockInterview/export?id=${encodeURIComponent(String(id))}`), {
     method: 'GET',

@@ -10,9 +10,11 @@ import com.xduo.springbootinit.common.ResultUtils;
 import com.xduo.springbootinit.constant.UserConstant;
 import com.xduo.springbootinit.exception.BusinessException;
 import com.xduo.springbootinit.exception.ThrowUtils;
+import com.xduo.springbootinit.manager.AiManager;
 import com.xduo.springbootinit.model.dto.mockinterview.MockInterviewAddRequest;
 import com.xduo.springbootinit.model.dto.mockinterview.MockInterviewEventRequest;
 import com.xduo.springbootinit.model.dto.mockinterview.MockInterviewQueryRequest;
+import com.xduo.springbootinit.model.dto.mockinterview.MockInterviewSpeechRequest;
 import com.xduo.springbootinit.model.entity.MockInterview;
 import com.xduo.springbootinit.model.entity.User;
 import com.xduo.springbootinit.service.MockInterviewService;
@@ -46,6 +48,9 @@ public class MockInterviewController {
 
     @Resource
     private UserService userService;
+
+    @Resource
+    private AiManager aiManager;
 
     @PostMapping("/add")
     public BaseResponse<Long> addMockInterview(@RequestBody MockInterviewAddRequest addRequest, HttpServletRequest request) {
@@ -128,6 +133,22 @@ public class MockInterviewController {
         MockInterview mockInterview = getOwnedMockInterview(id, loginUser, request);
         String transcript = mockInterviewService.transcribeInterviewAudio(mockInterview, audioFile);
         return ResultUtils.success(transcript);
+    }
+
+    @PostMapping(value = "/speech", produces = {"audio/mpeg", "audio/wav", "audio/ogg", "audio/pcm"})
+    public ResponseEntity<byte[]> synthesizeMockInterviewSpeech(@RequestBody MockInterviewSpeechRequest speechRequest,
+                                                                HttpServletRequest request) {
+        ThrowUtils.throwIf(speechRequest == null || speechRequest.getId() == null || speechRequest.getId() <= 0,
+                ErrorCode.PARAMS_ERROR);
+        ThrowUtils.throwIf(speechRequest == null || speechRequest.getText() == null || speechRequest.getText().isBlank(),
+                ErrorCode.PARAMS_ERROR, "请先提供要播报的内容");
+        User loginUser = userService.getLoginUser(request);
+        getOwnedMockInterview(speechRequest.getId(), loginUser, request);
+        byte[] audioBytes = aiManager.synthesizeSpeech(speechRequest.getText(), loginUser.getId());
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CACHE_CONTROL, "no-store")
+                .contentType(MediaType.parseMediaType(aiManager.getTtsContentType()))
+                .body(audioBytes);
     }
 
     @PostMapping("/list/page")

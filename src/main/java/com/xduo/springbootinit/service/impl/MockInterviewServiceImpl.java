@@ -725,9 +725,9 @@ public class MockInterviewServiceImpl extends ServiceImpl<MockInterviewMapper, M
     private String buildScoringPolicy(MockInterview mockInterview) {
         String difficulty = StringUtils.defaultIfBlank(mockInterview == null ? null : mockInterview.getDifficulty(), "中等");
         return switch (difficulty) {
-            case "初级" -> "评分策略：初级难度下，能讲清基础概念、基本流程和个人参与部分可给中等分；但概念错误、答非所问或完全没有实践细节仍要扣分。";
-            case "高级" -> "评分策略：高级难度下，只有回答包含真实项目细节、关键指标、技术取舍、边界场景、故障处理或复盘改进时才可给高分；泛泛而谈通常不超过 65 分。";
-            default -> "评分策略：评分要真实，不要默认给高分。候选人回答空泛、没有量化结果、没有技术取舍、没有边界场景时，应明显扣分。";
+            case "初级" -> "评分策略：初级难度下，只要回答能讲清背景、职责、基本流程和结果，即使深度一般，也可给 70 分上下；有真实细节、指标或复盘可到 80 分以上；只有概念错误、答非所问或几乎没有实践信息时才明显扣分。";
+            case "高级" -> "评分策略：高级难度下，结构完整并能拿出真实项目证据的回答可给 70 分上下；回答若包含关键指标、技术取舍、边界场景、故障处理和复盘改进，才进入 85 分以上；明显空泛或缺少事实依据时再压低。";
+            default -> "评分策略：中等难度下，回答只要能说清背景、职责、方案和结果，即使量化和边界不够充分，也可给 70 分上下；80 分以上留给有指标、技术取舍、边界场景和复盘支撑的回答；明显空泛、答非所问或缺少事实依据时再明显扣分。";
         };
     }
 
@@ -743,9 +743,9 @@ public class MockInterviewServiceImpl extends ServiceImpl<MockInterviewMapper, M
     private int getLowScoreProbeThreshold(MockInterview mockInterview) {
         String difficulty = StringUtils.defaultIfBlank(mockInterview == null ? null : mockInterview.getDifficulty(), "中等");
         return switch (difficulty) {
-            case "初级" -> 52;
-            case "高级" -> 65;
-            default -> 58;
+            case "初级" -> 48;
+            case "高级" -> 62;
+            default -> 54;
         };
     }
 
@@ -1332,7 +1332,7 @@ public class MockInterviewServiceImpl extends ServiceImpl<MockInterviewMapper, M
         }
 
         if (completedRounds < minimumReliableRounds) {
-            capSummaryScores(summaryResult, 60);
+            capSummaryScores(summaryResult, 72);
             summaryResult.setSummary("本次面试完成轮次偏少，当前评分只适合作为早期参考。建议继续完成更多轮次后再判断稳定水平。"
                     + StringUtils.defaultString(summaryResult.getSummary()));
             summaryResult.setReadinessLevel("样本偏少，建议继续完成更多轮次");
@@ -1351,7 +1351,7 @@ public class MockInterviewServiceImpl extends ServiceImpl<MockInterviewMapper, M
                     summaryResult.getPracticePlan(),
                     List.of("补完至少 " + minimumReliableRounds + " 轮模拟面试，并复盘每轮是否包含背景、职责、方案、结果")), MAX_PRACTICE_PLAN_ITEMS, MAX_PRACTICE_PLAN_ITEM_CHARS));
         } else if (completedRounds * 1.0 / expectedRounds < 0.6) {
-            capSummaryScores(summaryResult, 75);
+            capSummaryScores(summaryResult, 85);
             summaryResult.setRecommendedNextAction("当前完成度不足六成，建议继续完成计划轮次，让评分覆盖更多题型和追问场景。");
         }
     }
@@ -1388,32 +1388,32 @@ public class MockInterviewServiceImpl extends ServiceImpl<MockInterviewMapper, M
             roundAnalysis.setNextActionHint("请先说出你的初步理解、推理过程、验证方法和学习补齐计划。");
         } else {
             if (answer.length() < SHORT_ANSWER_THRESHOLD) {
-                scoreCap = Math.min(scoreCap, 60);
+                scoreCap = Math.min(scoreCap, 68);
                 appendDistinctStrings(improvementTags, List.of("扩展回答结构"));
                 appendDistinctStrings(missingPoints, List.of("回答信息量偏少"));
             }
             if (!hrInterview && !hasQuantitativeSignal(answer)) {
-                scoreCap = Math.min(scoreCap, 82);
+                scoreCap = Math.min(scoreCap, 88);
                 appendDistinctStrings(improvementTags, List.of("补量化指标"));
                 appendDistinctStrings(missingPoints, List.of("缺少可验证指标"));
             }
             if (!hasResponsibilitySignal(answer)) {
-                scoreCap = Math.min(scoreCap, 78);
+                scoreCap = Math.min(scoreCap, 86);
                 appendDistinctStrings(improvementTags, List.of("补职责边界"));
                 appendDistinctStrings(missingPoints, List.of("个人职责边界不清楚"));
             }
             if (!hasReasoningSignal(answer)) {
-                scoreCap = Math.min(scoreCap, 78);
+                scoreCap = Math.min(scoreCap, 86);
                 appendDistinctStrings(improvementTags, List.of("补设计取舍"));
                 appendDistinctStrings(missingPoints, List.of("技术取舍或推理链不足"));
             }
             if (!hrInterview && !hasReviewSignal(answer)) {
-                scoreCap = Math.min(scoreCap, 85);
+                scoreCap = Math.min(scoreCap, 90);
                 appendDistinctStrings(improvementTags, List.of("补复盘风险"));
                 appendDistinctStrings(missingPoints, List.of("缺少复盘或风险意识"));
             }
             if (looksUncertain(answer)) {
-                scoreCap = Math.min(scoreCap, 68);
+                scoreCap = Math.min(scoreCap, 76);
                 appendDistinctStrings(improvementTags, List.of("补事实证据"));
                 appendDistinctStrings(missingPoints, List.of("不确定表达较多，缺少事实支撑"));
             }
@@ -1563,8 +1563,8 @@ public class MockInterviewServiceImpl extends ServiceImpl<MockInterviewMapper, M
 
     private boolean looksUncertain(String userAnswer) {
         String normalized = StringUtils.trimToEmpty(userAnswer);
-        return normalized.length() < 120
-                && normalized.matches(".*(可能|大概|应该|也许|好像|不确定).*");
+        return normalized.length() < 90
+                && normalized.matches(".*(不确定|没把握|可能是|大概是|也许是|好像是).*");
     }
 
     private String extractJsonContent(String content) {

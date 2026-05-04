@@ -201,6 +201,32 @@ ai:
     model-name: bigmodel
     user-id: intelliface
     timeout-seconds: 120
+  tts:
+    # 语音播报：当前模拟面试页面通过后端调用豆包语音合成模型 2.0，再把音频返回前端播放
+    provider: doubao
+    # 新版控制台直接使用 API Key；旧字段 app-id / token 仅作为兼容兜底，不建议再新配
+    api-key: your_doubao_tts_api_key
+    app-id: ""
+    token: ""
+    cluster: volcano_tts
+    endpoint: https://openspeech.bytedance.com/api/v3/tts/submit
+    query-endpoint: https://openspeech.bytedance.com/api/v3/tts/query
+    # 豆包语音合成模型 2.0 的资源 ID；如果你的环境有特殊要求，可按官方文档覆盖
+    resource-id: seed-tts-2.0
+    query-resource-id: seed-tts-2.0
+    # 默认用 2.0 通用女声 Vivi；可替换为你控制台已授权的其他 2.0 音色
+    voice-type: zh_female_vv_uranus_bigtts
+    encoding: mp3
+    rate: 24000
+    speed-ratio: 1.0
+    volume-ratio: 1.0
+    pitch-ratio: 1.0
+    # 仅部分 2.0 复刻/角色音色需要显式指定模型，可留空
+    model: ""
+    emotion: ""
+    language: ""
+    user-id: intelliface
+    timeout-seconds: 60
   rate-limit:
     enabled: true
     chat:
@@ -209,6 +235,9 @@ ai:
     audio:
       max-per-minute: 3
       max-per-day: 30
+    tts:
+      max-per-minute: 12
+      max-per-day: 200
 
 # 前端联调地址
 app:

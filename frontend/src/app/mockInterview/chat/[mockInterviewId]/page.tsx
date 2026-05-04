@@ -24,6 +24,7 @@ import {
   downloadMockInterviewReviewUsingGet,
   getMockInterviewByIdUsingGet,
   handleMockInterviewEventUsingPost,
+  synthesizeMockInterviewSpeechUsingPost,
   streamMockInterviewEventUsingPost,
   transcribeMockInterviewAudioUsingPost,
 } from "@/api/mockInterviewController";
@@ -181,6 +182,62 @@ function formatDuration(seconds?: number) {
   return `${Math.floor(safeSeconds / 60)}:${String(safeSeconds % 60).padStart(2, "0")}`;
 }
 
+function splitSpeechText(content: string, maxBytes = 900) {
+  const normalized = content
+    .replace(/\r/g, "\n")
+    .replace(/\n{2,}/g, "\n")
+    .replace(/[ \t\f\v]+/g, " ")
+    .trim();
+  if (!normalized) {
+    return [];
+  }
+  const encoder = new TextEncoder();
+  const punctuation = new Set(["。", "！", "？", "；", "，", ".", "!", "?", ";", ",", "\n", "：", ":"]);
+  const segments: string[] = [];
+  let current = "";
+  let lastBreakIndex = -1;
+
+  const flushCurrent = (value: string) => {
+    const trimmed = value.trim();
+    if (trimmed) {
+      segments.push(trimmed);
+    }
+  };
+
+  for (const char of normalized) {
+    const candidate = current + char;
+    if (encoder.encode(candidate).length <= maxBytes) {
+      current = candidate;
+      if (punctuation.has(char)) {
+        lastBreakIndex = current.length;
+      }
+      continue;
+    }
+    if (!current) {
+      flushCurrent(char);
+      lastBreakIndex = -1;
+      continue;
+    }
+    if (lastBreakIndex > 0) {
+      const head = current.slice(0, lastBreakIndex);
+      const tail = current.slice(lastBreakIndex);
+      flushCurrent(head);
+      current = `${tail}${char}`.trimStart();
+    } else {
+      flushCurrent(current);
+      current = char;
+    }
+    lastBreakIndex = -1;
+    for (let i = 0; i < current.length; i += 1) {
+      if (punctuation.has(current[i])) {
+        lastBreakIndex = i + 1;
+      }
+    }
+  }
+  flushCurrent(current);
+  return segments;
+}
+
 function buildRoundScoreItems(record?: RoundRecord | null) {
   return [
     { label: "表达", value: record?.communicationScore || 0 },
@@ -277,7 +334,7 @@ export default function InterviewRoomPage({ params }: { params: { mockInterviewI
   const [streamingReply, setStreamingReply] = useState<StreamingReply | null>(null);
   const [autoSpeakEnabled, setAutoSpeakEnabled] = useState(true);
   const [speechRecognitionSupported, setSpeechRecognitionSupported] = useState(false);
-  const [speechSynthesisSupported, setSpeechSynthesisSupported] = useState(false);
+  const [audioPlaybackSupported, setAudioPlaybackSupported] = useState(false);
   const [audioRecordingSupported, setAudioRecordingSupported] = useState(false);
   const [isListening, setIsListening] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
@@ -295,6 +352,9 @@ export default function InterviewRoomPage({ params }: { params: { mockInterviewI
   const mediaStreamRef = useRef<MediaStream | null>(null);
   const recordedChunksRef = useRef<BlobPart[]>([]);
   const recordMimeTypeRef = useRef("audio/webm");
+  const activeAudioRef = useRef<HTMLAudioElement | null>(null);
+  const speechAbortControllerRef = useRef<AbortController | null>(null);
+  const speakingTaskIdRef = useRef(0);
 
   const applyInterviewData = useCallback((rawData?: API.MockInterview) => {
     const nextInterview = hydrateInterviewDetail(rawData);
@@ -331,7 +391,7 @@ export default function InterviewRoomPage({ params }: { params: { mockInterviewI
       return;
     }
     setSpeechRecognitionSupported(Boolean(getSpeechRecognitionConstructor()));
-    setSpeechSynthesisSupported("speechSynthesis" in window);
+    setAudioPlaybackSupported(typeof window.Audio !== "undefined");
     setAudioRecordingSupported(Boolean(window.MediaRecorder) && Boolean(navigator.mediaDevices?.getUserMedia));
     const savedAutoSpeak = window.localStorage.getItem(AUTO_SPEAK_STORAGE_KEY);
     if (savedAutoSpeak === "0") {
@@ -358,9 +418,14 @@ export default function InterviewRoomPage({ params }: { params: { mockInterviewI
       if (refreshAfterAbortTimerRef.current) {
         window.clearTimeout(refreshAfterAbortTimerRef.current);
       }
-      if ("speechSynthesis" in window) {
-        window.speechSynthesis.cancel();
+      speechAbortControllerRef.current?.abort();
+      speechAbortControllerRef.current = null;
+      const activeAudio = activeAudioRef.current;
+      if (activeAudio) {
+        activeAudio.pause();
+        activeAudio.src = "";
       }
+      activeAudioRef.current = null;
     };
   }, []);
 
@@ -459,9 +524,16 @@ export default function InterviewRoomPage({ params }: { params: { mockInterviewI
   }, [isEnded, isStarted, latestQuestionMessage?.timestamp, shouldPauseQuestionTimer]);
 
   const stopSpeaking = useCallback(() => {
-    if (typeof window !== "undefined" && "speechSynthesis" in window) {
-      window.speechSynthesis.cancel();
+    speakingTaskIdRef.current += 1;
+    speechAbortControllerRef.current?.abort();
+    speechAbortControllerRef.current = null;
+    const activeAudio = activeAudioRef.current;
+    if (activeAudio) {
+      activeAudio.pause();
+      activeAudio.src = "";
+      activeAudioRef.current = null;
     }
+    setVoiceStatus((current) => (current.startsWith("豆包语音") || current.includes("自动播放") ? "" : current));
   }, []);
 
   const releaseAudioRecorderResources = useCallback(() => {
@@ -477,20 +549,87 @@ export default function InterviewRoomPage({ params }: { params: { mockInterviewI
     recordedChunksRef.current = [];
   }, []);
 
-  const speakText = useCallback((content?: string) => {
-    if (!content || typeof window === "undefined" || !("speechSynthesis" in window)) {
+  const speakText = useCallback(async (content?: string, manual = false) => {
+    if (!content || typeof window === "undefined" || typeof window.Audio === "undefined" || !interview?.id) {
       return;
     }
-    const utterance = new SpeechSynthesisUtterance(content);
-    utterance.lang = "zh-CN";
-    utterance.rate = 1;
-    utterance.pitch = 1;
     stopSpeaking();
-    window.speechSynthesis.speak(utterance);
-  }, [stopSpeaking]);
+    const taskId = speakingTaskIdRef.current;
+    const segments = splitSpeechText(content);
+    if (!segments.length) {
+      return;
+    }
+    setVoiceStatus(segments.length > 1 ? "豆包语音正在分段播报..." : "豆包语音正在播报...");
+    try {
+      for (let index = 0; index < segments.length; index += 1) {
+        if (speakingTaskIdRef.current !== taskId) {
+          return;
+        }
+        const abortController = new AbortController();
+        speechAbortControllerRef.current = abortController;
+        const audioBlob = await synthesizeMockInterviewSpeechUsingPost(
+          {
+            id: interview.id,
+            text: segments[index],
+          },
+          abortController.signal,
+        );
+        if (speakingTaskIdRef.current !== taskId) {
+          return;
+        }
+        const audioUrl = URL.createObjectURL(audioBlob);
+        try {
+          await new Promise<void>((resolve, reject) => {
+            const audio = new Audio(audioUrl);
+            activeAudioRef.current = audio;
+            audio.onended = () => resolve();
+            audio.onpause = () => {
+              if (speakingTaskIdRef.current !== taskId || audio.ended) {
+                resolve();
+              }
+            };
+            audio.onerror = () => reject(new Error("音频播放失败"));
+            audio.play().then(() => {
+              if (segments.length > 1) {
+                setVoiceStatus(`豆包语音播报中（${index + 1}/${segments.length}）...`);
+              }
+            }).catch(reject);
+          });
+        } finally {
+          URL.revokeObjectURL(audioUrl);
+          if (activeAudioRef.current) {
+            activeAudioRef.current.onended = null;
+            activeAudioRef.current.onpause = null;
+            activeAudioRef.current.onerror = null;
+            activeAudioRef.current = null;
+          }
+        }
+      }
+      setVoiceStatus("");
+    } catch (error: any) {
+      if (error?.name === "AbortError" || speakingTaskIdRef.current !== taskId) {
+        return;
+      }
+      const blocked = error?.name === "NotAllowedError";
+      const errorText = blocked && !manual
+        ? "浏览器拦截了自动播放，请点击“播报当前题目”手动收听"
+        : error?.message || "豆包语音播报失败";
+      setVoiceStatus(errorText);
+      if (manual || !blocked) {
+        message.error(errorText);
+      }
+    } finally {
+      if (speechAbortControllerRef.current?.signal.aborted) {
+        speechAbortControllerRef.current = null;
+      }
+      if (speakingTaskIdRef.current === taskId) {
+        speechAbortControllerRef.current = null;
+      }
+    }
+  }, [interview?.id, stopSpeaking]);
 
   useEffect(() => {
-    if (!autoSpeakEnabled || !speechSynthesisSupported || !latestSpeakableMessage?.content) {
+    if (!autoSpeakEnabled || !audioPlaybackSupported || !latestSpeakableMessage?.content) {
       return;
     }
     const speakKey = `${latestSpeakableMessage.stage || "ai"}-${latestSpeakableMessage.timestamp}-${latestSpeakableMessage.content}`;
@@ -498,11 +637,11 @@ export default function InterviewRoomPage({ params }: { params: { mockInterviewI
       return;
     }
     lastSpokenKeyRef.current = speakKey;
-    speakText(latestSpeakableMessage.content);
-  }, [autoSpeakEnabled, latestSpeakableMessage, speakText, speechSynthesisSupported]);
+    void speakText(latestSpeakableMessage.content);
+  }, [audioPlaybackSupported, autoSpeakEnabled, latestSpeakableMessage, speakText]);
 
   useEffect(() => {
-    if (!autoSpeakEnabled && typeof window !== "undefined" && "speechSynthesis" in window) {
+    if (!autoSpeakEnabled) {
       stopSpeaking();
     }
   }, [autoSpeakEnabled, stopSpeaking]);
@@ -1280,15 +1419,17 @@ export default function InterviewRoomPage({ params }: { params: { mockInterviewI
                     onClick={() => {
                       setAutoSpeakEnabled((prev) => !prev);
                     }}
-                    disabled={!speechSynthesisSupported}
+                    disabled={!audioPlaybackSupported}
                     className="tool-button"
                   >
                     {autoSpeakEnabled ? <Volume2 size={16} /> : <VolumeX size={16} />}
                     {autoSpeakEnabled ? "关闭自动播报" : "开启自动播报"}
                   </Button>
                   <Button
-                    onClick={() => speakText(latestSpeakableMessage?.content)}
-                    disabled={!speechSynthesisSupported || !latestSpeakableMessage?.content}
+                    onClick={() => {
+                      void speakText(latestSpeakableMessage?.content, true);
+                    }}
+                    disabled={!audioPlaybackSupported || !latestSpeakableMessage?.content}
                     className="tool-button"
                   >
                     <Volume2 size={16} />
@@ -1340,7 +1481,7 @@ export default function InterviewRoomPage({ params }: { params: { mockInterviewI
                 {latestRoundRecord ? (
                   <div className="round-feedback">
                     <div className="feedback-score">
-                      <span>本轮评分</span>
+                      <span>本轮评分 / 100</span>
                       <strong>{latestRoundRecord.score || 0}</strong>
                     </div>
                     {latestRoundRecord.verdict ? (
@@ -1476,7 +1617,7 @@ export default function InterviewRoomPage({ params }: { params: { mockInterviewI
               <div className="review-hero">
                 <div className="review-score-stack">
                   <div className="overall-score">{report.overallScore || 0}</div>
-                  <div className="report-label">综合评分</div>
+                  <div className="report-label">综合评分 / 100</div>
                 </div>
                 <div className="review-summary-panel">
                   <Paragraph className="!mb-0 text-slate-600">
@@ -1593,7 +1734,7 @@ export default function InterviewRoomPage({ params }: { params: { mockInterviewI
                       <div className="review-round-card" key={`${item.round || "round"}-${index}`}>
                         <div className="record-head">
                           <strong>第 {item.round} 轮</strong>
-                          <span>{item.score || 0} 分</span>
+                          <span>{item.score || 0} / 100</span>
                         </div>
                         {item.questionStyle ? (
                           <div className="record-style">

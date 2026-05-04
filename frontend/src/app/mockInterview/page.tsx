@@ -304,7 +304,7 @@ export default function MockInterviewHomePage() {
                           {item.status === 2 && (practicePlan.length || improvementTags.length || report?.overallScore) ? (
                             <div className="grid gap-3 rounded-2xl bg-slate-50 p-3 md:grid-cols-[96px_minmax(0,1fr)]">
                               <div className="flex items-center gap-3 md:block">
-                                <div className="text-xs font-black uppercase tracking-widest text-slate-400">Score</div>
+                                <div className="text-xs font-black uppercase tracking-widest text-slate-400">Score / 100</div>
                                 <div className="text-2xl font-black text-slate-900">{report?.overallScore || 0}</div>
                               </div>
                               <div className="min-w-0 space-y-2">

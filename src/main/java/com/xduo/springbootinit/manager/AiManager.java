@@ -85,6 +85,66 @@ public class AiManager {
     @Value("${ai.speech.timeout-seconds:120}")
     private long speechTimeoutSeconds;
 
+    @Value("${ai.tts.provider:doubao}")
+    private String ttsProvider;
+
+    @Value("${ai.tts.app-id:}")
+    private String ttsAppId;
+
+    @Value("${ai.tts.token:}")
+    private String ttsToken;
+
+    @Value("${ai.tts.api-key:}")
+    private String ttsApiKey;
+
+    @Value("${ai.tts.cluster:volcano_tts}")
+    private String ttsCluster;
+
+    @Value("${ai.tts.endpoint:https://openspeech.bytedance.com/api/v3/tts/submit}")
+    private String ttsEndpoint;
+
+    @Value("${ai.tts.query-endpoint:https://openspeech.bytedance.com/api/v3/tts/query}")
+    private String ttsQueryEndpoint;
+
+    @Value("${ai.tts.resource-id:seed-tts-2.0}")
+    private String ttsResourceId;
+
+    @Value("${ai.tts.query-resource-id:${ai.tts.resource-id:seed-tts-2.0}}")
+    private String ttsQueryResourceId;
+
+    @Value("${ai.tts.voice-type:zh_female_vv_uranus_bigtts}")
+    private String ttsVoiceType;
+
+    @Value("${ai.tts.encoding:mp3}")
+    private String ttsEncoding;
+
+    @Value("${ai.tts.rate:24000}")
+    private int ttsRate;
+
+    @Value("${ai.tts.speed-ratio:1.0}")
+    private double ttsSpeedRatio;
+
+    @Value("${ai.tts.volume-ratio:1.0}")
+    private double ttsVolumeRatio;
+
+    @Value("${ai.tts.pitch-ratio:1.0}")
+    private double ttsPitchRatio;
+
+    @Value("${ai.tts.model:}")
+    private String ttsModel;
+
+    @Value("${ai.tts.emotion:}")
+    private String ttsEmotion;
+
+    @Value("${ai.tts.language:}")
+    private String ttsLanguage;
+
+    @Value("${ai.tts.user-id:intelliface}")
+    private String ttsUserId;
+
+    @Value("${ai.tts.timeout-seconds:60}")
+    private long ttsTimeoutSeconds;
+
     @Value("${ai.rate-limit.enabled:true}")
     private boolean rateLimitEnabled;
 
@@ -99,6 +159,12 @@ public class AiManager {
 
     @Value("${ai.rate-limit.audio.max-per-day:30}")
     private int audioMaxPerDay;
+
+    @Value("${ai.rate-limit.tts.max-per-minute:12}")
+    private int ttsMaxPerMinute;
+
+    @Value("${ai.rate-limit.tts.max-per-day:200}")
+    private int ttsMaxPerDay;
 
     @Resource
     private StringRedisTemplate stringRedisTemplate;
@@ -209,6 +275,36 @@ public class AiManager {
         };
     }
 
+    /**
+     * 调用语音合成接口，并按指定用户维度限流。
+     */
+    public byte[] synthesizeSpeech(String text, Long userId) {
+        String normalizedText = normalizeSpeechText(text);
+        if (StringUtils.isBlank(normalizedText)) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "播报内容不能为空");
+        }
+        int textBytes = normalizedText.getBytes(StandardCharsets.UTF_8).length;
+        if (textBytes > 1024) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "单次语音播报文本过长，请控制在 1024 字节以内");
+        }
+        checkAiRateLimit("tts", ttsMaxPerMinute, 60, ttsMaxPerDay, secondsUntilTomorrow(),
+                buildUserRateLimitActor(userId));
+        String provider = StringUtils.defaultIfBlank(ttsProvider, "doubao").trim().toLowerCase();
+        return switch (provider) {
+            case "volcengine", "volc", "doubao" -> synthesizeSpeechByDoubao(normalizedText);
+            default -> throw new BusinessException(ErrorCode.PARAMS_ERROR, "不支持的语音播报服务商: " + ttsProvider);
+        };
+    }
+
+    public String getTtsContentType() {
+        return switch (StringUtils.defaultIfBlank(ttsEncoding, "mp3").trim().toLowerCase()) {
+            case "wav" -> "audio/wav";
+            case "ogg", "ogg_opus" -> "audio/ogg";
+            case "pcm" -> "audio/pcm";
+            default -> "audio/mpeg";
+        };
+    }
+
     private String transcribeAudioByOpenAi(String fileName, byte[] fileBytes, String contentType,
                                            String language, String prompt) {
         String resolvedSpeechApiKey = resolveOpenAiSpeechApiKey();
@@ -287,6 +383,73 @@ public class AiManager {
         }
     }
 
+    private byte[] synthesizeSpeechByDoubao(String text) {
+        String resolvedTtsApiKey = resolveTtsApiKey();
+        if (!hasConfiguredApiKey(resolvedTtsApiKey)) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "请先配置豆包语音播报的 API Key");
+        }
+        String requestId = UUID.randomUUID().toString();
+        String resourceId = StringUtils.defaultIfBlank(ttsResourceId, "seed-tts-2.0").trim();
+        String queryResourceId = StringUtils.defaultIfBlank(ttsQueryResourceId, resourceId).trim();
+        String speaker = resolveDoubaoTtsSpeaker(resourceId);
+        Map<String, Object> requestMap = new HashMap<>();
+        Map<String, Object> userMap = new HashMap<>();
+        userMap.put("uid", StringUtils.defaultIfBlank(ttsUserId, "intelliface"));
+        requestMap.put("user", userMap);
+        requestMap.put("unique_id", requestId);
+        requestMap.put("namespace", "BidirectionalTTS");
+
+        Map<String, Object> reqParamsMap = new HashMap<>();
+        reqParamsMap.put("text", text);
+        reqParamsMap.put("speaker", speaker);
+        if (StringUtils.isNotBlank(ttsModel)) {
+            reqParamsMap.put("model", ttsModel.trim());
+        }
+
+        Map<String, Object> audioParamsMap = new HashMap<>();
+        audioParamsMap.put("format", StringUtils.defaultIfBlank(ttsEncoding, "mp3"));
+        audioParamsMap.put("sample_rate", ttsRate > 0 ? ttsRate : 24000);
+        if (StringUtils.isNotBlank(ttsEmotion)) {
+            audioParamsMap.put("emotion", ttsEmotion.trim());
+        }
+        int speechRate = toDoubaoRate(ttsSpeedRatio);
+        if (speechRate != 0) {
+            audioParamsMap.put("speech_rate", speechRate);
+        }
+        int loudnessRate = toDoubaoRate(ttsVolumeRatio);
+        if (loudnessRate != 0) {
+            audioParamsMap.put("loudness_rate", loudnessRate);
+        }
+        reqParamsMap.put("audio_params", audioParamsMap);
+
+        Map<String, Object> additionsMap = new HashMap<>();
+        if (StringUtils.isNotBlank(ttsLanguage)) {
+            additionsMap.put("explicit_language", ttsLanguage.trim());
+        }
+        Integer pitch = toDoubaoPitch(ttsPitchRatio);
+        if (pitch != null) {
+            Map<String, Object> postProcessMap = new HashMap<>();
+            postProcessMap.put("pitch", pitch);
+            additionsMap.put("post_process", postProcessMap);
+        }
+        if (!additionsMap.isEmpty()) {
+            reqParamsMap.put("additions", JSONUtil.toJsonStr(additionsMap));
+        }
+        requestMap.put("req_params", reqParamsMap);
+
+        try {
+            submitDoubaoTtsTask(requestMap, resourceId, requestId, resolvedTtsApiKey);
+            String audioUrl = queryDoubaoTtsAudioUrl(requestId, queryResourceId, resolvedTtsApiKey);
+            return downloadDoubaoTtsAudio(audioUrl);
+        } catch (IOException | InterruptedException e) {
+            if (e instanceof InterruptedException) {
+                Thread.currentThread().interrupt();
+            }
+            log.error("豆包语音播报通信异常", e);
+            throw new BusinessException(ErrorCode.SYSTEM_ERROR, "豆包语音播报通信失败");
+        }
+    }
+
     private String sendJsonRequest(String baseUrl, String apiKey, String path, String json)
             throws IOException, InterruptedException {
         HttpRequest request = HttpRequest.newBuilder()
@@ -302,6 +465,92 @@ public class AiManager {
             throw new BusinessException(ErrorCode.SYSTEM_ERROR, "AI 服务调用异常");
         }
         return response.body() == null ? "" : response.body();
+    }
+
+    private void submitDoubaoTtsTask(Map<String, Object> requestMap, String resourceId, String requestId,
+                                     String apiKey)
+            throws IOException, InterruptedException {
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(StringUtils.defaultIfBlank(ttsEndpoint, "https://openspeech.bytedance.com/api/v3/tts/submit")))
+                .timeout(Duration.ofSeconds(ttsTimeoutSeconds > 0 ? ttsTimeoutSeconds : 60))
+                .header("Content-Type", "application/json")
+                .header("X-Api-Key", apiKey)
+                .header("X-Api-Resource-Id", resourceId)
+                .header("X-Api-Request-Id", requestId)
+                .POST(HttpRequest.BodyPublishers.ofString(JSONUtil.toJsonStr(requestMap), StandardCharsets.UTF_8))
+                .build();
+        HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+        validateDoubaoTtsTaskResponse(response, "豆包语音播报任务提交失败");
+        Map<?, ?> responseMap = JSONUtil.toBean(StringUtils.defaultString(response.body()), Map.class);
+        Integer code = parseInteger(responseMap.get("code"));
+        if (code == null || code != 20000000) {
+            throw new BusinessException(ErrorCode.SYSTEM_ERROR,
+                    StringUtils.defaultIfBlank(getStringValue(responseMap.get("message")), "豆包语音播报任务提交失败"));
+        }
+    }
+
+    private String queryDoubaoTtsAudioUrl(String taskId, String resourceId, String apiKey)
+            throws IOException, InterruptedException {
+        long timeoutMillis = Math.max(10_000L, (ttsTimeoutSeconds > 0 ? ttsTimeoutSeconds : 60) * 1000L);
+        long deadline = System.currentTimeMillis() + timeoutMillis;
+        while (System.currentTimeMillis() < deadline) {
+            Map<String, Object> queryBody = new HashMap<>();
+            queryBody.put("task_id", taskId);
+            String requestId = UUID.randomUUID().toString();
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(StringUtils.defaultIfBlank(ttsQueryEndpoint, "https://openspeech.bytedance.com/api/v3/tts/query")))
+                    .timeout(Duration.ofSeconds(ttsTimeoutSeconds > 0 ? ttsTimeoutSeconds : 60))
+                    .header("Content-Type", "application/json")
+                    .header("X-Api-Key", apiKey)
+                    .header("X-Api-Resource-Id", resourceId)
+                    .header("X-Api-Request-Id", requestId)
+                    .POST(HttpRequest.BodyPublishers.ofString(JSONUtil.toJsonStr(queryBody), StandardCharsets.UTF_8))
+                    .build();
+            HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+            validateDoubaoTtsTaskResponse(response, "豆包语音播报任务查询失败");
+            Map<?, ?> responseMap = JSONUtil.toBean(StringUtils.defaultString(response.body()), Map.class);
+            Integer code = parseInteger(responseMap.get("code"));
+            if (code == null || code != 20000000) {
+                throw new BusinessException(ErrorCode.SYSTEM_ERROR,
+                        StringUtils.defaultIfBlank(getStringValue(responseMap.get("message")), "豆包语音播报任务查询失败"));
+            }
+            Map<?, ?> dataMap = responseMap.get("data") instanceof Map<?, ?> data ? data : Collections.emptyMap();
+            Integer taskStatus = parseInteger(dataMap.get("task_status"));
+            if (taskStatus != null && taskStatus == 2) {
+                String audioUrl = getStringValue(dataMap.get("audio_url"));
+                if (StringUtils.isBlank(audioUrl)) {
+                    throw new BusinessException(ErrorCode.SYSTEM_ERROR, "豆包语音播报任务已完成，但未返回音频地址");
+                }
+                return audioUrl;
+            }
+            if (taskStatus != null && taskStatus == 3) {
+                throw new BusinessException(ErrorCode.SYSTEM_ERROR,
+                        StringUtils.defaultIfBlank(getStringValue(responseMap.get("message")), "豆包语音播报任务处理失败"));
+            }
+            Thread.sleep(350L);
+        }
+        throw new BusinessException(ErrorCode.SYSTEM_ERROR, "豆包语音播报超时，请稍后重试");
+    }
+
+    private byte[] downloadDoubaoTtsAudio(String audioUrl) throws IOException, InterruptedException {
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(audioUrl))
+                .timeout(Duration.ofSeconds(ttsTimeoutSeconds > 0 ? ttsTimeoutSeconds : 60))
+                .GET()
+                .build();
+        HttpResponse<byte[]> response = client.send(request, HttpResponse.BodyHandlers.ofByteArray());
+        if (response.statusCode() < 200 || response.statusCode() >= 300 || response.body() == null || response.body().length == 0) {
+            throw new BusinessException(ErrorCode.SYSTEM_ERROR, "豆包语音音频下载失败");
+        }
+        return response.body();
+    }
+
+    private void validateDoubaoTtsTaskResponse(HttpResponse<String> response, String fallbackMessage) {
+        if (response.statusCode() >= 200 && response.statusCode() < 300) {
+            return;
+        }
+        log.error("{}: {}", fallbackMessage, response.body());
+        throw new BusinessException(ErrorCode.SYSTEM_ERROR, fallbackMessage);
     }
 
     private URI buildUri(String baseUrl, String path) {
@@ -456,6 +705,78 @@ public class AiManager {
             log.error("解析 AI 响应失败，responseBody={}", responseBody, e);
             throw new BusinessException(ErrorCode.SYSTEM_ERROR, "AI 返回结果格式错误");
         }
+    }
+
+    private String normalizeSpeechText(String text) {
+        String normalized = StringUtils.defaultString(text)
+                .replace("\r", "\n")
+                .replaceAll("\\n{2,}", "\n")
+                .replaceAll("[ \\t\\x0B\\f]+", " ")
+                .trim();
+        return normalized;
+    }
+
+    private double clampRatio(double ratio) {
+        if (ratio < 0.2D) {
+            return 0.2D;
+        }
+        if (ratio > 3.0D) {
+            return 3.0D;
+        }
+        return ratio;
+    }
+
+    private int toDoubaoRate(double ratio) {
+        double safeRatio = clampRatio(ratio);
+        int mapped = (int) Math.round((safeRatio - 1.0D) * 100.0D);
+        return Math.max(-50, Math.min(100, mapped));
+    }
+
+    private Integer toDoubaoPitch(double ratio) {
+        double safeRatio = clampRatio(ratio);
+        int mapped = (int) Math.round((safeRatio - 1.0D) * 12.0D);
+        if (mapped == 0) {
+            return null;
+        }
+        return Math.max(-12, Math.min(12, mapped));
+    }
+
+    private String resolveDoubaoTtsSpeaker(String resourceId) {
+        String speaker = StringUtils.defaultIfBlank(ttsVoiceType, "zh_female_vv_uranus_bigtts").trim();
+        if (StringUtils.containsIgnoreCase(resourceId, "seed-tts-2.0")
+                && (!speaker.contains("_bigtts") || speaker.startsWith("BV"))) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR,
+                    "豆包语音合成模型2.0 需要使用 2.0 音色，例如 zh_female_vv_uranus_bigtts");
+        }
+        return speaker;
+    }
+
+    private Integer parseInteger(Object value) {
+        if (value == null) {
+            return null;
+        }
+        if (value instanceof Number number) {
+            return number.intValue();
+        }
+        try {
+            return Integer.parseInt(String.valueOf(value).trim());
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    private String getStringValue(Object value) {
+        return value == null ? "" : String.valueOf(value).trim();
+    }
+
+    private String resolveTtsApiKey() {
+        if (hasConfiguredApiKey(ttsApiKey)) {
+            return ttsApiKey;
+        }
+        if (hasConfiguredApiKey(ttsToken)) {
+            return ttsToken;
+        }
+        return speechApiKey;
     }
 
     private String extractTranscriptionText(String responseBody) {

@@ -6,8 +6,9 @@ import { Button, Card, Empty, Input, List, Popconfirm, Progress, Skeleton, Tag, 
 import {
   Briefcase,
   BrainCircuit,
+  ChevronDown,
   ChevronRight,
-  ClipboardCheck,
+  ChevronUp,
   Clock3,
   Download,
   Flag,
@@ -340,6 +341,8 @@ export default function InterviewRoomPage({ params }: { params: { mockInterviewI
   const [isRecording, setIsRecording] = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [voiceStatus, setVoiceStatus] = useState("");
+  const [expandedRoundKeys, setExpandedRoundKeys] = useState<string[]>([]);
+  const [expandedRoundTextKeys, setExpandedRoundTextKeys] = useState<string[]>([]);
 
   const speechRecognitionRef = useRef<SpeechRecognitionLike | null>(null);
   const streamAbortControllerRef = useRef<AbortController | null>(null);
@@ -1048,6 +1051,8 @@ export default function InterviewRoomPage({ params }: { params: { mockInterviewI
   const hiringRecommendation = report?.hiringRecommendation || "";
   const riskPoints = report?.riskPoints || [];
   const nextInterviewFocus = report?.nextInterviewFocus || [];
+  const agendaItems = useMemo(() => report?.agenda || [], [report?.agenda]);
+  const roundRecords = useMemo(() => report?.roundRecords || [], [report?.roundRecords]);
   const latestQuestionText = latestQuestionMessage?.content || "面试官会在这里给出当前问题。";
   const answerTimePercent = Math.min(
     100,
@@ -1056,13 +1061,88 @@ export default function InterviewRoomPage({ params }: { params: { mockInterviewI
   const answerOvertime = questionElapsedSeconds > recommendedAnswerSeconds;
   const canAnswer = isStarted && !isEnded;
   const isStreaming = submitting && Boolean(streamAbortControllerRef.current);
-  const latestRoundScoreItems = buildRoundScoreItems(latestRoundRecord);
-  const hasSideRail = isEnded || (report?.agenda || []).length > 0;
+  const hasSideRail = !isEnded && agendaItems.length > 0;
   const canSendAnswer = canAnswer
     && Boolean(inputMessage.trim())
     && !submitting
     && !isRecording
     && !isTranscribing;
+
+  useEffect(() => {
+    if (!roundRecords.length) {
+      setExpandedRoundKeys([]);
+      setExpandedRoundTextKeys([]);
+      return;
+    }
+    const latestIndex = roundRecords.length - 1;
+    const latestRecord = roundRecords[latestIndex];
+    setExpandedRoundKeys([`${latestRecord.round || "round"}-${latestIndex}`]);
+    setExpandedRoundTextKeys([]);
+  }, [roundRecords]);
+
+  const toggleRoundRecord = useCallback((key: string) => {
+    setExpandedRoundKeys((prev) => (
+      prev.includes(key) ? prev.filter((item) => item !== key) : [...prev, key]
+    ));
+  }, []);
+
+  const expandAllRoundRecords = useCallback(() => {
+    setExpandedRoundKeys(roundRecords.map((item, index) => `${item.round || "round"}-${index}`));
+  }, [roundRecords]);
+
+  const collapseAllRoundRecords = useCallback(() => {
+    setExpandedRoundKeys([]);
+  }, []);
+
+  const toggleRoundText = useCallback((key: string) => {
+    setExpandedRoundTextKeys((prev) => (
+      prev.includes(key) ? prev.filter((item) => item !== key) : [...prev, key]
+    ));
+  }, []);
+
+  const buildCollapsedPreview = useCallback((text?: string | null, limit = 220) => {
+    const normalized = (text || "").replace(/\s+/g, " ").trim();
+    if (!normalized) {
+      return "";
+    }
+    if (normalized.length <= limit) {
+      return normalized;
+    }
+    return `${normalized.slice(0, limit).trimEnd()}...`;
+  }, []);
+
+  const renderExpandableRoundBlock = useCallback((
+    roundKey: string,
+    sectionKey: string,
+    label: string,
+    content: string | undefined,
+    className: string,
+    emptyText: string,
+    limit: number,
+  ) => {
+    const normalized = (content || "").trim();
+    const textKey = `${roundKey}:${sectionKey}`;
+    const shouldCollapse = normalized.length > limit;
+    const isExpandedText = expandedRoundTextKeys.includes(textKey);
+    const displayText = shouldCollapse && !isExpandedText
+      ? buildCollapsedPreview(normalized, limit)
+      : (normalized || emptyText);
+    return (
+      <div className="review-round-block">
+        <div className="focus-label">{label}</div>
+        <div className={className}>{displayText}</div>
+        {shouldCollapse ? (
+          <Button
+            type="text"
+            className="record-text-toggle"
+            onClick={() => toggleRoundText(textKey)}
+          >
+            {isExpandedText ? "收起全文" : "展开全文"}
+          </Button>
+        ) : null}
+      </div>
+    );
+  }, [buildCollapsedPreview, expandedRoundTextKeys, toggleRoundText]);
 
   if (loading) {
     return (
@@ -1467,106 +1547,7 @@ export default function InterviewRoomPage({ params }: { params: { mockInterviewI
 
         {hasSideRail ? (
           <aside className="interview-side">
-            {isEnded ? (
-              <Card className="side-card">
-                <div className="section-heading compact">
-                  <div>
-                    <div className="section-eyebrow">Round Insight</div>
-                    <Title level={5} className="!mb-0 !mt-2">
-                      最近一轮反馈
-                    </Title>
-                  </div>
-                  <ClipboardCheck size={18} className="text-primary" />
-                </div>
-                {latestRoundRecord ? (
-                  <div className="round-feedback">
-                    <div className="feedback-score">
-                      <span>本轮评分 / 100</span>
-                      <strong>{latestRoundRecord.score || 0}</strong>
-                    </div>
-                    {latestRoundRecord.verdict ? (
-                      <div className="feedback-verdict">{latestRoundRecord.verdict}</div>
-                    ) : null}
-                    <Paragraph className="!mb-3 text-slate-600">
-                      {latestRoundRecord.shortComment || "这一轮重点反馈会显示在这里。"}
-                    </Paragraph>
-                    {latestRoundRecord.responseSeconds ? (
-                      <div className="feedback-meta">本轮作答用时 {latestRoundRecord.responseSeconds}s</div>
-                    ) : null}
-                    {latestRoundScoreItems.some((item) => item.value > 0) ? (
-                      <div className="round-score-mini-grid">
-                        {latestRoundScoreItems.map((item) => (
-                          <div className="round-score-mini" key={item.label}>
-                            <div className="round-score-mini-head">
-                              <span>{item.label}</span>
-                              <strong>{item.value}</strong>
-                            </div>
-                            <Progress percent={item.value} showInfo={false} strokeColor="#1677ff" />
-                          </div>
-                        ))}
-                      </div>
-                    ) : null}
-                    {(latestRoundRecord.scoreReasons || []).length ? (
-                      <div className="score-reason-list">
-                        {(latestRoundRecord.scoreReasons || []).map((item) => (
-                          <div className="score-reason" key={item}>{item}</div>
-                        ))}
-                      </div>
-                    ) : null}
-                    {(latestRoundRecord.improvementTags || []).length ? (
-                      <div className="feedback-tags">
-                        {(latestRoundRecord.improvementTags || []).map((tag) => (
-                          <span className="feedback-tag" key={tag}>{tag}</span>
-                        ))}
-                      </div>
-                    ) : null}
-                    {(latestRoundRecord.missingPoints || []).length ? (
-                      <div className="missing-point-list">
-                        {(latestRoundRecord.missingPoints || []).map((item) => (
-                          <span className="missing-point" key={item}>{item}</span>
-                        ))}
-                      </div>
-                    ) : null}
-                    {(latestRoundRecord.answerQualitySignals || []).length ? (
-                      <div className="diagnostic-signal-panel">
-                        <div className="focus-label">诊断信号</div>
-                        <div className="diagnostic-signal-list">
-                          {(latestRoundRecord.answerQualitySignals || []).map((item) => (
-                            <span className="diagnostic-signal" key={item}>{item}</span>
-                          ))}
-                        </div>
-                      </div>
-                    ) : null}
-                    {latestRoundRecord.interviewerObservation ? (
-                      <div className="feedback-focus neutral">
-                        <div className="focus-label">面试官观察</div>
-                        <div className="focus-text">{latestRoundRecord.interviewerObservation}</div>
-                      </div>
-                    ) : null}
-                    <div className="feedback-focus">
-                      <div className="focus-label">这一轮主要问题：</div>
-                      <div className="focus-text">{latestRoundRecord.focus || "继续补充项目细节和设计取舍。"}</div>
-                    </div>
-                    {latestRoundRecord.followUpReason ? (
-                      <div className="feedback-focus neutral">
-                        <div className="focus-label">追问理由</div>
-                        <div className="focus-text">{latestRoundRecord.followUpReason}</div>
-                      </div>
-                    ) : null}
-                    {latestRoundRecord.answerRewriteSuggestion ? (
-                      <div className="rewrite-suggestion">
-                        <div className="focus-label">改进版回答骨架</div>
-                        <div>{latestRoundRecord.answerRewriteSuggestion}</div>
-                      </div>
-                    ) : null}
-                  </div>
-                ) : (
-                  <Empty description="报告生成后，这里会显示最后一轮重点反馈" image={Empty.PRESENTED_IMAGE_SIMPLE} />
-                )}
-              </Card>
-            ) : null}
-
-            {(report?.agenda || []).length ? (
+            {agendaItems.length ? (
               <Card className="side-card">
                 <div className="section-heading compact">
                   <div>
@@ -1577,7 +1558,7 @@ export default function InterviewRoomPage({ params }: { params: { mockInterviewI
                   </div>
                 </div>
                 <div className="agenda-list">
-                  {(report?.agenda || []).map((item) => {
+                  {agendaItems.map((item) => {
                     const isActive = !isEnded && item.round === activeAgendaRound;
                     const isCompleted = (item.round || 0) <= currentRound;
                     return (
@@ -1657,6 +1638,29 @@ export default function InterviewRoomPage({ params }: { params: { mockInterviewI
                 </div>
               ) : null}
 
+              {agendaItems.length ? (
+                <div className="review-agenda-panel">
+                  <div className="block-title">本场议程</div>
+                  <div className="review-agenda-grid">
+                    {agendaItems.map((item) => (
+                      <div key={`review-agenda-${item.round}-${item.label}`} className="agenda-item done">
+                        <div className="agenda-index">{item.round}</div>
+                        <div className="agenda-content">
+                          <div className="agenda-title">{item.label}</div>
+                          {item.focusTopic ? <div className="agenda-desc">{item.focusTopic}</div> : null}
+                          {item.questionStyle || item.recommendedAnswerSeconds ? (
+                            <div className="agenda-meta">
+                              {item.questionStyle || "真实面试追问"}
+                              {item.recommendedAnswerSeconds ? ` · 建议 ${item.recommendedAnswerSeconds}s` : ""}
+                            </div>
+                          ) : null}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+
               {riskPoints.length || nextInterviewFocus.length ? (
                 <div className="review-extra-grid">
                   {riskPoints.length ? (
@@ -1726,102 +1730,157 @@ export default function InterviewRoomPage({ params }: { params: { mockInterviewI
                 </div>
               ) : null}
 
-              {(report?.roundRecords || []).length ? (
+              {roundRecords.length ? (
                 <div className="review-round-section">
-                  <div className="block-title review-round-title">逐轮记录</div>
+                  <div className="review-round-header">
+                    <div className="block-title review-round-title">逐轮记录</div>
+                    <div className="review-round-actions">
+                      <Button size="small" className="round-action-button" onClick={expandAllRoundRecords}>
+                        全部展开
+                      </Button>
+                      <Button size="small" className="round-action-button" onClick={collapseAllRoundRecords}>
+                        全部收起
+                      </Button>
+                    </div>
+                  </div>
                   <div className="review-round-grid">
-                    {(report?.roundRecords || []).map((item, index) => (
-                      <div className="review-round-card" key={`${item.round || "round"}-${index}`}>
-                        <div className="record-head">
-                          <strong>第 {item.round} 轮</strong>
-                          <span>{item.score || 0} / 100</span>
-                        </div>
-                        {item.questionStyle ? (
-                          <div className="record-style">
-                            {item.questionStyle} / 建议 {item.recommendedAnswerSeconds || 120}s
-                          </div>
-                        ) : null}
-                        {item.responseSeconds ? (
-                          <div className="record-meta">实际作答 {item.responseSeconds}s</div>
-                        ) : null}
-                        <div className="round-score-mini-grid compact">
-                          {buildRoundScoreItems(item).map((scoreItem) => (
-                            <div className="round-score-mini" key={`${item.round}-${scoreItem.label}`}>
-                              <div className="round-score-mini-head">
-                                <span>{scoreItem.label}</span>
-                                <strong>{scoreItem.value}</strong>
-                              </div>
-                              <Progress percent={scoreItem.value} showInfo={false} strokeColor="#1677ff" />
+                    {roundRecords.map((item, index) => {
+                      const roundKey = `${item.round || "round"}-${index}`;
+                      const isExpanded = expandedRoundKeys.includes(roundKey);
+                      return (
+                        <div className={`review-round-card ${isExpanded ? "expanded" : ""}`} key={roundKey}>
+                          <div className="review-round-card-head">
+                            <div className="record-head">
+                              <strong>第 {item.round} 轮</strong>
+                              <span>{item.score || 0} / 100</span>
                             </div>
-                          ))}
-                        </div>
-                        {(item.scoreReasons || []).length ? (
-                          <div className="score-reason-list compact">
-                            {(item.scoreReasons || []).map((reason) => (
-                              <div className="score-reason" key={`${item.round}-${reason}`}>{reason}</div>
+                            <Button
+                              type="text"
+                              className="round-toggle-button"
+                              onClick={() => toggleRoundRecord(roundKey)}
+                            >
+                              {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                              {isExpanded ? "收起详情" : "展开详情"}
+                            </Button>
+                          </div>
+                          <div className="review-round-summary">
+                            {item.questionStyle ? (
+                              <div className="record-style">
+                                {item.questionStyle} / 建议 {item.recommendedAnswerSeconds || 120}s
+                              </div>
+                            ) : null}
+                            {item.responseSeconds ? (
+                              <div className="record-meta">实际作答 {item.responseSeconds}s</div>
+                            ) : null}
+                          </div>
+                          <div className="round-score-mini-grid compact">
+                            {buildRoundScoreItems(item).map((scoreItem) => (
+                              <div className="round-score-mini" key={`${item.round}-${scoreItem.label}`}>
+                                <div className="round-score-mini-head">
+                                  <span>{scoreItem.label}</span>
+                                  <strong>{scoreItem.value}</strong>
+                                </div>
+                                <Progress percent={scoreItem.value} showInfo={false} strokeColor="#1677ff" />
+                              </div>
                             ))}
                           </div>
-                        ) : null}
-                        {item.verdict ? <div className="record-verdict">{item.verdict}</div> : null}
-                        <div className="review-round-block">
-                          <div className="focus-label">面试问题</div>
-                          <div className="record-question">{item.question || "暂无问题记录"}</div>
-                        </div>
-                        <div className="review-round-block">
-                          <div className="focus-label">你的回答</div>
-                          <div className="record-answer">{item.answer || "暂无回答记录"}</div>
-                        </div>
-                        <div className="review-round-block">
-                          <div className="focus-label">面试官评语</div>
-                          <div className="record-comment">
-                            <span>{item.shortComment || "暂无评语"}</span>
-                            <ChevronRight size={14} />
+                          {item.verdict ? <div className="record-verdict compact">{item.verdict}</div> : null}
+                          <div className="record-summary">
+                            {item.shortComment || item.interviewerObservation || "这一轮的面试摘要会显示在这里。"}
                           </div>
-                        </div>
-                        {item.interviewerObservation ? (
-                          <div className="review-round-block">
-                            <div className="focus-label">面试官观察</div>
-                            <div className="focus-text">{item.interviewerObservation}</div>
-                          </div>
-                        ) : null}
-                        {(item.improvementTags || []).length ? (
-                          <div className="record-tags">
-                            {(item.improvementTags || []).map((tag) => (
-                              <span className="feedback-tag" key={`${item.round}-${tag}`}>{tag}</span>
-                            ))}
-                          </div>
-                        ) : null}
-                        {(item.missingPoints || []).length ? (
-                          <div className="record-tags">
-                            {(item.missingPoints || []).map((point) => (
-                              <span className="missing-point" key={`${item.round}-${point}`}>{point}</span>
-                            ))}
-                          </div>
-                        ) : null}
-                        {(item.answerQualitySignals || []).length ? (
-                          <div className="review-round-block">
-                            <div className="focus-label">诊断信号</div>
-                            <div className="diagnostic-signal-list">
-                              {(item.answerQualitySignals || []).map((signal) => (
-                                <span className="diagnostic-signal" key={`${item.round}-${signal}`}>{signal}</span>
+                          {(item.improvementTags || []).length ? (
+                            <div className="record-tags compact">
+                              {(item.improvementTags || []).slice(0, 3).map((tag) => (
+                                <span className="feedback-tag" key={`${item.round}-${tag}`}>{tag}</span>
                               ))}
                             </div>
-                          </div>
-                        ) : null}
-                        {item.followUpReason ? (
-                          <div className="review-round-block">
-                            <div className="focus-label">追问理由</div>
-                            <div className="focus-text">{item.followUpReason}</div>
-                          </div>
-                        ) : null}
-                        {item.answerRewriteSuggestion ? (
-                          <div className="review-round-block">
-                            <div className="focus-label">改进版回答骨架</div>
-                            <div className="record-answer">{item.answerRewriteSuggestion}</div>
-                          </div>
-                        ) : null}
-                      </div>
-                    ))}
+                          ) : null}
+                          {isExpanded ? (
+                            <div className="review-round-detail">
+                              {(item.scoreReasons || []).length ? (
+                                <div className="score-reason-list compact">
+                                  {(item.scoreReasons || []).map((reason) => (
+                                    <div className="score-reason" key={`${item.round}-${reason}`}>{reason}</div>
+                                  ))}
+                                </div>
+                              ) : null}
+                              {renderExpandableRoundBlock(
+                                roundKey,
+                                "question",
+                                "面试问题",
+                                item.question,
+                                "record-question",
+                                "暂无问题记录",
+                                160,
+                              )}
+                              {renderExpandableRoundBlock(
+                                roundKey,
+                                "answer",
+                                "你的回答",
+                                item.answer,
+                                "record-answer",
+                                "暂无回答记录",
+                                260,
+                              )}
+                              <div className="review-round-block">
+                                <div className="focus-label">面试官评语</div>
+                                <div className="record-comment">
+                                  <span>{item.shortComment || "暂无评语"}</span>
+                                  <ChevronRight size={14} />
+                                </div>
+                              </div>
+                              {item.interviewerObservation ? (
+                                <div className="review-round-block">
+                                  <div className="focus-label">面试官观察</div>
+                                  <div className="focus-text">{item.interviewerObservation}</div>
+                                </div>
+                              ) : null}
+                              {(item.improvementTags || []).length ? (
+                                <div className="record-tags">
+                                  {(item.improvementTags || []).map((tag) => (
+                                    <span className="feedback-tag" key={`${item.round}-${tag}`}>{tag}</span>
+                                  ))}
+                                </div>
+                              ) : null}
+                              {(item.missingPoints || []).length ? (
+                                <div className="record-tags">
+                                  {(item.missingPoints || []).map((point) => (
+                                    <span className="missing-point" key={`${item.round}-${point}`}>{point}</span>
+                                  ))}
+                                </div>
+                              ) : null}
+                              {(item.answerQualitySignals || []).length ? (
+                                <div className="review-round-block">
+                                  <div className="focus-label">诊断信号</div>
+                                  <div className="diagnostic-signal-list">
+                                    {(item.answerQualitySignals || []).map((signal) => (
+                                      <span className="diagnostic-signal" key={`${item.round}-${signal}`}>{signal}</span>
+                                    ))}
+                                  </div>
+                                </div>
+                              ) : null}
+                              {item.followUpReason ? (
+                                <div className="review-round-block">
+                                  <div className="focus-label">追问理由</div>
+                                  <div className="focus-text">{item.followUpReason}</div>
+                                </div>
+                              ) : null}
+                              {item.answerRewriteSuggestion ? (
+                                renderExpandableRoundBlock(
+                                  roundKey,
+                                  "rewrite",
+                                  "改进版回答骨架",
+                                  item.answerRewriteSuggestion,
+                                  "record-answer",
+                                  "暂无改进版回答骨架",
+                                  240,
+                                )
+                              ) : null}
+                            </div>
+                          ) : null}
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               ) : null}

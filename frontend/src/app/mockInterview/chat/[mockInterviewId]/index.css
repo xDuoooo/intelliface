@@ -451,8 +451,6 @@
     color: #0f172a;
 }
 
-.round-feedback,
-.report-panel,
 .report-placeholder {
     margin-top: 16px;
 }
@@ -510,36 +508,6 @@
     line-height: 1.7;
 }
 
-.feedback-score {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    border-radius: 18px;
-    background: #f8fafc;
-    padding: 14px 16px;
-    margin-bottom: 14px;
-}
-
-.feedback-score span {
-    color: #64748b;
-}
-
-.feedback-score strong {
-    font-size: 24px;
-    color: #0f172a;
-}
-
-.feedback-verdict {
-    border-radius: 16px;
-    background: rgba(15, 23, 42, 0.04);
-    color: #0f172a;
-    padding: 12px 14px;
-    font-weight: 700;
-    margin-bottom: 12px;
-    line-height: 1.7;
-}
-
-.feedback-meta,
 .record-meta {
     margin-top: 10px;
     color: #64748b;
@@ -660,26 +628,6 @@
     font-weight: 700;
     line-height: 1.5;
     padding: 6px 10px;
-}
-
-.feedback-focus {
-    border-radius: 18px;
-    background: rgba(22, 119, 255, 0.06);
-    padding: 14px 16px;
-    margin-top: 12px;
-}
-
-.feedback-focus.neutral {
-    background: #f8fafc;
-}
-
-.rewrite-suggestion {
-    margin-top: 12px;
-    border-radius: 18px;
-    background: rgba(15, 23, 42, 0.04);
-    color: #334155;
-    line-height: 1.8;
-    padding: 14px 16px;
 }
 
 .focus-label {
@@ -883,6 +831,20 @@
     margin-top: 18px;
 }
 
+.review-agenda-panel {
+    margin-top: 18px;
+    border-radius: 22px;
+    background: #f8fafc;
+    padding: 18px;
+}
+
+.review-agenda-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+    margin-top: 12px;
+}
+
 .review-extra-panel {
     border-radius: 22px;
     background: #f8fafc;
@@ -964,8 +926,29 @@
     margin-top: 22px;
 }
 
+.review-round-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
 .review-round-title {
     margin-bottom: 12px;
+}
+
+.review-round-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+.round-action-button {
+    border-radius: 999px !important;
+    height: 32px !important;
+    padding: 0 12px !important;
+    color: #475569 !important;
 }
 
 .review-round-grid {
@@ -978,10 +961,41 @@
     border-radius: 22px;
     background: #f8fafc;
     padding: 18px;
+    border: 1px solid rgba(226, 232, 240, 0.9);
+}
+
+.review-round-card.expanded {
+    background: #fbfdff;
+    border-color: rgba(191, 219, 254, 0.95);
 }
 
 .review-round-block {
     margin-top: 14px;
+}
+
+.review-round-card-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 12px;
+}
+
+.round-toggle-button {
+    display: inline-flex !important;
+    align-items: center !important;
+    gap: 6px;
+    padding-inline: 0 !important;
+    height: auto !important;
+    color: #64748b !important;
+    font-weight: 700 !important;
+}
+
+.review-round-summary {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px 12px;
+    margin-top: 10px;
 }
 
 .topic-list {
@@ -1066,6 +1080,14 @@
     font-size: 13px;
 }
 
+.agenda-meta {
+    margin-top: 8px;
+    color: #94a3b8;
+    line-height: 1.6;
+    font-size: 12px;
+    font-weight: 700;
+}
+
 .round-record-list {
     margin-top: 16px;
     display: flex;
@@ -1116,6 +1138,26 @@
     line-height: 1.7;
 }
 
+.record-verdict.compact {
+    margin-top: 14px;
+}
+
+.record-summary {
+    margin-top: 10px;
+    color: #475569;
+    line-height: 1.75;
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.record-text-toggle {
+    margin-top: 6px;
+    padding-inline: 0 !important;
+    height: auto !important;
+    color: #1677ff !important;
+    font-weight: 700 !important;
+}
+
 .record-comment {
     margin-top: 10px;
     color: #64748b;
@@ -1139,6 +1181,21 @@
     font-size: 12px;
     font-weight: 700;
     padding: 6px 10px;
+}
+
+.review-round-summary .record-style,
+.review-round-summary .record-meta {
+    margin-top: 0;
+}
+
+.record-tags.compact {
+    margin-top: 12px;
+}
+
+.review-round-detail {
+    margin-top: 16px;
+    padding-top: 16px;
+    border-top: 1px solid rgba(226, 232, 240, 0.9);
 }
 
 .thinking-card {
@@ -1192,6 +1249,7 @@
     }
 
     .review-hero,
+    .review-agenda-grid,
     .review-dimension-grid,
     .review-detail-grid,
     .review-extra-grid,
@@ -1203,7 +1261,8 @@
 @media (max-width: 768px) {
     .hero-header,
     .section-heading,
-    .active-question-head {
+    .active-question-head,
+    .review-round-card-head {
         flex-direction: column;
     }
 
@@ -1260,5 +1319,9 @@
 
     .review-score-stack {
         align-items: flex-start;
+    }
+
+    .review-round-actions {
+        width: 100%;
     }
 }

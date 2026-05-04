@@ -109,9 +109,6 @@ public class AiManager {
     @Value("${ai.tts.resource-id:seed-tts-2.0}")
     private String ttsResourceId;
 
-    @Value("${ai.tts.query-resource-id:${ai.tts.resource-id:seed-tts-2.0}}")
-    private String ttsQueryResourceId;
-
     @Value("${ai.tts.voice-type:zh_female_vv_uranus_bigtts}")
     private String ttsVoiceType;
 
@@ -390,7 +387,6 @@ public class AiManager {
         }
         String requestId = UUID.randomUUID().toString();
         String resourceId = StringUtils.defaultIfBlank(ttsResourceId, "seed-tts-2.0").trim();
-        String queryResourceId = StringUtils.defaultIfBlank(ttsQueryResourceId, resourceId).trim();
         String speaker = resolveDoubaoTtsSpeaker(resourceId);
         Map<String, Object> requestMap = new HashMap<>();
         Map<String, Object> userMap = new HashMap<>();
@@ -439,7 +435,7 @@ public class AiManager {
 
         try {
             submitDoubaoTtsTask(requestMap, resourceId, requestId, resolvedTtsApiKey);
-            String audioUrl = queryDoubaoTtsAudioUrl(requestId, queryResourceId, resolvedTtsApiKey);
+            String audioUrl = queryDoubaoTtsAudioUrl(requestId, resourceId, resolvedTtsApiKey);
             return downloadDoubaoTtsAudio(audioUrl);
         } catch (IOException | InterruptedException e) {
             if (e instanceof InterruptedException) {
@@ -480,12 +476,14 @@ public class AiManager {
                 .POST(HttpRequest.BodyPublishers.ofString(JSONUtil.toJsonStr(requestMap), StandardCharsets.UTF_8))
                 .build();
         HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
-        validateDoubaoTtsTaskResponse(response, "豆包语音播报任务提交失败");
+        validateDoubaoTtsTaskResponse(response,
+                String.format("豆包语音播报任务提交失败(resourceId=%s)", resourceId));
         Map<?, ?> responseMap = JSONUtil.toBean(StringUtils.defaultString(response.body()), Map.class);
         Integer code = parseInteger(responseMap.get("code"));
         if (code == null || code != 20000000) {
             throw new BusinessException(ErrorCode.SYSTEM_ERROR,
-                    StringUtils.defaultIfBlank(getStringValue(responseMap.get("message")), "豆包语音播报任务提交失败"));
+                    StringUtils.defaultIfBlank(getStringValue(responseMap.get("message")),
+                            String.format("豆包语音播报任务提交失败(resourceId=%s)", resourceId)));
         }
     }
 
@@ -507,12 +505,14 @@ public class AiManager {
                     .POST(HttpRequest.BodyPublishers.ofString(JSONUtil.toJsonStr(queryBody), StandardCharsets.UTF_8))
                     .build();
             HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
-            validateDoubaoTtsTaskResponse(response, "豆包语音播报任务查询失败");
+            validateDoubaoTtsTaskResponse(response,
+                    String.format("豆包语音播报任务查询失败(resourceId=%s)", resourceId));
             Map<?, ?> responseMap = JSONUtil.toBean(StringUtils.defaultString(response.body()), Map.class);
             Integer code = parseInteger(responseMap.get("code"));
             if (code == null || code != 20000000) {
                 throw new BusinessException(ErrorCode.SYSTEM_ERROR,
-                        StringUtils.defaultIfBlank(getStringValue(responseMap.get("message")), "豆包语音播报任务查询失败"));
+                        StringUtils.defaultIfBlank(getStringValue(responseMap.get("message")),
+                                String.format("豆包语音播报任务查询失败(resourceId=%s)", resourceId)));
             }
             Map<?, ?> dataMap = responseMap.get("data") instanceof Map<?, ?> data ? data : Collections.emptyMap();
             Integer taskStatus = parseInteger(dataMap.get("task_status"));

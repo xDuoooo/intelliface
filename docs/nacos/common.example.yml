@@ -111,6 +111,12 @@ ai:
     model-name: bigmodel
     user-id: intelliface
     timeout-seconds: 120
+  tts:
+    provider: doubao
+    endpoint: https://openspeech.bytedance.com/api/v3/tts/submit
+    query-endpoint: https://openspeech.bytedance.com/api/v3/tts/query
+    # 提交和查询统一使用同一个 2.0 资源 ID
+    resource-id: seed-tts-2.0
   rate-limit:
     enabled: true
     chat:

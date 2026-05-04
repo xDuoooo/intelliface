@@ -82,6 +82,14 @@ ai:
     api-key: your_deepseek_api_key
   speech:
     api-key: your_volcengine_speech_api_key
+  tts:
+    provider: doubao
+    api-key: your_doubao_tts_api_key
+    endpoint: https://openspeech.bytedance.com/api/v3/tts/submit
+    query-endpoint: https://openspeech.bytedance.com/api/v3/tts/query
+    # 提交和查询统一使用同一个 2.0 资源 ID，避免旧配置里的 volc.seedtts.default 继续生效
+    resource-id: seed-tts-2.0
+    voice-type: zh_female_vv_uranus_bigtts
   rate-limit:
     enabled: true
     chat:

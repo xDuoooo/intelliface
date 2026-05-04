@@ -211,9 +211,8 @@ ai:
     cluster: volcano_tts
     endpoint: https://openspeech.bytedance.com/api/v3/tts/submit
     query-endpoint: https://openspeech.bytedance.com/api/v3/tts/query
-    # 豆包语音合成模型 2.0 的资源 ID；如果你的环境有特殊要求，可按官方文档覆盖
+    # 豆包语音合成模型 2.0 的资源 ID；提交和查询都会使用它
     resource-id: seed-tts-2.0
-    query-resource-id: seed-tts-2.0
     # 默认用 2.0 通用女声 Vivi；可替换为你控制台已授权的其他 2.0 音色
     voice-type: zh_female_vv_uranus_bigtts
     encoding: mp3

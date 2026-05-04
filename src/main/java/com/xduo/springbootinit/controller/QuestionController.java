@@ -78,7 +78,14 @@ public class QuestionController {
     private static final long MAX_RESUME_FILE_SIZE = 2 * 1024 * 1024L;
     private static final long MAX_AUDIO_FILE_SIZE = 8 * 1024 * 1024L;
     private static final int MAX_ANSWER_EVALUATE_LENGTH = 5000;
-    private static final int AI_GENERATE_ANSWER_BATCH_SIZE = 5;
+    private static final int AI_GENERATE_QUESTION_BATCH_SIZE = 4;
+    private static final int AI_GENERATE_QUESTION_MAX_ROUNDS = 6;
+    private static final int AI_GENERATE_ANSWER_BATCH_SIZE = 3;
+    private static final int MIN_GENERATED_QUESTION_CONTENT_LENGTH = 28;
+    private static final int MIN_GENERATED_ANSWER_LENGTH = 180;
+    private static final int MIN_HIGH_CONFIDENCE_GENERATED_ANSWER_LENGTH = 320;
+    private static final int MIN_GENERATED_ANSWER_REVIEW_SCORE = 78;
+    private static final int MAX_GENERATED_TAGS = 5;
     private static final Set<String> SUPPORTED_RESUME_FILE_SUFFIX_SET = Set.of("txt", "md", "markdown", "docx", "pdf");
     private static final Set<String> SUPPORTED_AUDIO_FILE_SUFFIX_SET = Set.of("webm", "wav", "mp3", "m4a", "mp4", "ogg", "oga");
 
@@ -653,20 +660,8 @@ public class QuestionController {
         // 获取登录用户
         User loginUser = userService.getLoginUser(request);
 
-        // 第一步：先生成题目骨架（不直接写答案）
-        String systemPrompt = "你是一位资深技术面试官，负责为面试题库生产可直接入库的高质量题目。"
-                + "请严格输出 JSON 数组，不要输出 Markdown 代码块，不要输出额外解释。"
-                + "数组中的每个对象必须包含 title、content、tags、difficulty 四个字段。"
-                + "其中 tags 必须是字符串数组，title 简洁明确，content 描述题目要求。"
-                + "difficulty 必须且只能是：简单、中等、困难 三者之一，要根据题目考察深度、候选人经验要求和作答复杂度合理判断。"
-                + "请优先生成中高级技术面试里高频、能区分候选人水平、适合配详细参考答案的题目。";
-        String userPrompt = String.format("知识点：%s，数量：%d。请输出适合直接入库的题目骨架。", questionType, number);
-
-        // 调用 AI
-        String result = aiManager.doChat(systemPrompt, userPrompt);
-
         try {
-            List<AiGeneratedQuestion> generatedQuestionList = parseAiGeneratedQuestions(result);
+            List<AiGeneratedQuestion> generatedQuestionList = generateQuestionSkeletons(questionType, number);
             enrichGeneratedQuestionAnswers(generatedQuestionList);
             int successCount = 0;
             for (AiGeneratedQuestion generatedQuestion : generatedQuestionList) {
@@ -697,6 +692,221 @@ public class QuestionController {
         }
     }
 
+    private List<AiGeneratedQuestion> generateQuestionSkeletons(String questionType, int targetCount) {
+        List<AiGeneratedQuestion> acceptedQuestionList = new ArrayList<>();
+        for (int round = 0; round < AI_GENERATE_QUESTION_MAX_ROUNDS && acceptedQuestionList.size() < targetCount; round++) {
+            int remaining = targetCount - acceptedQuestionList.size();
+            int requestCount = Math.min(AI_GENERATE_QUESTION_BATCH_SIZE, Math.max(1, remaining + 1));
+            try {
+                String result = aiManager.doChat(
+                        buildQuestionGenerationSystemPrompt(),
+                        buildQuestionGenerationUserPrompt(questionType, requestCount, acceptedQuestionList)
+                );
+                List<AiGeneratedQuestion> parsedQuestionList = parseAiGeneratedQuestions(result);
+                List<AiGeneratedQuestion> normalizedQuestionList = normalizeAndFilterGeneratedQuestions(
+                        parsedQuestionList,
+                        questionType,
+                        acceptedQuestionList
+                );
+                for (AiGeneratedQuestion question : normalizedQuestionList) {
+                    if (acceptedQuestionList.size() >= targetCount) {
+                        break;
+                    }
+                    acceptedQuestionList.add(question);
+                }
+            } catch (Exception e) {
+                log.warn("AI 题目骨架生成失败，questionType={}, round={}", questionType, round + 1, e);
+            }
+        }
+        ThrowUtils.throwIf(acceptedQuestionList.isEmpty(), ErrorCode.SYSTEM_ERROR, "AI 未生成出可用题目，请尝试细化技术方向后重试");
+        return acceptedQuestionList;
+    }
+
+    private String buildQuestionGenerationSystemPrompt() {
+        return "你是一位负责技术面试题库建设的资深面试官兼内容编辑。"
+                + "你的目标不是凑数量，而是产出能真实区分候选人水平、能被面试官继续深挖的高质量题目。"
+                + "请严格输出 JSON 数组，不要输出 Markdown 代码块，不要输出额外解释。"
+                + "数组中的每个对象必须包含 title、content、tags、difficulty 四个字段。"
+                + "title 要直接点明考点和场景，不要带编号、引号、【】、'题目'、'请简述' 这类空话。"
+                + "content 必须是真正可直接入库的题干，至少体现业务场景、技术约束、排查目标、设计目标、取舍要求中的两项，避免只有一句“什么是 xx”或“请介绍 xx”。"
+                + "tags 必须是 2 到 5 个简洁标签组成的字符串数组。"
+                + "difficulty 必须且只能是：简单、中等、困难 三者之一，并根据题目考察深度、经验要求和作答复杂度合理判断。"
+                + "如果一次生成多道题，请主动拉开题型分布，优先覆盖原理机制、工程场景、系统设计、性能优化、故障排查、边界取舍等不同方向，避免重复题和换皮题。";
+    }
+
+    private String buildQuestionGenerationUserPrompt(String questionType, int requestCount,
+                                                     List<AiGeneratedQuestion> existingQuestionList) {
+        StringBuilder promptBuilder = new StringBuilder();
+        promptBuilder.append("技术方向：").append(questionType)
+                .append("\n本轮需要新增 ").append(requestCount).append(" 道题目。");
+        promptBuilder.append("\n请优先生成能用于中高级技术面试、适合配详细参考答案、具备继续追问空间的题目。");
+        promptBuilder.append("\n如果方向本身比较基础，请主动放到真实工程语境中，不要只出纯概念定义题。");
+        promptBuilder.append("\n优先考虑这些题型：原理机制、线上故障排查、性能或稳定性优化、系统设计与扩展、方案取舍、项目复盘。");
+        if (existingQuestionList != null && !existingQuestionList.isEmpty()) {
+            promptBuilder.append("\n下面这些题目已经生成过了，新题不要重复、不要近似、不要只换个说法：");
+            for (AiGeneratedQuestion question : existingQuestionList) {
+                promptBuilder.append("\n- ").append(StringUtils.defaultString(question.getTitle()));
+            }
+        }
+        return promptBuilder.toString();
+    }
+
+    private List<AiGeneratedQuestion> normalizeAndFilterGeneratedQuestions(List<AiGeneratedQuestion> parsedQuestionList,
+                                                                           String questionType,
+                                                                           List<AiGeneratedQuestion> existingQuestionList) {
+        List<AiGeneratedQuestion> acceptedQuestionList = new ArrayList<>();
+        if (parsedQuestionList == null || parsedQuestionList.isEmpty()) {
+            return acceptedQuestionList;
+        }
+        List<AiGeneratedQuestion> referenceQuestionList = new ArrayList<>();
+        if (existingQuestionList != null) {
+            referenceQuestionList.addAll(existingQuestionList);
+        }
+        for (AiGeneratedQuestion rawQuestion : parsedQuestionList) {
+            AiGeneratedQuestion normalizedQuestion = normalizeGeneratedQuestion(rawQuestion, questionType);
+            if (!isGeneratedQuestionUsable(normalizedQuestion)) {
+                continue;
+            }
+            if (isDuplicateGeneratedQuestion(normalizedQuestion, referenceQuestionList)
+                    || isDuplicateGeneratedQuestion(normalizedQuestion, acceptedQuestionList)) {
+                continue;
+            }
+            acceptedQuestionList.add(normalizedQuestion);
+            referenceQuestionList.add(normalizedQuestion);
+        }
+        return acceptedQuestionList;
+    }
+
+    private AiGeneratedQuestion normalizeGeneratedQuestion(AiGeneratedQuestion rawQuestion, String questionType) {
+        AiGeneratedQuestion normalizedQuestion = new AiGeneratedQuestion();
+        normalizedQuestion.setTitle(cleanGeneratedTitle(rawQuestion == null ? null : rawQuestion.getTitle()));
+        normalizedQuestion.setContent(cleanGeneratedContent(rawQuestion == null ? null : rawQuestion.getContent()));
+        normalizedQuestion.setDifficulty(normalizeGeneratedDifficulty(rawQuestion == null ? null : rawQuestion.getDifficulty()));
+        normalizedQuestion.setTags(normalizeGeneratedTags(rawQuestion == null ? null : rawQuestion.getTags(), questionType));
+        return normalizedQuestion;
+    }
+
+    private String cleanGeneratedTitle(String title) {
+        String cleaned = StringUtils.trimToEmpty(title)
+                .replaceAll("^题目\\s*[:：]\\s*", "")
+                .replaceAll("^[0-9一二三四五六七八九十]+[.、)）]\\s*", "")
+                .replaceAll("^[\"“'‘【\\[]+", "")
+                .replaceAll("[\"”'’】\\]]+$", "")
+                .trim();
+        return StringUtils.abbreviate(cleaned, 80);
+    }
+
+    private String cleanGeneratedContent(String content) {
+        String cleaned = StringUtils.trimToEmpty(content)
+                .replaceAll("^题干\\s*[:：]\\s*", "")
+                .replaceAll("^[0-9一二三四五六七八九十]+[.、)）]\\s*", "")
+                .replace("\r", "\n")
+                .replaceAll("\\n{3,}", "\n\n")
+                .trim();
+        return cleaned;
+    }
+
+    private List<String> normalizeGeneratedTags(List<String> rawTags, String questionType) {
+        LinkedHashSet<String> tagSet = new LinkedHashSet<>();
+        if (rawTags != null) {
+            rawTags.stream()
+                    .map(StringUtils::trimToEmpty)
+                    .filter(StringUtils::isNotBlank)
+                    .map(tag -> StringUtils.abbreviate(tag, 20))
+                    .forEach(tagSet::add);
+        }
+        if (tagSet.isEmpty()) {
+            splitCandidateText(questionType).stream()
+                    .limit(3)
+                    .forEach(tagSet::add);
+        }
+        return new ArrayList<>(tagSet).stream().limit(MAX_GENERATED_TAGS).collect(Collectors.toList());
+    }
+
+    private boolean isGeneratedQuestionUsable(AiGeneratedQuestion question) {
+        if (question == null) {
+            return false;
+        }
+        String title = StringUtils.trimToEmpty(question.getTitle());
+        String content = StringUtils.trimToEmpty(question.getContent());
+        if (StringUtils.isAnyBlank(title, content)) {
+            return false;
+        }
+        if (title.length() < 4 || content.length() < MIN_GENERATED_QUESTION_CONTENT_LENGTH) {
+            return false;
+        }
+        if (normalizeGeneratedQuestionText(title).equals(normalizeGeneratedQuestionText(content))) {
+            return false;
+        }
+        String lowerContent = content.toLowerCase(Locale.ROOT);
+        return !(content.length() < 42
+                && (lowerContent.contains("什么是")
+                || lowerContent.contains("请介绍")
+                || lowerContent.contains("请简述")
+                || lowerContent.contains("解释一下")
+                || lowerContent.contains("谈谈你对")));
+    }
+
+    private boolean isDuplicateGeneratedQuestion(AiGeneratedQuestion candidate, List<AiGeneratedQuestion> questionList) {
+        if (candidate == null || questionList == null || questionList.isEmpty()) {
+            return false;
+        }
+        String candidateTitle = normalizeGeneratedQuestionText(candidate.getTitle());
+        String candidateKey = buildGeneratedQuestionDuplicateKey(candidate);
+        for (AiGeneratedQuestion existingQuestion : questionList) {
+            if (existingQuestion == null) {
+                continue;
+            }
+            String existingTitle = normalizeGeneratedQuestionText(existingQuestion.getTitle());
+            if (StringUtils.isBlank(existingTitle)) {
+                continue;
+            }
+            if (candidateKey.equals(buildGeneratedQuestionDuplicateKey(existingQuestion))) {
+                return true;
+            }
+            if (candidateTitle.equals(existingTitle)) {
+                return true;
+            }
+            if (candidateTitle.length() >= 8 && existingTitle.length() >= 8
+                    && (candidateTitle.contains(existingTitle) || existingTitle.contains(candidateTitle))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private String buildGeneratedQuestionDuplicateKey(AiGeneratedQuestion question) {
+        String normalizedTitle = normalizeGeneratedQuestionText(question == null ? null : question.getTitle());
+        String normalizedContent = normalizeGeneratedQuestionText(StringUtils.left(
+                StringUtils.defaultString(question == null ? null : question.getContent()),
+                120
+        ));
+        return normalizedTitle + "#" + normalizedContent;
+    }
+
+    private String normalizeGeneratedQuestionText(String text) {
+        return StringUtils.defaultString(text)
+                .toLowerCase(Locale.ROOT)
+                .replaceAll("[\\s`'\"“”‘’《》【】()（）,.，。:：;；!?！？、/\\\\\\-_|]+", "")
+                .replace("请介绍", "")
+                .replace("请简述", "")
+                .replace("请说明", "")
+                .replace("解释一下", "")
+                .replace("什么是", "")
+                .trim();
+    }
+
+    private List<String> splitCandidateText(String text) {
+        if (StringUtils.isBlank(text)) {
+            return new ArrayList<>();
+        }
+        return java.util.Arrays.stream(text.split("[、,，/|\\s]+"))
+                .map(StringUtils::trimToEmpty)
+                .filter(StringUtils::isNotBlank)
+                .distinct()
+                .collect(Collectors.toList());
+    }
+
     private void enrichGeneratedQuestionAnswers(List<AiGeneratedQuestion> generatedQuestionList) {
         if (generatedQuestionList == null || generatedQuestionList.isEmpty()) {
             return;
@@ -708,9 +918,25 @@ public class QuestionController {
             List<AiGeneratedAnswerResult> answerResultList = generateAnswersByPlans(batch, answerPlanList);
             for (int i = 0; i < batch.size(); i++) {
                 AiGeneratedQuestion question = batch.get(i);
+                AiGeneratedAnswerPlan answerPlan = findAnswerPlanByIndex(answerPlanList, i);
+                if (answerPlan == null) {
+                    answerPlan = buildFallbackAnswerPlan(i, question);
+                }
                 AiGeneratedAnswerResult answerResult = findAnswerResultByIndex(answerResultList, i);
                 if (answerResult != null && StringUtils.isNotBlank(answerResult.getAnswer())) {
                     question.setAnswer(answerResult.getAnswer().trim());
+                }
+                if (!isGeneratedAnswerUsable(question.getAnswer())) {
+                    String retriedAnswer = generateSingleAnswerByPlan(question, answerPlan);
+                    if (isGeneratedAnswerUsable(retriedAnswer)) {
+                        question.setAnswer(retriedAnswer.trim());
+                    }
+                }
+                if (shouldReviewGeneratedAnswer(question, answerPlan)) {
+                    String improvedAnswer = reviewAndImproveGeneratedAnswer(question, answerPlan);
+                    if (isGeneratedAnswerUsable(improvedAnswer)) {
+                        question.setAnswer(improvedAnswer.trim());
+                    }
                 }
             }
         }
@@ -719,17 +945,41 @@ public class QuestionController {
     private List<AiGeneratedAnswerPlan> generateAnswerPlans(List<AiGeneratedQuestion> questionBatch) {
         String systemPrompt = "你是一位技术题解编辑，当前任务不是直接写答案，而是先判断每道题最适合拆成几部分回答。"
                 + "请严格输出 JSON 数组，不要输出 Markdown 代码块，不要输出额外解释。"
-                + "数组中的每个对象必须包含 index、partTitles、guidance 三个字段。"
-                + "index 是题目序号；partTitles 是字符串数组，表示这道题最适合拆分成的回答部分标题，数量建议 2 到 6 个；guidance 是一句话说明这道题作答时的重点。"
-                + "请根据每道题的题型自定义 partTitles，不要所有题都复用同一套标题。"
-                + "如果是原理题，更适合按概念、机制、场景、误区来拆；如果是设计题，更适合按目标、方案、取舍、风险来拆；如果是场景题，更适合按背景、分析、动作、结果来拆。";
-        String userPrompt = buildAnswerPlanUserPrompt(questionBatch);
-        String result = aiManager.doChat(systemPrompt, userPrompt);
-        List<AiGeneratedAnswerPlan> planList = parseAiGeneratedAnswerPlans(result);
+                + "数组中的每个对象必须包含 index、questionType、partTitles、mustCoverPoints、guidance、answerStyle 六个字段。"
+                + "index 是题目序号；questionType 只能从 principle、scenario、design、troubleshooting、comparison 中选择；"
+                + "partTitles 是字符串数组，表示这道题最适合拆分成的回答部分标题，数量建议 2 到 6 个；"
+                + "mustCoverPoints 是字符串数组，表示答案必须覆盖的关键点；"
+                + "guidance 是一句话说明这道题作答时的重点；"
+                + "answerStyle 是一句话说明最终答案应该采用什么表达风格，例如“先给结论再展开机制”“按排查时间线推进”“按对比维度逐项展开”。"
+                + "请根据每道题的题型自定义 partTitles 和 mustCoverPoints，不要所有题都复用同一套标题。"
+                + "原理题要突出概念、本质、机制、适用边界；设计题要突出目标、约束、方案、取舍、扩展；"
+                + "场景题要突出背景、分析、动作、结果；故障排查题要突出症状、定位路径、根因、修复和复盘；对比选型题要突出维度、差异、适用场景和取舍。";
+        List<AiGeneratedAnswerPlan> planList = new ArrayList<>();
+        try {
+            String userPrompt = buildAnswerPlanUserPrompt(questionBatch);
+            String result = aiManager.doChat(systemPrompt, userPrompt);
+            planList.addAll(parseAiGeneratedAnswerPlans(result));
+        } catch (Exception e) {
+            log.warn("AI 参考答案拆分方案生成失败，已切换到本地兜底", e);
+        }
         for (int i = 0; i < questionBatch.size(); i++) {
             AiGeneratedAnswerPlan plan = findAnswerPlanByIndex(planList, i);
+            AiGeneratedAnswerPlan fallbackPlan = buildFallbackAnswerPlan(i, questionBatch.get(i));
             if (plan == null || plan.getPartTitles() == null || plan.getPartTitles().isEmpty()) {
-                planList.add(buildFallbackAnswerPlan(i, questionBatch.get(i)));
+                planList.add(fallbackPlan);
+                continue;
+            }
+            if (StringUtils.isBlank(plan.getQuestionType())) {
+                plan.setQuestionType(fallbackPlan.getQuestionType());
+            }
+            if (plan.getMustCoverPoints() == null || plan.getMustCoverPoints().isEmpty()) {
+                plan.setMustCoverPoints(fallbackPlan.getMustCoverPoints());
+            }
+            if (StringUtils.isBlank(plan.getGuidance())) {
+                plan.setGuidance(fallbackPlan.getGuidance());
+            }
+            if (StringUtils.isBlank(plan.getAnswerStyle())) {
+                plan.setAnswerStyle(fallbackPlan.getAnswerStyle());
             }
         }
         return planList;
@@ -738,15 +988,21 @@ public class QuestionController {
     private List<AiGeneratedAnswerResult> generateAnswersByPlans(List<AiGeneratedQuestion> questionBatch,
                                                                  List<AiGeneratedAnswerPlan> answerPlanList) {
         String systemPrompt = "你是一位资深技术面试官，负责为题库撰写详细参考答案。"
-                + "你会先收到每道题的回答拆分方案，请基于对应的 partTitles 和 guidance 写答案。"
+                + "你会先收到每道题的回答拆分方案，请基于对应的 questionType、partTitles、mustCoverPoints、guidance 和 answerStyle 写答案。"
                 + "请严格输出 JSON 数组，不要输出 Markdown 代码块，不要输出额外解释。"
                 + "数组中的每个对象必须包含 index、answer 两个字段。"
-                + "answer 要尽可能详细、可直接用于学习复习和面试作答，优先 300 字以上。"
+                + "answer 要尽可能详细、可直接用于学习复习和面试作答，优先 450 字以上。"
+                + "不要只停留在定义或概念，要主动补齐为什么、怎么做、什么时候适合、有什么代价、线上会踩什么坑。"
                 + "每道题的结构要贴合它自己的题型，不要所有题都套用同一组标题。"
-                + "可以使用小标题、编号或自然分段，但要围绕对应的 partTitles 展开，写清原因、步骤、取舍、边界条件、工程示例和常见坑点。";
-        String userPrompt = buildAnswerGenerationUserPrompt(questionBatch, answerPlanList);
-        String result = aiManager.doChat(systemPrompt, userPrompt);
-        return parseAiGeneratedAnswerResults(result);
+                + "可以使用小标题、编号或自然分段，但要围绕对应的 partTitles 展开，写清原因、步骤、取舍、边界条件、工程示例、排查路径和常见坑点。";
+        try {
+            String userPrompt = buildAnswerGenerationUserPrompt(questionBatch, answerPlanList);
+            String result = aiManager.doChat(systemPrompt, userPrompt);
+            return parseAiGeneratedAnswerResults(result);
+        } catch (Exception e) {
+            log.warn("AI 批量参考答案生成失败，后续将尝试单题补写", e);
+            return new ArrayList<>();
+        }
     }
 
     private String buildAnswerPlanUserPrompt(List<AiGeneratedQuestion> questionBatch) {
@@ -755,6 +1011,7 @@ public class QuestionController {
             AiGeneratedQuestion question = questionBatch.get(i);
             promptBuilder.append("\n题目序号：").append(i)
                     .append("\n标题：").append(StringUtils.defaultString(question.getTitle()))
+                    .append("\n建议题型：").append(detectGeneratedQuestionType(question))
                     .append("\n难度：").append(normalizeGeneratedDifficulty(question.getDifficulty()))
                     .append("\n题干：").append(StringUtils.defaultString(question.getContent()))
                     .append("\n标签：").append(question.getTags() == null ? "[]" : JSONUtil.toJsonStr(question.getTags()))
@@ -777,41 +1034,85 @@ public class QuestionController {
                     .append("\n难度：").append(normalizeGeneratedDifficulty(question.getDifficulty()))
                     .append("\n题干：").append(StringUtils.defaultString(question.getContent()))
                     .append("\n标签：").append(question.getTags() == null ? "[]" : JSONUtil.toJsonStr(question.getTags()))
+                    .append("\n题型：").append(StringUtils.defaultIfBlank(answerPlan.getQuestionType(), detectGeneratedQuestionType(question)))
                     .append("\n回答分段：").append(JSONUtil.toJsonStr(answerPlan.getPartTitles()))
+                    .append("\n必须覆盖点：").append(answerPlan.getMustCoverPoints() == null ? "[]" : JSONUtil.toJsonStr(answerPlan.getMustCoverPoints()))
                     .append("\n作答重点：").append(StringUtils.defaultString(answerPlan.getGuidance()))
+                    .append("\n表达风格：").append(StringUtils.defaultString(answerPlan.getAnswerStyle()))
                     .append("\n");
         }
         return promptBuilder.toString();
     }
 
     private AiGeneratedAnswerPlan buildFallbackAnswerPlan(int index, AiGeneratedQuestion question) {
-        String titleAndContent = StringUtils.defaultString(question == null ? null : question.getTitle())
-                + " " + StringUtils.defaultString(question == null ? null : question.getContent());
+        String questionType = detectGeneratedQuestionType(question);
         List<String> partTitles = new ArrayList<>();
+        List<String> mustCoverPoints = new ArrayList<>();
         String guidance;
-        if (titleAndContent.contains("设计") || titleAndContent.contains("架构") || titleAndContent.contains("系统")) {
+        String answerStyle;
+        if ("design".equals(questionType)) {
             partTitles.add("问题背景与目标");
             partTitles.add("核心方案设计");
             partTitles.add("关键取舍与风险");
-            partTitles.add("落地优化方向");
-            guidance = "重点写清业务约束、方案结构、优缺点和扩展性。";
-        } else if (titleAndContent.contains("场景") || titleAndContent.contains("如何") || titleAndContent.contains("怎么")) {
+            partTitles.add("扩展与优化方向");
+            mustCoverPoints.add("业务约束");
+            mustCoverPoints.add("核心链路");
+            mustCoverPoints.add("扩展性");
+            mustCoverPoints.add("容灾或高可用");
+            guidance = "重点写清约束条件、方案结构、优缺点、容量与扩展性。";
+            answerStyle = "先交代目标和约束，再展开方案、取舍与演进方向。";
+        } else if ("troubleshooting".equals(questionType)) {
+            partTitles.add("现象与影响范围");
+            partTitles.add("排查路径");
+            partTitles.add("根因定位与修复");
+            partTitles.add("复盘与预防");
+            mustCoverPoints.add("排查顺序");
+            mustCoverPoints.add("日志或监控线索");
+            mustCoverPoints.add("根因");
+            mustCoverPoints.add("防再发措施");
+            guidance = "重点写清先看什么、怎么缩小范围、如何定位根因，以及修复后的复盘动作。";
+            answerStyle = "按排查时间线展开，体现观察、验证、定位、修复和复盘。";
+        } else if ("comparison".equals(questionType)) {
+            partTitles.add("比较前提与核心维度");
+            partTitles.add("关键差异");
+            partTitles.add("适用场景与选型建议");
+            partTitles.add("落地注意事项");
+            mustCoverPoints.add("对比维度");
+            mustCoverPoints.add("优缺点");
+            mustCoverPoints.add("适用场景");
+            mustCoverPoints.add("取舍依据");
+            guidance = "重点写清比较维度、差异点、适用边界和选型逻辑。";
+            answerStyle = "按维度逐项对比，再给出明确的选型建议。";
+        } else if ("scenario".equals(questionType)) {
             partTitles.add("场景与核心问题");
             partTitles.add("分析思路");
-            partTitles.add("解决方案");
-            partTitles.add("常见风险与实践建议");
-            guidance = "重点写清判断过程、处理步骤和工程化经验。";
+            partTitles.add("解决动作");
+            partTitles.add("风险与实践建议");
+            mustCoverPoints.add("判断过程");
+            mustCoverPoints.add("处理步骤");
+            mustCoverPoints.add("结果验证");
+            mustCoverPoints.add("风险控制");
+            guidance = "重点写清判断过程、处理步骤、落地动作和工程化经验。";
+            answerStyle = "先交代场景，再按分析、动作、结果和复盘展开。";
         } else {
             partTitles.add("核心结论");
-            partTitles.add("关键机制");
-            partTitles.add("应用场景");
-            partTitles.add("常见问题与边界");
-            guidance = "重点写清原理解释、适用场景和常见误区。";
+            partTitles.add("底层机制");
+            partTitles.add("典型场景");
+            partTitles.add("常见误区与边界");
+            mustCoverPoints.add("概念本质");
+            mustCoverPoints.add("运行机制");
+            mustCoverPoints.add("使用场景");
+            mustCoverPoints.add("边界条件");
+            guidance = "重点写清原理解释、适用场景、边界条件和常见误区。";
+            answerStyle = "先给结论，再解释 why/how，最后补场景和边界。";
         }
         AiGeneratedAnswerPlan plan = new AiGeneratedAnswerPlan();
         plan.setIndex(index);
+        plan.setQuestionType(questionType);
         plan.setPartTitles(partTitles);
+        plan.setMustCoverPoints(mustCoverPoints);
         plan.setGuidance(guidance);
+        plan.setAnswerStyle(answerStyle);
         return plan;
     }
 
@@ -837,6 +1138,261 @@ public class QuestionController {
             }
         }
         return null;
+    }
+
+    private String generateSingleAnswerByPlan(AiGeneratedQuestion question, AiGeneratedAnswerPlan answerPlan) {
+        String safeTitle = StringUtils.defaultString(question == null ? null : question.getTitle());
+        try {
+            String systemPrompt = "你是一位资深技术面试官兼题解编辑，现在只需要为一道题写最终参考答案。"
+                    + "请严格输出 JSON 对象，不要输出 Markdown 代码块，不要输出额外解释。"
+                    + "JSON 对象必须包含 answer 字段。"
+                    + "answer 必须是可以直接入库的完整参考答案，不要只给提纲，不要只给几句概括。"
+                    + "请根据题目的 difficulty、tags、questionType、partTitles、mustCoverPoints、guidance 和 answerStyle 写出 450 到 1200 字左右的高质量答案。"
+                    + "答案要尽量减少模板味，贴合题型展开：原理题讲清 why/how 和边界，设计题讲清约束、方案、取舍和扩展，场景题讲清分析路径、落地动作、风险点和复盘，排查题讲清定位线索和排查顺序，对比题讲清维度和选型依据。";
+            String userPrompt = buildSingleAnswerGenerationUserPrompt(question, answerPlan);
+            String result = aiManager.doChat(systemPrompt, userPrompt);
+            return extractSingleGeneratedAnswer(result);
+        } catch (Exception e) {
+            log.warn("AI 单题参考答案补写失败，title={}", safeTitle, e);
+            return "";
+        }
+    }
+
+    private String buildSingleAnswerGenerationUserPrompt(AiGeneratedQuestion question, AiGeneratedAnswerPlan answerPlan) {
+        return "标题：" + StringUtils.defaultString(question == null ? null : question.getTitle())
+                + "\n难度：" + normalizeGeneratedDifficulty(question == null ? null : question.getDifficulty())
+                + "\n题干：" + StringUtils.defaultString(question == null ? null : question.getContent())
+                + "\n标签：" + (question == null || question.getTags() == null ? "[]" : JSONUtil.toJsonStr(question.getTags()))
+                + "\n题型：" + StringUtils.defaultIfBlank(answerPlan == null ? null : answerPlan.getQuestionType(), detectGeneratedQuestionType(question))
+                + "\n回答分段：" + (answerPlan == null || answerPlan.getPartTitles() == null ? "[]" : JSONUtil.toJsonStr(answerPlan.getPartTitles()))
+                + "\n必须覆盖点：" + (answerPlan == null || answerPlan.getMustCoverPoints() == null ? "[]" : JSONUtil.toJsonStr(answerPlan.getMustCoverPoints()))
+                + "\n作答重点：" + StringUtils.defaultString(answerPlan == null ? null : answerPlan.getGuidance())
+                + "\n表达风格：" + StringUtils.defaultString(answerPlan == null ? null : answerPlan.getAnswerStyle())
+                + "\n请输出最终参考答案。";
+    }
+
+    private String extractSingleGeneratedAnswer(String rawContent) {
+        String jsonText = normalizeAiJson(rawContent);
+        if (jsonText.startsWith("{")) {
+            JSONObject jsonObject = JSONUtil.parseObj(jsonText);
+            return StringUtils.trimToEmpty(firstNonBlank(jsonObject.getStr("answer"), jsonObject.getStr("content")));
+        }
+        if (jsonText.startsWith("[")) {
+            List<AiGeneratedAnswerResult> answerResultList = JSONUtil.toList(jsonText, AiGeneratedAnswerResult.class);
+            if (answerResultList != null && !answerResultList.isEmpty()) {
+                return StringUtils.trimToEmpty(answerResultList.get(0).getAnswer());
+            }
+        }
+        return StringUtils.trimToEmpty(jsonText);
+    }
+
+    private boolean isGeneratedAnswerUsable(String answer) {
+        String normalizedAnswer = StringUtils.trimToEmpty(answer);
+        if (normalizedAnswer.length() < MIN_GENERATED_ANSWER_LENGTH) {
+            return false;
+        }
+        String lowerAnswer = normalizedAnswer.toLowerCase(Locale.ROOT);
+        return !(lowerAnswer.contains("待补充")
+                || lowerAnswer.contains("暂无")
+                || lowerAnswer.contains("示例答案")
+                || lowerAnswer.contains("参考提纲"));
+    }
+
+    private boolean shouldReviewGeneratedAnswer(AiGeneratedQuestion question, AiGeneratedAnswerPlan answerPlan) {
+        String answer = StringUtils.trimToEmpty(question == null ? null : question.getAnswer());
+        if (!isGeneratedAnswerUsable(answer)) {
+            return true;
+        }
+        if (answer.length() < MIN_HIGH_CONFIDENCE_GENERATED_ANSWER_LENGTH) {
+            return true;
+        }
+        List<String> expectedKeywordList = buildExpectedAnswerKeywords(question, answerPlan);
+        int keywordHitCount = countAnswerKeywordHits(answer, expectedKeywordList);
+        int expectedHitThreshold = expectedKeywordList.isEmpty()
+                ? 0
+                : Math.min(expectedKeywordList.size(), Math.max(2, Math.min(5, expectedKeywordList.size() / 3 + 1)));
+        if (!expectedKeywordList.isEmpty() && keywordHitCount < expectedHitThreshold) {
+            return true;
+        }
+        boolean hasStructure = containsAnyIgnoreCase(answer, "首先", "然后", "最后", "一是", "二是", "三是", "1.", "2.", "3.", "第一", "第二");
+        boolean hasScenario = containsAnyIgnoreCase(answer, "例如", "比如", "场景", "案例", "实践", "线上", "落地");
+        boolean hasBoundary = containsAnyIgnoreCase(answer, "边界", "风险", "注意", "误区", "坑", "异常", "限制");
+        boolean hasTradeOff = containsAnyIgnoreCase(answer, "取舍", "权衡", "优点", "缺点", "成本", "收益");
+        String questionType = StringUtils.defaultIfBlank(answerPlan == null ? null : answerPlan.getQuestionType(), detectGeneratedQuestionType(question));
+        if ("design".equals(questionType)) {
+            return (!hasTradeOff || !hasBoundary) && answer.length() < 520;
+        }
+        if ("troubleshooting".equals(questionType)) {
+            return !containsAnyIgnoreCase(answer, "排查", "定位", "日志", "监控", "根因", "复盘")
+                    || (!hasScenario && answer.length() < 460);
+        }
+        if ("comparison".equals(questionType)) {
+            return (!containsAnyIgnoreCase(answer, "区别", "差异", "适合", "不适合", "选型") || !hasTradeOff)
+                    && answer.length() < 500;
+        }
+        if ("scenario".equals(questionType)) {
+            return (!hasScenario || !containsAnyIgnoreCase(answer, "步骤", "处理", "先", "再", "验证", "复盘"))
+                    && answer.length() < 480;
+        }
+        return !hasStructure
+                || !containsAnyIgnoreCase(answer, "原理", "机制", "流程", "原因", "本质")
+                || (!hasBoundary && answer.length() < 480);
+    }
+
+    private String reviewAndImproveGeneratedAnswer(AiGeneratedQuestion question, AiGeneratedAnswerPlan answerPlan) {
+        String currentAnswer = StringUtils.trimToEmpty(question == null ? null : question.getAnswer());
+        String safeTitle = StringUtils.defaultString(question == null ? null : question.getTitle());
+        try {
+            String systemPrompt = buildAnswerReviewSystemPrompt();
+            String userPrompt = buildAnswerReviewUserPrompt(question, answerPlan, currentAnswer);
+            String result = aiManager.doChat(systemPrompt, userPrompt);
+            AiGeneratedAnswerReview review = parseAiGeneratedAnswerReview(result);
+            if (review == null) {
+                return currentAnswer;
+            }
+            String rewrittenAnswer = StringUtils.trimToEmpty(review.getRewriteAnswer());
+            if (isGeneratedAnswerUsable(rewrittenAnswer)
+                    && (!Boolean.TRUE.equals(review.getPass())
+                    || review.getScore() == null
+                    || review.getScore() < MIN_GENERATED_ANSWER_REVIEW_SCORE
+                    || rewrittenAnswer.length() > currentAnswer.length() + 40)) {
+                return rewrittenAnswer;
+            }
+            return currentAnswer;
+        } catch (Exception e) {
+            log.warn("AI 参考答案审稿重写失败，title={}", safeTitle, e);
+            return currentAnswer;
+        }
+    }
+
+    private String buildAnswerReviewSystemPrompt() {
+        return "你是一位严格但专业的技术题库总编，负责审稿和重写参考答案。"
+                + "请严格输出 JSON 对象，不要输出 Markdown 代码块，不要输出额外解释。"
+                + "JSON 对象必须包含 pass、score、problems、rewriteAnswer 四个字段。"
+                + "pass 表示当前答案是否已经达到可直接入库的质量；score 为 0 到 100 的整数；problems 是字符串数组；rewriteAnswer 是改写后的完整答案。"
+                + "评分时重点看：是否足够详细、是否贴合题型、是否覆盖关键知识点、是否讲清为什么和怎么做、是否有场景/边界/取舍/风险/示例。"
+                + "如果当前答案已经很好，也要返回 score 和 problems，但 rewriteAnswer 可以返回空字符串。"
+                + "如果当前答案偏短、偏泛、像提纲、缺少分析过程或缺少关键覆盖点，就必须给出完整 rewriteAnswer。";
+    }
+
+    private String buildAnswerReviewUserPrompt(AiGeneratedQuestion question,
+                                               AiGeneratedAnswerPlan answerPlan,
+                                               String currentAnswer) {
+        return "请审查下面这道题的参考答案，并在需要时直接重写："
+                + "\n标题：" + StringUtils.defaultString(question == null ? null : question.getTitle())
+                + "\n难度：" + normalizeGeneratedDifficulty(question == null ? null : question.getDifficulty())
+                + "\n题干：" + StringUtils.defaultString(question == null ? null : question.getContent())
+                + "\n标签：" + (question == null || question.getTags() == null ? "[]" : JSONUtil.toJsonStr(question.getTags()))
+                + "\n题型：" + StringUtils.defaultIfBlank(answerPlan == null ? null : answerPlan.getQuestionType(), detectGeneratedQuestionType(question))
+                + "\n回答分段：" + (answerPlan == null || answerPlan.getPartTitles() == null ? "[]" : JSONUtil.toJsonStr(answerPlan.getPartTitles()))
+                + "\n必须覆盖点：" + (answerPlan == null || answerPlan.getMustCoverPoints() == null ? "[]" : JSONUtil.toJsonStr(answerPlan.getMustCoverPoints()))
+                + "\n作答重点：" + StringUtils.defaultString(answerPlan == null ? null : answerPlan.getGuidance())
+                + "\n表达风格：" + StringUtils.defaultString(answerPlan == null ? null : answerPlan.getAnswerStyle())
+                + "\n当前答案：" + currentAnswer
+                + "\n要求：如果答案不够好，请直接输出完整 rewriteAnswer，不要只列修改建议。";
+    }
+
+    private AiGeneratedAnswerReview parseAiGeneratedAnswerReview(String rawContent) {
+        String jsonText = normalizeAiJson(rawContent);
+        if (jsonText.startsWith("[")) {
+            JSONArray jsonArray = JSONUtil.parseArray(jsonText);
+            if (jsonArray.isEmpty()) {
+                return null;
+            }
+            jsonText = JSONUtil.toJsonStr(jsonArray.get(0));
+        }
+        if (jsonText.startsWith("{")) {
+            JSONObject jsonObject = JSONUtil.parseObj(jsonText);
+            AiGeneratedAnswerReview review = new AiGeneratedAnswerReview();
+            review.setPass(jsonObject.getBool("pass"));
+            review.setScore(jsonObject.getInt("score"));
+            JSONArray problems = jsonObject.getJSONArray("problems");
+            if (problems == null) {
+                problems = jsonObject.getJSONArray("issues");
+            }
+            review.setProblems(problems == null ? new ArrayList<>() : problems.toList(String.class));
+            review.setRewriteAnswer(StringUtils.trimToEmpty(firstNonBlank(
+                    jsonObject.getStr("rewriteAnswer"),
+                    jsonObject.getStr("rewrite"),
+                    jsonObject.getStr("answer")
+            )));
+            return review;
+        }
+        if (StringUtils.isNotBlank(jsonText)) {
+            AiGeneratedAnswerReview review = new AiGeneratedAnswerReview();
+            review.setPass(false);
+            review.setScore(0);
+            review.setProblems(List.of("AI 审稿返回了非 JSON 内容"));
+            review.setRewriteAnswer(StringUtils.trimToEmpty(jsonText));
+            return review;
+        }
+        return null;
+    }
+
+    private List<String> buildExpectedAnswerKeywords(AiGeneratedQuestion question, AiGeneratedAnswerPlan answerPlan) {
+        LinkedHashSet<String> keywordSet = new LinkedHashSet<>();
+        if (question != null && question.getTags() != null) {
+            question.getTags().stream()
+                    .map(StringUtils::trimToEmpty)
+                    .filter(keyword -> keyword.length() >= 2 && keyword.length() <= 24)
+                    .map(keyword -> keyword.toLowerCase(Locale.ROOT))
+                    .forEach(keywordSet::add);
+        }
+        if (answerPlan != null && answerPlan.getPartTitles() != null) {
+            answerPlan.getPartTitles().stream()
+                    .filter(StringUtils::isNotBlank)
+                    .forEach(partTitle -> {
+                        keywordSet.add(partTitle.toLowerCase(Locale.ROOT));
+                        tokenizeText(partTitle).forEach(keywordSet::add);
+                    });
+        }
+        if (answerPlan != null && answerPlan.getMustCoverPoints() != null) {
+            answerPlan.getMustCoverPoints().stream()
+                    .filter(StringUtils::isNotBlank)
+                    .forEach(point -> {
+                        keywordSet.add(point.toLowerCase(Locale.ROOT));
+                        tokenizeText(point).forEach(keywordSet::add);
+                    });
+        }
+        tokenizeText(question == null ? null : question.getTitle()).stream().limit(6).forEach(keywordSet::add);
+        tokenizeText(question == null ? null : question.getContent()).stream().limit(10).forEach(keywordSet::add);
+        return new ArrayList<>(keywordSet).stream().limit(16).collect(Collectors.toList());
+    }
+
+    private int countAnswerKeywordHits(String answer, List<String> expectedKeywordList) {
+        if (StringUtils.isBlank(answer) || expectedKeywordList == null || expectedKeywordList.isEmpty()) {
+            return 0;
+        }
+        String lowerAnswer = answer.toLowerCase(Locale.ROOT);
+        int hitCount = 0;
+        for (String keyword : expectedKeywordList) {
+            String normalizedKeyword = StringUtils.trimToEmpty(keyword).toLowerCase(Locale.ROOT);
+            if (normalizedKeyword.length() >= 2 && lowerAnswer.contains(normalizedKeyword)) {
+                hitCount++;
+            }
+        }
+        return hitCount;
+    }
+
+    private String detectGeneratedQuestionType(AiGeneratedQuestion question) {
+        String titleAndContent = StringUtils.defaultString(question == null ? null : question.getTitle())
+                + " " + StringUtils.defaultString(question == null ? null : question.getContent());
+        if (question != null && question.getTags() != null && !question.getTags().isEmpty()) {
+            titleAndContent += " " + String.join(" ", question.getTags());
+        }
+        if (containsAnyIgnoreCase(titleAndContent, "对比", "比较", "区别", "优缺点", "选型", "tradeoff")) {
+            return "comparison";
+        }
+        if (containsAnyIgnoreCase(titleAndContent, "排查", "定位", "故障", "异常", "报警", "线上", "事故", "根因")) {
+            return "troubleshooting";
+        }
+        if (containsAnyIgnoreCase(titleAndContent, "设计", "架构", "系统", "高可用", "扩展", "容量", "容灾", "一致性")) {
+            return "design";
+        }
+        if (containsAnyIgnoreCase(titleAndContent, "场景", "如何", "怎么", "如果", "实践", "落地", "优化")) {
+            return "scenario";
+        }
+        return "principle";
     }
 
     /**
@@ -1357,14 +1913,25 @@ public class QuestionController {
     @Data
     private static class AiGeneratedAnswerPlan {
         private Integer index;
+        private String questionType;
         private List<String> partTitles;
+        private List<String> mustCoverPoints;
         private String guidance;
+        private String answerStyle;
     }
 
     @Data
     private static class AiGeneratedAnswerResult {
         private Integer index;
         private String answer;
+    }
+
+    @Data
+    private static class AiGeneratedAnswerReview {
+        private Boolean pass;
+        private Integer score;
+        private List<String> problems;
+        private String rewriteAnswer;
     }
 
 }

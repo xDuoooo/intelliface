@@ -82,9 +82,9 @@ public class QuestionController {
     private static final int AI_GENERATE_QUESTION_MAX_ROUNDS = 6;
     private static final int AI_GENERATE_ANSWER_BATCH_SIZE = 3;
     private static final int MIN_GENERATED_QUESTION_CONTENT_LENGTH = 28;
-    private static final int MIN_GENERATED_ANSWER_LENGTH = 180;
-    private static final int MIN_HIGH_CONFIDENCE_GENERATED_ANSWER_LENGTH = 320;
-    private static final int MIN_GENERATED_ANSWER_REVIEW_SCORE = 78;
+    private static final int MIN_GENERATED_ANSWER_LENGTH = 320;
+    private static final int MIN_HIGH_CONFIDENCE_GENERATED_ANSWER_LENGTH = 560;
+    private static final int MIN_GENERATED_ANSWER_REVIEW_SCORE = 85;
     private static final int MAX_GENERATED_TAGS = 5;
     private static final Set<String> SUPPORTED_RESUME_FILE_SUFFIX_SET = Set.of("txt", "md", "markdown", "docx", "pdf");
     private static final Set<String> SUPPORTED_AUDIO_FILE_SUFFIX_SET = Set.of("webm", "wav", "mp3", "m4a", "mp4", "ogg", "oga");
@@ -991,10 +991,12 @@ public class QuestionController {
                 + "你会先收到每道题的回答拆分方案，请基于对应的 questionType、partTitles、mustCoverPoints、guidance 和 answerStyle 写答案。"
                 + "请严格输出 JSON 数组，不要输出 Markdown 代码块，不要输出额外解释。"
                 + "数组中的每个对象必须包含 index、answer 两个字段。"
-                + "answer 要尽可能详细、可直接用于学习复习和面试作答，优先 450 字以上。"
-                + "不要只停留在定义或概念，要主动补齐为什么、怎么做、什么时候适合、有什么代价、线上会踩什么坑。"
+                + "在不胡编、不脱离题意的前提下，answer 越详细越好，宁可展开充分，也不要写得过短。"
+                + "answer 要尽可能详细、可直接用于学习复习和面试作答。简单题通常也不要低于 450 字，中等题优先 650 字以上，困难题优先 800 字以上。"
+                + "不要只停留在定义或概念，要主动补齐为什么、怎么做、什么时候适合、有什么代价、不这么做会怎样、线上会踩什么坑。"
                 + "每道题的结构要贴合它自己的题型，不要所有题都套用同一组标题。"
-                + "可以使用小标题、编号或自然分段，但要围绕对应的 partTitles 展开，写清原因、步骤、取舍、边界条件、工程示例、排查路径和常见坑点。";
+                + "可以使用小标题、编号或自然分段，但要围绕对应的 partTitles 展开，写清原因、步骤、取舍、边界条件、工程示例、排查路径、验证方式和常见坑点。"
+                + "除非题目本身极其简单，否则请至少给出一个具体场景、一个工程化细节和一个常见误区或风险点。";
         try {
             String userPrompt = buildAnswerGenerationUserPrompt(questionBatch, answerPlanList);
             String result = aiManager.doChat(systemPrompt, userPrompt);
@@ -1039,6 +1041,7 @@ public class QuestionController {
                     .append("\n必须覆盖点：").append(answerPlan.getMustCoverPoints() == null ? "[]" : JSONUtil.toJsonStr(answerPlan.getMustCoverPoints()))
                     .append("\n作答重点：").append(StringUtils.defaultString(answerPlan.getGuidance()))
                     .append("\n表达风格：").append(StringUtils.defaultString(answerPlan.getAnswerStyle()))
+                    .append("\n").append(buildGeneratedAnswerLengthInstruction(question, answerPlan))
                     .append("\n");
         }
         return promptBuilder.toString();
@@ -1059,7 +1062,9 @@ public class QuestionController {
             mustCoverPoints.add("核心链路");
             mustCoverPoints.add("扩展性");
             mustCoverPoints.add("容灾或高可用");
-            guidance = "重点写清约束条件、方案结构、优缺点、容量与扩展性。";
+            mustCoverPoints.add("容量预估或性能瓶颈");
+            mustCoverPoints.add("验证方案是否可行");
+            guidance = "重点写清约束条件、方案结构、优缺点、容量与扩展性，并补一个贴近真实业务的落地示例。";
             answerStyle = "先交代目标和约束，再展开方案、取舍与演进方向。";
         } else if ("troubleshooting".equals(questionType)) {
             partTitles.add("现象与影响范围");
@@ -1070,7 +1075,9 @@ public class QuestionController {
             mustCoverPoints.add("日志或监控线索");
             mustCoverPoints.add("根因");
             mustCoverPoints.add("防再发措施");
-            guidance = "重点写清先看什么、怎么缩小范围、如何定位根因，以及修复后的复盘动作。";
+            mustCoverPoints.add("验证修复是否生效");
+            mustCoverPoints.add("容易误判的线索");
+            guidance = "重点写清先看什么、怎么缩小范围、如何定位根因，以及修复后的复盘动作和防再发机制。";
             answerStyle = "按排查时间线展开，体现观察、验证、定位、修复和复盘。";
         } else if ("comparison".equals(questionType)) {
             partTitles.add("比较前提与核心维度");
@@ -1081,7 +1088,9 @@ public class QuestionController {
             mustCoverPoints.add("优缺点");
             mustCoverPoints.add("适用场景");
             mustCoverPoints.add("取舍依据");
-            guidance = "重点写清比较维度、差异点、适用边界和选型逻辑。";
+            mustCoverPoints.add("迁移或落地成本");
+            mustCoverPoints.add("常见误选场景");
+            guidance = "重点写清比较维度、差异点、适用边界、选型逻辑，以及在真实项目里的迁移或维护成本。";
             answerStyle = "按维度逐项对比，再给出明确的选型建议。";
         } else if ("scenario".equals(questionType)) {
             partTitles.add("场景与核心问题");
@@ -1092,7 +1101,9 @@ public class QuestionController {
             mustCoverPoints.add("处理步骤");
             mustCoverPoints.add("结果验证");
             mustCoverPoints.add("风险控制");
-            guidance = "重点写清判断过程、处理步骤、落地动作和工程化经验。";
+            mustCoverPoints.add("业务影响与收益");
+            mustCoverPoints.add("常见坑点");
+            guidance = "重点写清判断过程、处理步骤、落地动作、结果验证和工程化经验，尽量带出业务收益。";
             answerStyle = "先交代场景，再按分析、动作、结果和复盘展开。";
         } else {
             partTitles.add("核心结论");
@@ -1103,7 +1114,9 @@ public class QuestionController {
             mustCoverPoints.add("运行机制");
             mustCoverPoints.add("使用场景");
             mustCoverPoints.add("边界条件");
-            guidance = "重点写清原理解释、适用场景、边界条件和常见误区。";
+            mustCoverPoints.add("为什么这样设计");
+            mustCoverPoints.add("工程实践中的注意点");
+            guidance = "重点写清原理解释、适用场景、边界条件和常见误区，并补充一段工程实践视角。";
             answerStyle = "先给结论，再解释 why/how，最后补场景和边界。";
         }
         AiGeneratedAnswerPlan plan = new AiGeneratedAnswerPlan();
@@ -1146,9 +1159,11 @@ public class QuestionController {
             String systemPrompt = "你是一位资深技术面试官兼题解编辑，现在只需要为一道题写最终参考答案。"
                     + "请严格输出 JSON 对象，不要输出 Markdown 代码块，不要输出额外解释。"
                     + "JSON 对象必须包含 answer 字段。"
+                    + "在不胡编、不脱离题意的前提下，answer 越详细越好，宁可展开充分，也不要只写成短答案。"
                     + "answer 必须是可以直接入库的完整参考答案，不要只给提纲，不要只给几句概括。"
-                    + "请根据题目的 difficulty、tags、questionType、partTitles、mustCoverPoints、guidance 和 answerStyle 写出 450 到 1200 字左右的高质量答案。"
-                    + "答案要尽量减少模板味，贴合题型展开：原理题讲清 why/how 和边界，设计题讲清约束、方案、取舍和扩展，场景题讲清分析路径、落地动作、风险点和复盘，排查题讲清定位线索和排查顺序，对比题讲清维度和选型依据。";
+                    + "请根据题目的 difficulty、tags、questionType、partTitles、mustCoverPoints、guidance 和 answerStyle 写出一篇明显充分展开的高质量答案。"
+                    + "答案要尽量减少模板味，贴合题型展开：原理题讲清 why/how 和边界，设计题讲清约束、方案、取舍和扩展，场景题讲清分析路径、落地动作、风险点和复盘，排查题讲清定位线索和排查顺序，对比题讲清维度和选型依据。"
+                    + "除非题目本身非常简单，否则必须覆盖：一个具体场景或例子、一个工程实践细节、一个风险或误区、一个验证结果或判断依据。";
             String userPrompt = buildSingleAnswerGenerationUserPrompt(question, answerPlan);
             String result = aiManager.doChat(systemPrompt, userPrompt);
             return extractSingleGeneratedAnswer(result);
@@ -1168,6 +1183,7 @@ public class QuestionController {
                 + "\n必须覆盖点：" + (answerPlan == null || answerPlan.getMustCoverPoints() == null ? "[]" : JSONUtil.toJsonStr(answerPlan.getMustCoverPoints()))
                 + "\n作答重点：" + StringUtils.defaultString(answerPlan == null ? null : answerPlan.getGuidance())
                 + "\n表达风格：" + StringUtils.defaultString(answerPlan == null ? null : answerPlan.getAnswerStyle())
+                + "\n" + buildGeneratedAnswerLengthInstruction(question, answerPlan)
                 + "\n请输出最终参考答案。";
     }
 
@@ -1203,7 +1219,8 @@ public class QuestionController {
         if (!isGeneratedAnswerUsable(answer)) {
             return true;
         }
-        if (answer.length() < MIN_HIGH_CONFIDENCE_GENERATED_ANSWER_LENGTH) {
+        int expectedMinLength = expectedGeneratedAnswerMinLength(question, answerPlan);
+        if (answer.length() < Math.max(MIN_HIGH_CONFIDENCE_GENERATED_ANSWER_LENGTH, expectedMinLength)) {
             return true;
         }
         List<String> expectedKeywordList = buildExpectedAnswerKeywords(question, answerPlan);
@@ -1218,25 +1235,34 @@ public class QuestionController {
         boolean hasScenario = containsAnyIgnoreCase(answer, "例如", "比如", "场景", "案例", "实践", "线上", "落地");
         boolean hasBoundary = containsAnyIgnoreCase(answer, "边界", "风险", "注意", "误区", "坑", "异常", "限制");
         boolean hasTradeOff = containsAnyIgnoreCase(answer, "取舍", "权衡", "优点", "缺点", "成本", "收益");
+        boolean hasValidation = containsAnyIgnoreCase(answer, "验证", "指标", "监控", "压测", "结果", "观察", "确认");
         String questionType = StringUtils.defaultIfBlank(answerPlan == null ? null : answerPlan.getQuestionType(), detectGeneratedQuestionType(question));
         if ("design".equals(questionType)) {
-            return (!hasTradeOff || !hasBoundary) && answer.length() < 520;
+            return !hasTradeOff || !hasBoundary || !hasScenario || !hasValidation || answer.length() < Math.max(680, expectedMinLength);
         }
         if ("troubleshooting".equals(questionType)) {
             return !containsAnyIgnoreCase(answer, "排查", "定位", "日志", "监控", "根因", "复盘")
-                    || (!hasScenario && answer.length() < 460);
+                    || !hasValidation
+                    || !hasScenario
+                    || answer.length() < Math.max(660, expectedMinLength);
         }
         if ("comparison".equals(questionType)) {
             return (!containsAnyIgnoreCase(answer, "区别", "差异", "适合", "不适合", "选型") || !hasTradeOff)
-                    && answer.length() < 500;
+                    || !hasScenario
+                    || !hasBoundary
+                    || answer.length() < Math.max(620, expectedMinLength);
         }
         if ("scenario".equals(questionType)) {
-            return (!hasScenario || !containsAnyIgnoreCase(answer, "步骤", "处理", "先", "再", "验证", "复盘"))
-                    && answer.length() < 480;
+            return !hasScenario
+                    || !containsAnyIgnoreCase(answer, "步骤", "处理", "先", "再", "验证", "复盘")
+                    || !hasValidation
+                    || answer.length() < Math.max(620, expectedMinLength);
         }
         return !hasStructure
                 || !containsAnyIgnoreCase(answer, "原理", "机制", "流程", "原因", "本质")
-                || (!hasBoundary && answer.length() < 480);
+                || !hasScenario
+                || !hasBoundary
+                || answer.length() < Math.max(560, expectedMinLength);
     }
 
     private String reviewAndImproveGeneratedAnswer(AiGeneratedQuestion question, AiGeneratedAnswerPlan answerPlan) {
@@ -1271,8 +1297,10 @@ public class QuestionController {
                 + "JSON 对象必须包含 pass、score、problems、rewriteAnswer 四个字段。"
                 + "pass 表示当前答案是否已经达到可直接入库的质量；score 为 0 到 100 的整数；problems 是字符串数组；rewriteAnswer 是改写后的完整答案。"
                 + "评分时重点看：是否足够详细、是否贴合题型、是否覆盖关键知识点、是否讲清为什么和怎么做、是否有场景/边界/取舍/风险/示例。"
+                + "只要还能在不胡编的前提下写得更详细，就不要轻易判定 pass。"
                 + "如果当前答案已经很好，也要返回 score 和 problems，但 rewriteAnswer 可以返回空字符串。"
-                + "如果当前答案偏短、偏泛、像提纲、缺少分析过程或缺少关键覆盖点，就必须给出完整 rewriteAnswer。";
+                + "如果当前答案偏短、偏泛、像提纲、缺少分析过程、缺少工程细节或缺少关键覆盖点，就必须给出完整 rewriteAnswer。"
+                + "不要只做轻微润色，重写时要把答案显著写得更充实。";
     }
 
     private String buildAnswerReviewUserPrompt(AiGeneratedQuestion question,
@@ -1288,6 +1316,7 @@ public class QuestionController {
                 + "\n必须覆盖点：" + (answerPlan == null || answerPlan.getMustCoverPoints() == null ? "[]" : JSONUtil.toJsonStr(answerPlan.getMustCoverPoints()))
                 + "\n作答重点：" + StringUtils.defaultString(answerPlan == null ? null : answerPlan.getGuidance())
                 + "\n表达风格：" + StringUtils.defaultString(answerPlan == null ? null : answerPlan.getAnswerStyle())
+                + "\n" + buildGeneratedAnswerLengthInstruction(question, answerPlan)
                 + "\n当前答案：" + currentAnswer
                 + "\n要求：如果答案不够好，请直接输出完整 rewriteAnswer，不要只列修改建议。";
     }
@@ -1393,6 +1422,34 @@ public class QuestionController {
             return "scenario";
         }
         return "principle";
+    }
+
+    private int expectedGeneratedAnswerMinLength(AiGeneratedQuestion question, AiGeneratedAnswerPlan answerPlan) {
+        String difficulty = normalizeGeneratedDifficulty(question == null ? null : question.getDifficulty());
+        int baseLength = switch (difficulty) {
+            case "简单" -> 450;
+            case "困难" -> 800;
+            default -> 620;
+        };
+        String questionType = StringUtils.defaultIfBlank(
+                answerPlan == null ? null : answerPlan.getQuestionType(),
+                detectGeneratedQuestionType(question)
+        );
+        int bonus = switch (questionType) {
+            case "design", "troubleshooting" -> 120;
+            case "scenario", "comparison" -> 80;
+            default -> 40;
+        };
+        return baseLength + bonus;
+    }
+
+    private String buildGeneratedAnswerLengthInstruction(AiGeneratedQuestion question, AiGeneratedAnswerPlan answerPlan) {
+        int minLength = expectedGeneratedAnswerMinLength(question, answerPlan);
+        int preferredLength = Math.min(1400, minLength + 260);
+        return String.format("字数目标：尽量写到 %d 到 %d 字，除非题目极其简单，否则不要明显低于 %d 字。",
+                minLength,
+                preferredLength,
+                minLength);
     }
 
     /**

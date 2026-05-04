@@ -21,6 +21,9 @@ import {
   BriefcaseBusiness,
   MessageSquareText,
   FileSearch,
+  ChevronLeft,
+  ChevronRight,
+  MoveHorizontal,
 } from "lucide-react";
 import UserAvatar from "@/components/UserAvatar";
 import { formatIpLocation } from "@/lib/location";
@@ -90,6 +93,11 @@ function UserCenterContent() {
   const [stats, setStats] = useState<any>({});
   const [statsLoading, setStatsLoading] = useState(false);
   const [showRecordExtras, setShowRecordExtras] = useState(false);
+  const [tabOverflowState, setTabOverflowState] = useState({
+    overflow: false,
+    canScrollLeft: false,
+    canScrollRight: false,
+  });
 
   const router = useRouter();
   const hasShownMessage = useRef(false);
@@ -258,6 +266,94 @@ function UserCenterContent() {
     event.preventDefault();
   };
 
+  const syncTabOverflowState = useCallback(() => {
+    const container = tabScrollRef.current;
+    if (!container) {
+      return;
+    }
+    const maxScrollLeft = Math.max(container.scrollWidth - container.clientWidth, 0);
+    const nextState = {
+      overflow: maxScrollLeft > 8,
+      canScrollLeft: container.scrollLeft > 6,
+      canScrollRight: container.scrollLeft < maxScrollLeft - 6,
+    };
+    setTabOverflowState((prevState) => {
+      if (
+        prevState.overflow === nextState.overflow &&
+        prevState.canScrollLeft === nextState.canScrollLeft &&
+        prevState.canScrollRight === nextState.canScrollRight
+      ) {
+        return prevState;
+      }
+      return nextState;
+    });
+  }, []);
+
+  const scrollTabStrip = (direction: "left" | "right") => {
+    const container = tabScrollRef.current;
+    if (!container) {
+      return;
+    }
+    const delta = Math.max(container.clientWidth * 0.72, 180);
+    container.scrollBy({
+      left: direction === "left" ? -delta : delta,
+      behavior: "smooth",
+    });
+  };
+
+  useEffect(() => {
+    syncTabOverflowState();
+    const container = tabScrollRef.current;
+    if (!container || typeof window === "undefined") {
+      return;
+    }
+    const handleScroll = () => {
+      syncTabOverflowState();
+    };
+    container.addEventListener("scroll", handleScroll, { passive: true });
+    const handleResize = () => {
+      syncTabOverflowState();
+    };
+    window.addEventListener("resize", handleResize);
+    let resizeObserver: ResizeObserver | undefined;
+    if (typeof ResizeObserver !== "undefined") {
+      resizeObserver = new ResizeObserver(() => {
+        syncTabOverflowState();
+      });
+      resizeObserver.observe(container);
+    }
+    return () => {
+      container.removeEventListener("scroll", handleScroll);
+      window.removeEventListener("resize", handleResize);
+      resizeObserver?.disconnect();
+    };
+  }, [syncTabOverflowState]);
+
+  useEffect(() => {
+    const container = tabScrollRef.current;
+    if (!container) {
+      return;
+    }
+    const activeButton = Array.from(container.querySelectorAll<HTMLButtonElement>("[data-tab-key]")).find(
+      (node) => node.dataset.tabKey === activeTabKey,
+    );
+    if (!activeButton) {
+      return;
+    }
+    activeButton.scrollIntoView({
+      behavior: "smooth",
+      block: "nearest",
+      inline: "center",
+    });
+    if (typeof window !== "undefined") {
+      window.requestAnimationFrame(() => {
+        syncTabOverflowState();
+      });
+    } else {
+      syncTabOverflowState();
+    }
+  }, [activeTabKey, syncTabOverflowState]);
+
   const centerTabList = [
     { key: "overview", label: <span className="flex items-center gap-2 whitespace-nowrap"><LayoutDashboard size={16} />个人概览</span> },
     { key: "record", label: <span className="flex items-center gap-2 whitespace-nowrap"><Calendar size={16} />成就看板</span> },
@@ -385,30 +481,67 @@ function UserCenterContent() {
 
         {/* 右侧核心内容区 */}
         <Col xs={24} md={17}>
-          <div className="user-tabs-shell">
+          <div className={`user-tabs-shell ${tabOverflowState.overflow ? "user-tabs-shell-overflow" : ""}`}>
             <div
-              ref={tabScrollRef}
-              className="user-tabs-scroll"
-              role="tablist"
-              aria-label="个人中心栏目"
-              onWheel={handleTabWheel}
+              className={`user-tabs-nav ${tabOverflowState.overflow ? "user-tabs-nav-overflow" : ""} ${
+                tabOverflowState.canScrollLeft ? "user-tabs-nav-show-left" : ""
+              } ${tabOverflowState.canScrollRight ? "user-tabs-nav-show-right" : ""}`.trim()}
             >
-              {centerTabList.map((tab) => {
-                const isActive = activeTabKey === tab.key;
-                return (
-                  <button
-                    key={tab.key}
-                    type="button"
-                    role="tab"
-                    aria-selected={isActive}
-                    className={`user-tab-trigger ${isActive ? "user-tab-trigger-active" : ""}`}
-                    onClick={() => onTabChange(tab.key)}
-                  >
-                    {tab.label}
-                  </button>
-                );
-              })}
+              {tabOverflowState.overflow && (
+                <button
+                  type="button"
+                  className={`user-tabs-scroll-button user-tabs-scroll-button-left ${
+                    tabOverflowState.canScrollLeft ? "user-tabs-scroll-button-visible" : ""
+                  }`}
+                  aria-label="向左查看更多栏目"
+                  onClick={() => scrollTabStrip("left")}
+                >
+                  <ChevronLeft size={16} />
+                </button>
+              )}
+              <div
+                ref={tabScrollRef}
+                className="user-tabs-scroll"
+                role="tablist"
+                aria-label="个人中心栏目"
+                onWheel={handleTabWheel}
+              >
+                {centerTabList.map((tab) => {
+                  const isActive = activeTabKey === tab.key;
+                  return (
+                    <button
+                      key={tab.key}
+                      type="button"
+                      role="tab"
+                      aria-selected={isActive}
+                      data-tab-key={tab.key}
+                      className={`user-tab-trigger ${isActive ? "user-tab-trigger-active" : ""}`}
+                      onClick={() => onTabChange(tab.key)}
+                    >
+                      {tab.label}
+                    </button>
+                  );
+                })}
+              </div>
+              {tabOverflowState.overflow && (
+                <button
+                  type="button"
+                  className={`user-tabs-scroll-button user-tabs-scroll-button-right ${
+                    tabOverflowState.canScrollRight ? "user-tabs-scroll-button-visible" : ""
+                  }`}
+                  aria-label="向右查看更多栏目"
+                  onClick={() => scrollTabStrip("right")}
+                >
+                  <ChevronRight size={16} />
+                </button>
+              )}
             </div>
+            {tabOverflowState.overflow && (
+              <div className="user-tabs-hint" aria-live="polite">
+                <MoveHorizontal size={14} />
+                <span>左右滑动查看更多栏目</span>
+              </div>
+            )}
 
             <Card className="user-tabs-card min-h-[600px]">
             {activeTabKey === "overview" && (

@@ -10,22 +10,43 @@ import jakarta.annotation.Resource;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
+import org.springframework.ai.audio.transcription.AudioTranscription;
+import org.springframework.ai.audio.transcription.AudioTranscriptionPrompt;
+import org.springframework.ai.audio.transcription.AudioTranscriptionResponse;
+import org.springframework.ai.chat.messages.SystemMessage;
+import org.springframework.ai.chat.messages.UserMessage;
+import org.springframework.ai.chat.model.ChatModel;
+import org.springframework.ai.chat.model.ChatResponse;
+import org.springframework.ai.chat.model.Generation;
+import org.springframework.ai.chat.prompt.Prompt;
+import org.springframework.ai.deepseek.DeepSeekChatModel;
+import org.springframework.ai.deepseek.DeepSeekChatOptions;
+import org.springframework.ai.deepseek.api.DeepSeekApi;
+import org.springframework.ai.openai.OpenAiAudioSpeechModel;
+import org.springframework.ai.openai.OpenAiAudioSpeechOptions;
+import org.springframework.ai.openai.OpenAiAudioTranscriptionModel;
+import org.springframework.ai.openai.OpenAiAudioTranscriptionOptions;
+import org.springframework.ai.openai.OpenAiChatModel;
+import org.springframework.ai.openai.OpenAiChatOptions;
+import org.springframework.ai.openai.api.OpenAiAudioApi;
+import org.springframework.ai.openai.api.OpenAiApi;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.io.ByteArrayResource;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.data.redis.core.script.RedisScript;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
+import org.springframework.web.client.RestClient;
 import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
 
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
-import java.util.Base64;
 import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -33,21 +54,22 @@ import java.time.LocalTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
-/**
- * AI 服务管理
- */
 @Component
 @Slf4j
 public class AiManager {
 
     @Value("${ai.api-key:empty}")
     private String legacyApiKey;
+
+    @Value("${ai.chat.provider:auto}")
+    private String chatProvider;
 
     @Value("${ai.chat.api-key:}")
     private String chatApiKey;
@@ -57,6 +79,9 @@ public class AiManager {
 
     @Value("${ai.chat.model:${ai.model:deepseek-chat}}")
     private String chatModel;
+
+    @Value("${ai.chat.temperature:0.7}")
+    private double chatTemperature;
 
     @Value("${ai.chat.timeout-seconds:300}")
     private long chatTimeoutSeconds;
@@ -90,6 +115,9 @@ public class AiManager {
 
     @Value("${ai.tts.provider:doubao}")
     private String ttsProvider;
+
+    @Value("${ai.tts.host:${ai.speech.host:${ai.host:https://api.openai.com/v1}}}")
+    private String ttsHost;
 
     @Value("${ai.tts.app-id:}")
     private String ttsAppId;
@@ -185,79 +213,18 @@ public class AiManager {
             .connectTimeout(Duration.ofSeconds(60))
             .build();
 
-    /**
-     * 发送 AI 请求
-     *
-     * @param systemPrompt 系统提示词
-     * @param userPrompt   用户提示词
-     * @return AI 回复
-     */
     public String doChat(String systemPrompt, String userPrompt) {
         return doChat(systemPrompt, userPrompt, (String) null);
     }
 
-    /**
-     * 发送 AI 请求，并按指定用户维度限流。
-     */
     public String doChat(String systemPrompt, String userPrompt, Long userId) {
         return doChat(systemPrompt, userPrompt, buildUserRateLimitActor(userId));
     }
 
-    private String doChat(String systemPrompt, String userPrompt, String rateLimitActor) {
-        String resolvedChatApiKey = resolveChatApiKey();
-        if (!hasConfiguredApiKey(resolvedChatApiKey)) {
-            throw new BusinessException(ErrorCode.PARAMS_ERROR, "请先配置 AI API Key");
-        }
-        checkAiRateLimit("chat", chatMaxPerMinute, 60, chatMaxPerDay, secondsUntilTomorrow(), rateLimitActor);
-
-        // 构造请求参数
-        Map<String, Object> requestMap = new HashMap<>();
-        requestMap.put("model", chatModel);
-        
-        List<Map<String, String>> messages = new ArrayList<>();
-        Map<String, String> systemMsg = new HashMap<>();
-        systemMsg.put("role", "system");
-        systemMsg.put("content", systemPrompt);
-        messages.add(systemMsg);
-
-        Map<String, String> userMsg = new HashMap<>();
-        userMsg.put("role", "user");
-        userMsg.put("content", userPrompt);
-        messages.add(userMsg);
-
-        requestMap.put("messages", messages);
-        requestMap.put("temperature", 0.7);
-
-        String json = JSONUtil.toJsonStr(requestMap);
-        try {
-            String responseBody = sendJsonRequest(chatHost, resolvedChatApiKey, "/chat/completions", json);
-            return extractAssistantContent(responseBody);
-        } catch (IOException | InterruptedException e) {
-            if (e instanceof InterruptedException) {
-                Thread.currentThread().interrupt();
-            }
-            log.error("AI 通信异常", e);
-            throw new BusinessException(ErrorCode.SYSTEM_ERROR, "AI 通信失败");
-        }
-    }
-
-    /**
-     * 调用音频转写接口
-     *
-     * @param fileName    文件名
-     * @param fileBytes   文件内容
-     * @param contentType 文件类型
-     * @param language    语言
-     * @param prompt      转写提示词
-     * @return 转写文本
-     */
     public String transcribeAudio(String fileName, byte[] fileBytes, String contentType, String language, String prompt) {
         return transcribeAudio(fileName, fileBytes, contentType, language, prompt, null);
     }
 
-    /**
-     * 调用音频转写接口，并按指定用户维度限流。
-     */
     public String transcribeAudio(String fileName, byte[] fileBytes, String contentType,
                                   String language, String prompt, Long userId) {
         if (fileBytes == null || fileBytes.length == 0) {
@@ -267,17 +234,12 @@ public class AiManager {
                 buildUserRateLimitActor(userId));
         String provider = StringUtils.defaultIfBlank(speechProvider, "openai").trim().toLowerCase();
         return switch (provider) {
-            case "volcengine", "volc", "doubao" ->
-                    transcribeAudioByVolcengine(fileBytes);
-            case "openai", "openai-compatible" ->
-                    transcribeAudioByOpenAi(fileName, fileBytes, contentType, language, prompt);
+            case "volcengine", "volc", "doubao" -> transcribeAudioByVolcengine(fileBytes);
+            case "openai", "openai-compatible" -> transcribeAudioByOpenAi(fileName, fileBytes, contentType, language, prompt);
             default -> throw new BusinessException(ErrorCode.PARAMS_ERROR, "不支持的语音转写服务商: " + speechProvider);
         };
     }
 
-    /**
-     * 调用语音合成接口，并按指定用户维度限流。
-     */
     public byte[] synthesizeSpeech(String text, Long userId) {
         String normalizedText = normalizeSpeechText(text);
         if (StringUtils.isBlank(normalizedText)) {
@@ -291,6 +253,7 @@ public class AiManager {
                 buildUserRateLimitActor(userId));
         String provider = StringUtils.defaultIfBlank(ttsProvider, "doubao").trim().toLowerCase();
         return switch (provider) {
+            case "openai", "openai-compatible" -> synthesizeSpeechByOpenAi(normalizedText);
             case "volcengine", "volc", "doubao" -> synthesizeSpeechByDoubao(normalizedText);
             default -> throw new BusinessException(ErrorCode.PARAMS_ERROR, "不支持的语音播报服务商: " + ttsProvider);
         };
@@ -299,10 +262,90 @@ public class AiManager {
     public String getTtsContentType() {
         return switch (StringUtils.defaultIfBlank(ttsEncoding, "mp3").trim().toLowerCase()) {
             case "wav" -> "audio/wav";
-            case "ogg", "ogg_opus" -> "audio/ogg";
+            case "ogg", "ogg_opus", "opus" -> "audio/ogg";
             case "pcm" -> "audio/pcm";
+            case "aac" -> "audio/aac";
+            case "flac" -> "audio/flac";
             default -> "audio/mpeg";
         };
+    }
+
+    private String doChat(String systemPrompt, String userPrompt, String rateLimitActor) {
+        String resolvedChatApiKey = resolveChatApiKey();
+        if (!hasConfiguredApiKey(resolvedChatApiKey)) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "请先配置 AI API Key");
+        }
+        checkAiRateLimit("chat", chatMaxPerMinute, 60, chatMaxPerDay, secondsUntilTomorrow(), rateLimitActor);
+        try {
+            ChatModel model = createChatModel(resolvedChatApiKey);
+            Prompt prompt = new Prompt(
+                    new SystemMessage(StringUtils.defaultString(systemPrompt)),
+                    new UserMessage(StringUtils.defaultString(userPrompt))
+            );
+            ChatResponse response = model.call(prompt);
+            return extractAssistantContent(response);
+        } catch (BusinessException e) {
+            throw e;
+        } catch (Exception e) {
+            log.error("AI 通信异常", e);
+            throw new BusinessException(ErrorCode.SYSTEM_ERROR, "AI 通信失败");
+        }
+    }
+
+    private ChatModel createChatModel(String apiKey) {
+        String provider = resolveChatProvider();
+        if ("deepseek".equals(provider)) {
+            DeepSeekApi deepSeekApi = DeepSeekApi.builder()
+                    .baseUrl(StringUtils.defaultIfBlank(chatHost, "https://api.deepseek.com/v1"))
+                    .apiKey(apiKey)
+                    .restClientBuilder(buildRestClientBuilder(chatTimeoutSeconds))
+                    .build();
+            DeepSeekChatOptions options = DeepSeekChatOptions.builder()
+                    .model(StringUtils.defaultIfBlank(chatModel, DeepSeekApi.DEFAULT_CHAT_MODEL.getValue()))
+                    .temperature(chatTemperature)
+                    .build();
+            return DeepSeekChatModel.builder()
+                    .deepSeekApi(deepSeekApi)
+                    .defaultOptions(options)
+                    .build();
+        }
+        OpenAiApi openAiApi = OpenAiApi.builder()
+                .baseUrl(StringUtils.defaultIfBlank(chatHost, "https://api.openai.com/v1"))
+                .apiKey(apiKey)
+                .restClientBuilder(buildRestClientBuilder(chatTimeoutSeconds))
+                .build();
+        OpenAiChatOptions options = OpenAiChatOptions.builder()
+                .model(StringUtils.defaultIfBlank(chatModel, OpenAiApi.DEFAULT_CHAT_MODEL.getValue()))
+                .temperature(chatTemperature)
+                .build();
+        return OpenAiChatModel.builder()
+                .openAiApi(openAiApi)
+                .defaultOptions(options)
+                .build();
+    }
+
+    private String resolveChatProvider() {
+        String configuredProvider = StringUtils.defaultIfBlank(chatProvider, "auto").trim().toLowerCase();
+        if (!"auto".equals(configuredProvider) && StringUtils.isNotBlank(configuredProvider)) {
+            return configuredProvider;
+        }
+        String normalizedHost = StringUtils.defaultString(chatHost).toLowerCase();
+        String normalizedModel = StringUtils.defaultString(chatModel).toLowerCase();
+        if (normalizedHost.contains("deepseek") || normalizedModel.contains("deepseek")) {
+            return "deepseek";
+        }
+        return "openai-compatible";
+    }
+
+    private String extractAssistantContent(ChatResponse response) {
+        Generation generation = response == null ? null : response.getResult();
+        String content = generation == null || generation.getOutput() == null
+                ? null
+                : StringUtils.trimToNull(generation.getOutput().getText());
+        if (StringUtils.isBlank(content)) {
+            throw new BusinessException(ErrorCode.SYSTEM_ERROR, "AI 返回内容为空");
+        }
+        return content;
     }
 
     private String transcribeAudioByOpenAi(String fileName, byte[] fileBytes, String contentType,
@@ -311,34 +354,49 @@ public class AiManager {
         if (!hasConfiguredApiKey(resolvedSpeechApiKey)) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR, "请先配置 AI 语音转写 API Key");
         }
-        String safeFileName = StringUtils.defaultIfBlank(fileName, "mock-interview-audio.webm");
-        String safeContentType = StringUtils.defaultIfBlank(contentType, "application/octet-stream");
-        String boundary = "----CodexBoundary" + UUID.randomUUID().toString().replace("-", "");
-
         try {
-            byte[] requestBody = buildMultipartBody(boundary, safeFileName, fileBytes, safeContentType, language, prompt);
-            HttpRequest request = HttpRequest.newBuilder()
-                    .uri(buildUri(speechHost, "/audio/transcriptions"))
-                    .timeout(Duration.ofSeconds(speechTimeoutSeconds))
-                    .header("Authorization", "Bearer " + resolvedSpeechApiKey)
-                    .header("Content-Type", "multipart/form-data; boundary=" + boundary)
-                    .POST(HttpRequest.BodyPublishers.ofByteArray(requestBody))
+            OpenAiAudioApi openAiAudioApi = OpenAiAudioApi.builder()
+                    .baseUrl(StringUtils.defaultIfBlank(speechHost, "https://api.openai.com/v1"))
+                    .apiKey(resolvedSpeechApiKey)
+                    .restClientBuilder(buildRestClientBuilder(speechTimeoutSeconds))
                     .build();
-            HttpResponse<String> response = client.send(request,
-                    HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
-            if (response.statusCode() < 200 || response.statusCode() >= 300) {
-                log.error("AI 音频转写失败: {}", response.body());
-                throw new BusinessException(ErrorCode.SYSTEM_ERROR, "AI 音频转写失败");
-            }
-            String responseBody = response.body() == null ? "" : response.body();
-            return extractTranscriptionText(responseBody);
-        } catch (IOException | InterruptedException e) {
-            if (e instanceof InterruptedException) {
-                Thread.currentThread().interrupt();
-            }
+            OpenAiAudioTranscriptionOptions options = OpenAiAudioTranscriptionOptions.builder()
+                    .model(StringUtils.defaultIfBlank(speechModel, "whisper-1"))
+                    .language(StringUtils.trimToNull(language))
+                    .prompt(StringUtils.trimToNull(prompt))
+                    .responseFormat(OpenAiAudioApi.TranscriptResponseFormat.JSON)
+                    .build();
+            OpenAiAudioTranscriptionModel transcriptionModel =
+                    new OpenAiAudioTranscriptionModel(openAiAudioApi, options);
+            AudioTranscriptionResponse response = transcriptionModel.call(
+                    new AudioTranscriptionPrompt(buildAudioResource(fileName, fileBytes), options)
+            );
+            return extractTranscriptionText(response);
+        } catch (BusinessException e) {
+            throw e;
+        } catch (Exception e) {
             log.error("AI 音频转写通信异常", e);
             throw new BusinessException(ErrorCode.SYSTEM_ERROR, "AI 音频转写通信失败");
         }
+    }
+
+    private ByteArrayResource buildAudioResource(String fileName, byte[] fileBytes) {
+        String safeFileName = StringUtils.defaultIfBlank(fileName, "mock-interview-audio.webm");
+        return new ByteArrayResource(fileBytes) {
+            @Override
+            public String getFilename() {
+                return safeFileName;
+            }
+        };
+    }
+
+    private String extractTranscriptionText(AudioTranscriptionResponse response) {
+        AudioTranscription transcription = response == null ? null : response.getResult();
+        String text = transcription == null ? null : StringUtils.trimToNull(transcription.getOutput());
+        if (StringUtils.isBlank(text)) {
+            throw new BusinessException(ErrorCode.SYSTEM_ERROR, "AI 转写内容为空");
+        }
+        return text;
     }
 
     private String transcribeAudioByVolcengine(byte[] fileBytes) {
@@ -383,10 +441,62 @@ public class AiManager {
         }
     }
 
+    private byte[] synthesizeSpeechByOpenAi(String text) {
+        String resolvedTtsApiKey = resolveTtsApiKey();
+        if (!hasConfiguredApiKey(resolvedTtsApiKey)) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "请先配置 AI 语音播报 API Key");
+        }
+        try {
+            OpenAiAudioApi openAiAudioApi = OpenAiAudioApi.builder()
+                    .baseUrl(StringUtils.defaultIfBlank(ttsHost, "https://api.openai.com/v1"))
+                    .apiKey(resolvedTtsApiKey)
+                    .restClientBuilder(buildRestClientBuilder(ttsTimeoutSeconds))
+                    .build();
+            OpenAiAudioSpeechOptions options = OpenAiAudioSpeechOptions.builder()
+                    .model(StringUtils.defaultIfBlank(ttsModel, "tts-1"))
+                    .voice(StringUtils.defaultIfBlank(ttsVoiceType, "alloy"))
+                    .responseFormat(resolveOpenAiAudioResponseFormat())
+                    .speed(clampOpenAiSpeechSpeed(ttsSpeedRatio))
+                    .build();
+            OpenAiAudioSpeechModel speechModel = new OpenAiAudioSpeechModel(openAiAudioApi, options);
+            byte[] audioBytes = speechModel.call(text);
+            if (audioBytes == null || audioBytes.length == 0) {
+                throw new BusinessException(ErrorCode.SYSTEM_ERROR, "AI 语音播报结果为空");
+            }
+            return audioBytes;
+        } catch (BusinessException e) {
+            throw e;
+        } catch (Exception e) {
+            log.error("AI 语音播报通信异常", e);
+            throw new BusinessException(ErrorCode.SYSTEM_ERROR, "AI 语音播报通信失败");
+        }
+    }
+
+    private OpenAiAudioApi.SpeechRequest.AudioResponseFormat resolveOpenAiAudioResponseFormat() {
+        return switch (StringUtils.defaultIfBlank(ttsEncoding, "mp3").trim().toLowerCase()) {
+            case "wav" -> OpenAiAudioApi.SpeechRequest.AudioResponseFormat.WAV;
+            case "pcm" -> OpenAiAudioApi.SpeechRequest.AudioResponseFormat.PCM;
+            case "aac" -> OpenAiAudioApi.SpeechRequest.AudioResponseFormat.AAC;
+            case "flac" -> OpenAiAudioApi.SpeechRequest.AudioResponseFormat.FLAC;
+            case "ogg", "ogg_opus", "opus" -> OpenAiAudioApi.SpeechRequest.AudioResponseFormat.OPUS;
+            default -> OpenAiAudioApi.SpeechRequest.AudioResponseFormat.MP3;
+        };
+    }
+
+    private double clampOpenAiSpeechSpeed(double ratio) {
+        if (ratio < 0.25D) {
+            return 0.25D;
+        }
+        if (ratio > 4.0D) {
+            return 4.0D;
+        }
+        return ratio;
+    }
+
     private byte[] synthesizeSpeechByDoubao(String text) {
         String resolvedTtsApiKey = resolveTtsApiKey();
         if (!hasConfiguredApiKey(resolvedTtsApiKey)) {
-            throw new BusinessException(ErrorCode.PARAMS_ERROR, "请先配置豆包语音播报的 API Key");
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "请先配置豆包语音播报 API Key");
         }
         String requestId = UUID.randomUUID().toString();
         String resourceId = StringUtils.defaultIfBlank(ttsResourceId, "seed-tts-2.0").trim();
@@ -447,23 +557,6 @@ public class AiManager {
             log.error("豆包语音播报通信异常", e);
             throw new BusinessException(ErrorCode.SYSTEM_ERROR, "豆包语音播报通信失败");
         }
-    }
-
-    private String sendJsonRequest(String baseUrl, String apiKey, String path, String json)
-            throws IOException, InterruptedException {
-        HttpRequest request = HttpRequest.newBuilder()
-                .uri(buildUri(baseUrl, path))
-                .timeout(Duration.ofSeconds(chatTimeoutSeconds > 0 ? chatTimeoutSeconds : 300))
-                .header("Authorization", "Bearer " + apiKey)
-                .header("Content-Type", "application/json")
-                .POST(HttpRequest.BodyPublishers.ofString(json, StandardCharsets.UTF_8))
-                .build();
-        HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
-        if (response.statusCode() < 200 || response.statusCode() >= 300) {
-            log.error("AI 请求失败: {}", response.body());
-            throw new BusinessException(ErrorCode.SYSTEM_ERROR, "AI 服务调用异常");
-        }
-        return response.body() == null ? "" : response.body();
     }
 
     private void submitDoubaoTtsTask(Map<String, Object> requestMap, String resourceId, String requestId,
@@ -556,41 +649,6 @@ public class AiManager {
         throw new BusinessException(ErrorCode.SYSTEM_ERROR, fallbackMessage);
     }
 
-    private URI buildUri(String baseUrl, String path) {
-        String safeBaseUrl = StringUtils.removeEnd(StringUtils.defaultString(baseUrl), "/");
-        String safePath = StringUtils.startsWith(path, "/") ? path : "/" + path;
-        return URI.create(safeBaseUrl + safePath);
-    }
-
-    private byte[] buildMultipartBody(String boundary, String fileName, byte[] fileBytes, String contentType,
-                                      String language, String prompt) throws IOException {
-        ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
-        writeFormField(outputStream, boundary, "model", StringUtils.defaultIfBlank(speechModel, "whisper-1"));
-        if (StringUtils.isNotBlank(language)) {
-            writeFormField(outputStream, boundary, "language", language);
-        }
-        if (StringUtils.isNotBlank(prompt)) {
-            writeFormField(outputStream, boundary, "prompt", prompt);
-        }
-        outputStream.write(("--" + boundary + "\r\n").getBytes(StandardCharsets.UTF_8));
-        outputStream.write(("Content-Disposition: form-data; name=\"file\"; filename=\"" + fileName + "\"\r\n")
-                .getBytes(StandardCharsets.UTF_8));
-        outputStream.write(("Content-Type: " + contentType + "\r\n\r\n").getBytes(StandardCharsets.UTF_8));
-        outputStream.write(fileBytes);
-        outputStream.write("\r\n".getBytes(StandardCharsets.UTF_8));
-        outputStream.write(("--" + boundary + "--\r\n").getBytes(StandardCharsets.UTF_8));
-        return outputStream.toByteArray();
-    }
-
-    private void writeFormField(ByteArrayOutputStream outputStream, String boundary, String name, String value)
-            throws IOException {
-        outputStream.write(("--" + boundary + "\r\n").getBytes(StandardCharsets.UTF_8));
-        outputStream.write(("Content-Disposition: form-data; name=\"" + name + "\"\r\n\r\n")
-                .getBytes(StandardCharsets.UTF_8));
-        outputStream.write(StringUtils.defaultString(value).getBytes(StandardCharsets.UTF_8));
-        outputStream.write("\r\n".getBytes(StandardCharsets.UTF_8));
-    }
-
     private String resolveChatApiKey() {
         return StringUtils.defaultIfBlank(chatApiKey, legacyApiKey);
     }
@@ -625,16 +683,14 @@ public class AiManager {
                 minuteWindowSeconds
         );
         if (minuteCount > Math.max(1, maxPerMinute)) {
-            throw new BusinessException(ErrorCode.OPERATION_ERROR,
-                    "AI 请求过于频繁，请稍后再试");
+            throw new BusinessException(ErrorCode.OPERATION_ERROR, "AI 请求过于频繁，请稍后再试");
         }
         long dayCount = incrementAndExpire(
                 "ai_rate_limit:" + operation + ":day:" + today + ":" + actor,
                 dayWindowSeconds
         );
         if (dayCount > Math.max(1, maxPerDay)) {
-            throw new BusinessException(ErrorCode.OPERATION_ERROR,
-                    "今日 AI 使用次数已达上限，请明天再试");
+            throw new BusinessException(ErrorCode.OPERATION_ERROR, "今日 AI 使用次数已达上限，请明天再试");
         }
     }
 
@@ -681,42 +737,12 @@ public class AiManager {
         return Math.max(60, Duration.between(now, tomorrowStart).getSeconds());
     }
 
-    private String extractAssistantContent(String responseBody) {
-        try {
-            Map<?, ?> responseMap = JSONUtil.toBean(responseBody, Map.class);
-            Object choicesObj = responseMap.get("choices");
-            if (!(choicesObj instanceof List<?> choices) || choices.isEmpty()) {
-                throw new BusinessException(ErrorCode.SYSTEM_ERROR, "AI 返回结果为空");
-            }
-            Object firstChoice = choices.get(0);
-            if (!(firstChoice instanceof Map<?, ?> firstChoiceMap)) {
-                throw new BusinessException(ErrorCode.SYSTEM_ERROR, "AI 返回结果格式错误");
-            }
-            Object messageObj = firstChoiceMap.get("message");
-            if (!(messageObj instanceof Map<?, ?> messageMap)) {
-                throw new BusinessException(ErrorCode.SYSTEM_ERROR, "AI 返回结果格式错误");
-            }
-            Object contentObj = messageMap.get("content");
-            String content = contentObj == null ? null : String.valueOf(contentObj).trim();
-            if (StringUtils.isBlank(content)) {
-                throw new BusinessException(ErrorCode.SYSTEM_ERROR, "AI 返回内容为空");
-            }
-            return content;
-        } catch (BusinessException e) {
-            throw e;
-        } catch (Exception e) {
-            log.error("解析 AI 响应失败，responseBody={}", responseBody, e);
-            throw new BusinessException(ErrorCode.SYSTEM_ERROR, "AI 返回结果格式错误");
-        }
-    }
-
     private String normalizeSpeechText(String text) {
-        String normalized = StringUtils.defaultString(text)
+        return StringUtils.defaultString(text)
                 .replace("\r", "\n")
                 .replaceAll("\\n{2,}", "\n")
                 .replaceAll("[ \\t\\x0B\\f]+", " ")
                 .trim();
-        return normalized;
     }
 
     private double clampRatio(double ratio) {
@@ -749,7 +775,7 @@ public class AiManager {
         if (StringUtils.containsIgnoreCase(resourceId, "seed-tts-2.0")
                 && (!speaker.contains("_bigtts") || speaker.startsWith("BV"))) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR,
-                    "豆包语音合成模型2.0 需要使用 2.0 音色，例如 zh_female_vv_uranus_bigtts");
+                    "豆包语音合成模型 2.0 需要使用 2.0 音色，例如 zh_female_vv_uranus_bigtts");
         }
         return speaker;
     }
@@ -864,5 +890,13 @@ public class AiManager {
         }
         String text = String.valueOf(value).trim();
         return StringUtils.isBlank(text) ? null : text;
+    }
+
+    private RestClient.Builder buildRestClientBuilder(long timeoutSeconds) {
+        int timeoutMillis = (int) Math.min(Integer.MAX_VALUE, Math.max(1L, timeoutSeconds) * 1000L);
+        SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
+        requestFactory.setConnectTimeout(timeoutMillis);
+        requestFactory.setReadTimeout(timeoutMillis);
+        return RestClient.builder().requestFactory(requestFactory);
     }
 }

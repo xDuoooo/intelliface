@@ -188,13 +188,16 @@ wechat:
 ai:
   chat:
     # 文本 AI：DeepSeek / 火山方舟等 OpenAI 兼容接口均可
+    provider: auto
     api-key: your_deepseek_api_key
     host: https://api.deepseek.com
     model: deepseek-v4-flash
+    temperature: 0.7
     timeout-seconds: 300
   speech:
     # 语音转写：openai / openai-compatible / volcengine / doubao
     provider: volcengine
+    host: https://api.openai.com/v1
     # 火山引擎豆包语音控制台中的 X-Api-Key
     api-key: your_volcengine_speech_api_key
     endpoint: https://openspeech.bytedance.com/api/v3/auc/bigmodel/recognize/flash
@@ -205,6 +208,7 @@ ai:
   tts:
     # 语音播报：当前模拟面试页面通过后端调用豆包语音合成模型 2.0，再把音频返回前端播放
     provider: doubao
+    host: https://api.openai.com/v1
     # 新版控制台直接使用 API Key；旧字段 app-id / token 仅作为兼容兜底，不建议再新配
     api-key: your_doubao_tts_api_key
     app-id: ""

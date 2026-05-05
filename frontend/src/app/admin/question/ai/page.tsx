@@ -372,14 +372,10 @@ const AiGenerateQuestionPage: React.FC = () => {
                 htmlType="submit"
                 disabled={isTaskRunning}
                 size="large"
-                className="h-14 min-w-[220px] rounded-2xl border-none bg-slate-900 px-8 text-base font-black shadow-lg shadow-slate-300/60 hover:bg-slate-800 [&>span]:inline-flex [&>span]:items-center [&>span]:gap-2"
+                icon={starting || isTaskRunning ? undefined : <Wand2 className="h-5 w-5" />}
+                className="h-14 min-w-[220px] rounded-2xl border-none bg-slate-900 px-8 text-base font-black shadow-lg shadow-slate-300/60 hover:bg-slate-800 [&_.ant-btn-icon]:!inline-flex [&_.ant-btn-icon]:!items-center [&_.ant-btn-icon]:!leading-none [&_.ant-btn-icon]:shrink-0 [&_.ant-btn-icon_svg]:block"
               >
-                {starting || isTaskRunning ? `正在生成 ${progressSuccess}/${progressTotal || selectedCount || 0}` : (
-                  <span className="inline-flex items-center gap-2 whitespace-nowrap">
-                    <Wand2 className="h-5 w-5" />
-                    开始生成
-                  </span>
-                )}
+                {starting || isTaskRunning ? `正在生成 ${progressSuccess}/${progressTotal || selectedCount || 0}` : "开始生成"}
               </Button>
             </div>
           </Form>

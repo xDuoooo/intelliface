@@ -1513,7 +1513,9 @@ export default function InterviewRoomPage({ params }: { params: { mockInterviewI
               </div>
             </Card>
           </div>
+        </section>
 
+        <section className="interview-dialogue">
           <Card className="message-card">
             <div className="section-heading">
               <div>
@@ -1785,10 +1787,9 @@ export default function InterviewRoomPage({ params }: { params: { mockInterviewI
             ) : null}
           </aside>
         ) : null}
-      </div>
 
-      <section className="review-board-section">
-        <Card className="review-board-card">
+        <section className="review-board-section">
+          <Card className="review-board-card">
           <div className="section-heading">
             <div>
               <div className="section-eyebrow">Interview Review</div>
@@ -2113,8 +2114,9 @@ export default function InterviewRoomPage({ params }: { params: { mockInterviewI
               </Paragraph>
             </div>
           )}
-        </Card>
-      </section>
+          </Card>
+        </section>
+      </div>
     </div>
   );
 }

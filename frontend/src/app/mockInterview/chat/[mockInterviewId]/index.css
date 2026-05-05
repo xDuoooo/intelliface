@@ -52,10 +52,18 @@
 
 .interview-shell.with-side {
     grid-template-columns: minmax(0, 1.34fr) minmax(300px, 360px);
+    grid-template-areas:
+        "main side"
+        "dialogue side"
+        "review review";
 }
 
 .interview-shell.without-side {
     grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+        "main"
+        "dialogue"
+        "review";
 }
 
 .review-board-section {
@@ -63,12 +71,30 @@
 }
 
 .interview-main,
+.interview-dialogue,
 .interview-side {
     display: flex;
     flex-direction: column;
     gap: 24px;
     min-width: 0;
     overflow: visible;
+}
+
+.interview-main {
+    grid-area: main;
+}
+
+.interview-dialogue {
+    grid-area: dialogue;
+}
+
+.interview-side {
+    grid-area: side;
+    align-self: start;
+}
+
+.review-board-section {
+    grid-area: review;
 }
 
 .hero-card,
@@ -1457,6 +1483,11 @@
 @media (max-width: 1220px) {
     .interview-shell.with-side {
         grid-template-columns: 1fr;
+        grid-template-areas:
+            "main"
+            "dialogue"
+            "side"
+            "review";
     }
 
     .sticky-side-card {

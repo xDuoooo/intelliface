@@ -2,6 +2,7 @@ package com.xduo.springbootinit.service.impl;
 
 import cn.hutool.core.util.RandomUtil;
 import cn.hutool.crypto.digest.DigestUtil;
+import cn.hutool.json.JSONObject;
 import cn.hutool.json.JSONUtil;
 import com.xduo.springbootinit.common.ErrorCode;
 import com.xduo.springbootinit.config.WechatMpConfig;
@@ -112,13 +113,20 @@ public class WxMpServiceImpl implements WxMpService {
     @Override
     public WxMpLoginTicketVO createBindTicket(HttpServletRequest request) {
         ensureWechatMpEnabled();
-        Long bindUserId = userService.getLoginUser(request).getId();
-        return createTicket(request, WX_MP_BIND_TICKET_SESSION_KEY, SCENE_BIND, bindUserId);
+        userService.getLoginUser(request);
+        WxMpLoginTicketVO vo = new WxMpLoginTicketVO();
+        vo.setAccountName(StringUtils.defaultIfBlank(wechatMpConfig.getAccountName(), "公众号"));
+        vo.setQrImageUrl(wechatMpConfig.getQrImageUrl());
+        vo.setKeyword("绑定");
+        return vo;
     }
 
     @Override
     public WxMpLoginStatusVO getBindStatus(HttpServletRequest request) {
-        return getTicketStatus(request, WX_MP_BIND_TICKET_SESSION_KEY, "请先获取公众号绑定口令", "绑定口令已过期，请重新获取");
+        userService.getLoginUser(request);
+        return buildStatus(STATUS_PENDING, false,
+                "请在公众号中发送「绑定」获取 6 位验证码，然后回到网页输入完成绑定",
+                null);
     }
 
     @Override
@@ -130,13 +138,16 @@ public class WxMpServiceImpl implements WxMpService {
         }
         // 新模式：直接通过6位验证码在 Redis 中反查 openId
         String directCodeKey = RedisConstant.getWxMpDirectCodeRedisKey(code);
-        String openId = stringRedisTemplate.opsForValue().get(directCodeKey);
-        if (StringUtils.isBlank(openId)) {
+        DirectCodePayload directCodePayload = parseDirectCodePayload(stringRedisTemplate.opsForValue().get(directCodeKey));
+        if (directCodePayload == null || StringUtils.isBlank(directCodePayload.getOpenId())) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR, "公众号验证码不存在或已过期，请在公众号重新发送\"登录\"获取");
+        }
+        if (StringUtils.equals(directCodePayload.getScene(), SCENE_BIND)) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "这是公众号绑定验证码，请回到账号安全页完成绑定");
         }
         // 验证码一次性使用，立即删除
         stringRedisTemplate.delete(directCodeKey);
-        return userService.userLoginByMpOpenId(openId, httpServletRequest);
+        return userService.userLoginByMpOpenId(directCodePayload.getOpenId(), httpServletRequest);
     }
 
     @Override
@@ -146,30 +157,17 @@ public class WxMpServiceImpl implements WxMpService {
         if (StringUtils.isBlank(code)) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR, "请输入公众号验证码");
         }
-        String ticket = getCurrentTicket(httpServletRequest, WX_MP_BIND_TICKET_SESSION_KEY);
-        if (StringUtils.isBlank(ticket)) {
-            throw new BusinessException(ErrorCode.PARAMS_ERROR, "绑定口令不存在或已过期，请重新获取");
+        String directCodeKey = RedisConstant.getWxMpDirectCodeRedisKey(code);
+        DirectCodePayload directCodePayload = parseDirectCodePayload(stringRedisTemplate.opsForValue().get(directCodeKey));
+        if (directCodePayload == null || StringUtils.isBlank(directCodePayload.getOpenId())) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "公众号验证码不存在或已过期，请在公众号重新发送\"绑定\"获取");
         }
-        WxMpLoginTicketState state = getTicketState(ticket);
-        if (state == null || isExpired(state)) {
-            clearCurrentTicket(httpServletRequest, WX_MP_BIND_TICKET_SESSION_KEY);
-            throw new BusinessException(ErrorCode.PARAMS_ERROR, "绑定口令不存在或已过期，请重新获取");
-        }
-        if (!STATUS_CODE_SENT.equals(state.getStatus()) || StringUtils.isBlank(state.getCode())) {
-            throw new BusinessException(ErrorCode.PARAMS_ERROR, "请先按页面提示向公众号发送绑定口令");
-        }
-        if (!StringUtils.equals(state.getCode(), code)) {
-            throw new BusinessException(ErrorCode.PARAMS_ERROR, "公众号验证码错误或已过期");
+        if (StringUtils.equals(directCodePayload.getScene(), SCENE_LOGIN)) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "这是公众号登录验证码，请在登录页使用");
         }
         Long loginUserId = userService.getLoginUser(httpServletRequest).getId();
-        if (state.getBindUserId() != null && !state.getBindUserId().equals(loginUserId)) {
-            throw new BusinessException(ErrorCode.NO_AUTH_ERROR, "绑定口令不属于当前登录账号，请重新获取");
-        }
-        userService.bindMpOpenId(loginUserId, state.getOpenId());
-        state.setStatus(STATUS_USED);
-        state.setCode(null);
-        saveTicketState(state, Duration.ofSeconds(60));
-        clearCurrentTicket(httpServletRequest, WX_MP_BIND_TICKET_SESSION_KEY);
+        stringRedisTemplate.delete(directCodeKey);
+        userService.bindMpOpenId(loginUserId, directCodePayload.getOpenId());
         return userService.getLoginUserVO(userService.getById(loginUserId));
     }
 
@@ -193,6 +191,11 @@ public class WxMpServiceImpl implements WxMpService {
         // --- 新模式：用户直接发"登录"获取验证码 ---
         if (StringUtils.equals(normalizedContent, keyword)) {
             return generateAndReplyDirectCode(openId, SCENE_LOGIN);
+        }
+
+        // --- 新模式：用户直接发"绑定"获取绑定验证码 ---
+        if (StringUtils.equals(normalizedContent, bindKeyword)) {
+            return generateAndReplyDirectCode(openId, SCENE_BIND);
         }
 
         // --- 绑定场景：用户发"绑定 TICKET"（兼容旧的票据机制）---
@@ -236,7 +239,10 @@ public class WxMpServiceImpl implements WxMpService {
         // 生成不冲突的6位数字验证码，存入 Redis，key 为验证码，value 为 openId。
         String code = generateUniqueDirectCode();
         String redisKey = RedisConstant.getWxMpDirectCodeRedisKey(code);
-        stringRedisTemplate.opsForValue().set(redisKey, openId,
+        DirectCodePayload directCodePayload = new DirectCodePayload();
+        directCodePayload.setOpenId(openId);
+        directCodePayload.setScene(scene);
+        stringRedisTemplate.opsForValue().set(redisKey, JSONUtil.toJsonStr(directCodePayload),
                 Duration.ofSeconds(wechatMpConfig.getCodeExpireSeconds()));
         long minutes = Math.max(1, wechatMpConfig.getCodeExpireSeconds() / 60);
         return String.format("你的智面%s验证码为：%s，%d 分钟内有效。请在网页输入完成%s。",
@@ -307,13 +313,13 @@ public class WxMpServiceImpl implements WxMpService {
     private String buildWelcomeText() {
         return "欢迎来到智面公众号助手。登录请发送「"
                 + StringUtils.defaultIfBlank(wechatMpConfig.getLoginKeyword(), "登录")
-                + "」获取验证码；绑定账号请先在网页获取绑定口令，再发送「绑定 口令」。";
+                + "」获取验证码；绑定账号请发送「绑定」获取验证码。";
     }
 
     private String buildHelpText() {
         return "登录请发送「"
                 + StringUtils.defaultIfBlank(wechatMpConfig.getLoginKeyword(), "登录")
-                + "」获取验证码；绑定账号请发送网页展示的「绑定 口令」。";
+                + "」获取验证码；绑定账号请发送「绑定」获取验证码。";
     }
 
     private String buildTicketKeyword(String scene, String ticket) {
@@ -450,6 +456,28 @@ public class WxMpServiceImpl implements WxMpService {
         return statusVO;
     }
 
+    private DirectCodePayload parseDirectCodePayload(String rawValue) {
+        String value = StringUtils.trimToNull(rawValue);
+        if (value == null) {
+            return null;
+        }
+        try {
+            if (value.startsWith("{")) {
+                JSONObject jsonObject = JSONUtil.parseObj(value);
+                DirectCodePayload directCodePayload = new DirectCodePayload();
+                directCodePayload.setOpenId(StringUtils.trimToNull(jsonObject.getStr("openId")));
+                directCodePayload.setScene(StringUtils.trimToNull(jsonObject.getStr("scene")));
+                return StringUtils.isBlank(directCodePayload.getOpenId()) ? null : directCodePayload;
+            }
+        } catch (Exception e) {
+            log.warn("解析公众号验证码载荷失败，rawValue={}", value, e);
+            return null;
+        }
+        DirectCodePayload directCodePayload = new DirectCodePayload();
+        directCodePayload.setOpenId(value);
+        return directCodePayload;
+    }
+
     @Data
     private static class WxMpIncomingMessage {
         private String toUserName;
@@ -458,6 +486,12 @@ public class WxMpServiceImpl implements WxMpService {
         private String content;
         private String event;
         private String eventKey;
+    }
+
+    @Data
+    private static class DirectCodePayload {
+        private String openId;
+        private String scene;
     }
 
     @Data

@@ -29,7 +29,6 @@ import {
 import {
   bindByWxMpCodeUsingPost,
   createWxMpBindTicketUsingPost,
-  getWxMpBindStatusUsingGet,
   type WxMpLoginStatusVO,
   type WxMpLoginTicketVO,
 } from "@/api/wxMpController";
@@ -75,14 +74,6 @@ const AccountSecurityCenter: React.FC<Props> = ({ user }) => {
   const [wxMpBindTicketLoading, setWxMpBindTicketLoading] = useState(false);
   const [wxMpBindLoading, setWxMpBindLoading] = useState(false);
   const hasPasswordConfigured = Number(user.passwordConfigured || 0) === 1;
-  const wxMpBindExpireAt = wxMpBindStatus?.expireAt ?? wxMpBindTicketInfo?.expireAt;
-  const wxMpBindExpireText = wxMpBindExpireAt
-    ? new Date(wxMpBindExpireAt).toLocaleTimeString("zh-CN", {
-        hour: "2-digit",
-        minute: "2-digit",
-        second: "2-digit",
-      })
-    : null;
 
   // 脱敏显示
   const maskPhone = (phone?: string) => phone ? phone.replace(/(\d{3})\d{4}(\d{4})/, "$1****$2") : "未绑定";
@@ -179,8 +170,7 @@ const AccountSecurityCenter: React.FC<Props> = ({ user }) => {
       setWxMpBindStatus({
         status: "pending",
         codeSent: false,
-        message: "请在公众号中发送页面展示的绑定口令",
-        expireAt: res.data?.expireAt,
+        message: "请在公众号中发送「绑定」获取 6 位验证码，然后回到这里输入完成绑定",
       });
       setWxMpBindCode("");
     } catch (error: any) {
@@ -204,38 +194,6 @@ const AccountSecurityCenter: React.FC<Props> = ({ user }) => {
     }
     void createWxMpBindTicket(true);
   }, [wxMpBindModalVisible, wxMpBindTicketInfo, wxMpBindTicketLoading, wxMpBindStatus]);
-
-  useEffect(() => {
-    if (!wxMpBindModalVisible || !wxMpBindTicketInfo?.ticket) {
-      return;
-    }
-    let stopped = false;
-    const syncWxMpBindStatus = async () => {
-      try {
-        const res = await getWxMpBindStatusUsingGet();
-        if (!stopped) {
-          setWxMpBindStatus(res.data ?? null);
-        }
-      } catch (error: any) {
-        if (!stopped) {
-          setWxMpBindStatus((prev) => ({
-            status: prev?.status || "pending",
-            codeSent: prev?.codeSent || false,
-            message: error?.message || "查询绑定状态失败，请稍后重试",
-            expireAt: prev?.expireAt ?? wxMpBindTicketInfo.expireAt,
-          }));
-        }
-      }
-    };
-    void syncWxMpBindStatus();
-    const timer = window.setInterval(() => {
-      void syncWxMpBindStatus();
-    }, 3000);
-    return () => {
-      stopped = true;
-      window.clearInterval(timer);
-    };
-  }, [wxMpBindModalVisible, wxMpBindTicketInfo?.ticket, wxMpBindTicketInfo?.expireAt]);
 
   const handleSendCode = async () => {
     const target = bindTarget.trim();
@@ -764,7 +722,7 @@ const AccountSecurityCenter: React.FC<Props> = ({ user }) => {
       >
         <div className="space-y-4 pt-4">
           <div className="rounded-2xl bg-slate-50 px-4 py-3 text-sm text-slate-500">
-            使用你的公众号会话发送页面口令，收到 6 位验证码后回到这里输入，就能把公众号绑定到当前账号。
+            打开公众号会话后发送固定关键词「绑定」，收到 6 位验证码后回到这里输入，就能把公众号绑定到当前账号。
           </div>
 
           <div className="flex items-center justify-between gap-3 rounded-2xl border border-slate-100 bg-white px-4 py-3">
@@ -773,7 +731,7 @@ const AccountSecurityCenter: React.FC<Props> = ({ user }) => {
                 {wxMpBindTicketInfo?.accountName || "你的公众号"}
               </div>
               <Text type="secondary" className="text-xs">
-                若二维码失效，可重新获取绑定口令
+                若二维码失效，可重新加载公众号信息
               </Text>
             </div>
             <Button
@@ -781,7 +739,7 @@ const AccountSecurityCenter: React.FC<Props> = ({ user }) => {
               loading={wxMpBindTicketLoading}
               onClick={() => void createWxMpBindTicket()}
             >
-              {wxMpBindTicketLoading ? "刷新中..." : "刷新口令"}
+              {wxMpBindTicketLoading ? "刷新中..." : "刷新信息"}
             </Button>
           </div>
 
@@ -802,21 +760,16 @@ const AccountSecurityCenter: React.FC<Props> = ({ user }) => {
 
             <div className="text-center">
               <Text type="secondary" className="text-xs uppercase tracking-[0.18em]">
-                发送给公众号的口令
+                发送给公众号的关键词
               </Text>
               <div className="mt-2 rounded-2xl bg-white px-4 py-3 font-mono text-lg font-semibold tracking-[0.18em] text-slate-800 shadow-sm">
-                {wxMpBindTicketInfo?.keyword || "正在生成绑定口令..."}
+                {wxMpBindTicketInfo?.keyword || "绑定"}
               </div>
             </div>
           </div>
 
           <div className="rounded-2xl border border-emerald-100 bg-emerald-50/70 px-4 py-3 text-sm text-emerald-700">
-            {wxMpBindStatus?.message || "正在等待公众号回发验证码..."}
-            {wxMpBindExpireText ? (
-              <div className="mt-1 text-xs text-emerald-600">
-                本次口令预计在 {wxMpBindExpireText} 前有效
-              </div>
-            ) : null}
+            {wxMpBindStatus?.message || "请在公众号中发送「绑定」获取验证码"}
           </div>
 
           <div className="space-y-2">

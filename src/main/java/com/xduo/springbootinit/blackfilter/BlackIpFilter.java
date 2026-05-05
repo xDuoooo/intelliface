@@ -9,7 +9,7 @@ import lombok.extern.slf4j.Slf4j;
 import java.io.IOException;
 
 @Slf4j
-@WebFilter(urlPatterns = "/*", filterName = "blackIpFilter")
+@WebFilter(urlPatterns = "/*", filterName = "blackIpFilter", asyncSupported = true)
 public class BlackIpFilter implements Filter {
 
     @Override

@@ -204,6 +204,8 @@ public class QuestionBankController {
             questionQueryRequest.setQuestionBankId(id);
             questionQueryRequest.setCurrent(questionBankQueryRequest.getCurrent());
             questionQueryRequest.setPageSize(questionBankQueryRequest.getPageSize());
+            questionQueryRequest.setSearchText(questionBankQueryRequest.getSearchText());
+            questionQueryRequest.setTitle(questionBankQueryRequest.getTitle());
             questionQueryRequest.setSortField(questionBankQueryRequest.getSortField());
             questionQueryRequest.setSortOrder(questionBankQueryRequest.getSortOrder());
             if (isApprovedQuestionBank(questionBank)

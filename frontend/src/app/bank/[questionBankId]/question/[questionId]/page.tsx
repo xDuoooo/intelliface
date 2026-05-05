@@ -8,16 +8,37 @@ import QuestionOwnerPanel from "@/app/question/[questionId]/QuestionOwnerPanel";
 import { cn } from "@/lib/utils";
 import { ChevronDown, ChevronLeft, ListFilter, Bookmark, Sparkles } from "lucide-react";
 import { buildServerRequestOptions } from "@/libs/serverRequestOptions";
+import BankQuestionSidebarControls from "./BankQuestionSidebarControls";
 
 export const dynamic = "force-dynamic";
+
+const QUESTION_NAV_PAGE_SIZE = 12;
+
+function getSingleParam(value?: string | string[]) {
+  if (Array.isArray(value)) {
+    return value[0] || "";
+  }
+  return value || "";
+}
 
 /**
  * 题库题目详情页
  * @constructor
  */
-export default async function BankQuestionPage({ params }: { params: { questionBankId: string, questionId: string } }) {
+export default async function BankQuestionPage({
+  params,
+  searchParams,
+}: {
+  params: { questionBankId: string, questionId: string };
+  searchParams: {
+    listPage?: string | string[];
+    listQuery?: string | string[];
+  };
+}) {
   const { questionBankId, questionId } = params;
   const requestOptions = buildServerRequestOptions();
+  const listCurrent = Math.max(1, Number(getSingleParam(searchParams.listPage)) || 1);
+  const listQuery = getSingleParam(searchParams.listQuery).trim();
 
   // 获取题库详情
   let bank: API.QuestionBankVO | undefined = undefined;
@@ -29,7 +50,9 @@ export default async function BankQuestionPage({ params }: { params: { questionB
       {
         id: questionBankId,
         needQueryQuestionList: true,
-        pageSize: 200,
+        current: listCurrent,
+        pageSize: QUESTION_NAV_PAGE_SIZE,
+        title: listQuery || undefined,
       },
       requestOptions,
     ),
@@ -105,29 +128,43 @@ export default async function BankQuestionPage({ params }: { params: { questionB
   const isAdmin = loginUser?.userRole === "admin";
   const questionList = bank.questionPage?.records || [];
   const totalQuestionCount = Number(bank.questionPage?.total) || questionList.length;
+  const navigationParams = new URLSearchParams();
+  if (listQuery) {
+    navigationParams.set("listQuery", listQuery);
+  }
+  if (listCurrent > 1) {
+    navigationParams.set("listPage", String(listCurrent));
+  }
+  const navigationQueryString = navigationParams.toString();
 
   const questionNavigation = (
     <nav className="p-2 max-h-[calc(100vh-250px)] overflow-y-auto custom-scrollbar">
-      {questionList.map((q) => (
-        <Link
-          key={q.id}
-          href={`/bank/${questionBankId}/question/${q.id}`}
-          className={cn(
-            "flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold transition-all mb-1",
-            String(questionId) === String(q.id)
-              ? "bg-primary text-primary-foreground shadow-lg shadow-primary/20"
-              : "text-muted-foreground hover:bg-slate-50 hover:text-foreground"
-          )}
-        >
-          <Bookmark
+      {questionList.length ? (
+        questionList.map((q) => (
+          <Link
+            key={q.id}
+            href={`/bank/${questionBankId}/question/${q.id}${navigationQueryString ? `?${navigationQueryString}` : ""}`}
             className={cn(
-              "h-4 w-4 shrink-0",
-              String(questionId) === String(q.id) ? "fill-current" : "opacity-40"
+              "mb-1 flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-bold transition-all",
+              String(questionId) === String(q.id)
+                ? "bg-primary text-primary-foreground shadow-lg shadow-primary/20"
+                : "text-muted-foreground hover:bg-slate-50 hover:text-foreground"
             )}
-          />
-          <span className="truncate">{q.title}</span>
-        </Link>
-      ))}
+          >
+            <Bookmark
+              className={cn(
+                "h-4 w-4 shrink-0",
+                String(questionId) === String(q.id) ? "fill-current" : "opacity-40"
+              )}
+            />
+            <span className="truncate">{q.title}</span>
+          </Link>
+        ))
+      ) : (
+        <div className="px-4 py-8 text-center text-sm font-medium text-slate-500">
+          当前筛选下没有匹配的题目
+        </div>
+      )}
     </nav>
   );
 
@@ -164,6 +201,12 @@ export default async function BankQuestionPage({ params }: { params: { questionB
                 <ChevronDown className="h-5 w-5 transition-transform group-open:rotate-180" />
               </div>
             </summary>
+            <BankQuestionSidebarControls
+              current={listCurrent}
+              pageSize={QUESTION_NAV_PAGE_SIZE}
+              total={totalQuestionCount}
+              defaultQuery={listQuery}
+            />
             {questionNavigation}
           </details>
 
@@ -174,6 +217,12 @@ export default async function BankQuestionPage({ params }: { params: { questionB
                 {bank.title}
               </h2>
             </div>
+            <BankQuestionSidebarControls
+              current={listCurrent}
+              pageSize={QUESTION_NAV_PAGE_SIZE}
+              total={totalQuestionCount}
+              defaultQuery={listQuery}
+            />
             {questionNavigation}
           </div>
         </div>

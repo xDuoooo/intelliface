@@ -553,6 +553,11 @@ public class QuestionController {
         if (shouldSearchQuestionFromEs(questionQueryRequest)) {
             try {
                 questionPage = questionService.searchFromEs(questionQueryRequest);
+                if (questionPage.getTotal() == 0) {
+                    questionPage = questionService.listQuestionByPage(questionQueryRequest);
+                    fallbackToDb = true;
+                    syncQuestionPageToEs(questionPage);
+                }
             } catch (Exception e) {
                 log.warn("题目搜索 ES 不可用，已降级到数据库查询，searchText={}", questionQueryRequest.getSearchText(), e);
                 questionPage = questionService.listQuestionByPage(questionQueryRequest);
@@ -583,6 +588,19 @@ public class QuestionController {
                 || StringUtils.isNotBlank(questionQueryRequest.getTitle())
                 || StringUtils.isNotBlank(questionQueryRequest.getContent())
                 || StringUtils.isNotBlank(questionQueryRequest.getAnswer());
+    }
+
+    private void syncQuestionPageToEs(Page<Question> questionPage) {
+        if (questionPage == null || questionPage.getRecords() == null || questionPage.getRecords().isEmpty()) {
+            return;
+        }
+        for (Question question : questionPage.getRecords()) {
+            try {
+                questionService.syncQuestionToEs(question);
+            } catch (Exception e) {
+                log.warn("搜索兜底后补写题目到 ES 失败，questionId={}", question == null ? null : question.getId(), e);
+            }
+        }
     }
 
     /**

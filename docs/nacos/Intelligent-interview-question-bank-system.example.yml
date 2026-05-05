@@ -80,6 +80,7 @@ wechat:
 ai:
   chat:
     api-key: your_deepseek_api_key
+    timeout-seconds: 300
   speech:
     api-key: your_volcengine_speech_api_key
   tts:

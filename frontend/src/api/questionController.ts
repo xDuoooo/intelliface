@@ -33,6 +33,55 @@ export async function aiGenerateQuestionsUsingPost(
   });
 }
 
+export type QuestionAiGenerateTaskStatus = {
+  taskId: string;
+  creatorUserId?: number;
+  questionType?: string;
+  totalCount?: number;
+  successCount?: number;
+  failedCount?: number;
+  status?: "PENDING" | "RUNNING" | "SUCCESS" | "FAILED" | string;
+  message?: string;
+  createTime?: number;
+  updateTime?: number;
+  finishTime?: number;
+};
+
+/** startQuestionAiGenerateTask POST /api/question/ai/generate/question/task */
+export async function startQuestionAiGenerateTaskUsingPost(
+  body: API.QuestionAIGenerateRequest,
+  options?: { [key: string]: any },
+) {
+  return request<{ code: number; data: QuestionAiGenerateTaskStatus; message: string }>(
+    "/api/question/ai/generate/question/task",
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      data: body,
+      ...(options || {}),
+    },
+  );
+}
+
+/** getQuestionAiGenerateTask GET /api/question/ai/generate/question/task */
+export async function getQuestionAiGenerateTaskUsingGet(
+  params: { taskId: string },
+  options?: { [key: string]: any },
+) {
+  return request<{ code: number; data: QuestionAiGenerateTaskStatus; message: string }>(
+    "/api/question/ai/generate/question/task",
+    {
+      method: "GET",
+      params: {
+        ...params,
+      },
+      ...(options || {}),
+    },
+  );
+}
+
 /** evaluateQuestionAnswer POST /api/question/ai/evaluate */
 export async function evaluateQuestionAnswerUsingPost(
   body: API.QuestionAnswerEvaluateRequest,

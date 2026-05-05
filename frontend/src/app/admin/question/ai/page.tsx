@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import {
   Alert,
@@ -9,6 +9,7 @@ import {
   Form,
   Input,
   InputNumber,
+  Progress,
   Tag,
   Typography,
   message,
@@ -21,7 +22,11 @@ import {
   Sparkles,
   Wand2,
 } from "lucide-react";
-import { aiGenerateQuestionsUsingPost } from "@/api/questionController";
+import {
+  getQuestionAiGenerateTaskUsingGet,
+  startQuestionAiGenerateTaskUsingPost,
+  type QuestionAiGenerateTaskStatus,
+} from "@/api/questionController";
 
 const { Title, Text, Paragraph } = Typography;
 
@@ -65,27 +70,87 @@ const exampleTopics = [
  */
 const AiGenerateQuestionPage: React.FC = () => {
   const [form] = Form.useForm();
-  const [loading, setLoading] = useState(false);
-  const [successCount, setSuccessCount] = useState<number | null>(null);
+  const [starting, setStarting] = useState(false);
+  const [taskStatus, setTaskStatus] = useState<QuestionAiGenerateTaskStatus | null>(null);
   const selectedCount = Form.useWatch("number", form);
+  const notifiedTaskIdRef = useRef<string>("");
+
+  const isTaskRunning = taskStatus?.status === "PENDING" || taskStatus?.status === "RUNNING";
+  const progressTotal = Number(taskStatus?.totalCount || 0);
+  const progressSuccess = Number(taskStatus?.successCount || 0);
+  const progressPercent = progressTotal > 0 ? Math.min(100, Math.round((progressSuccess / progressTotal) * 100)) : 0;
 
   const doSubmit = async (values: API.QuestionAIGenerateRequest) => {
-    setLoading(true);
-    setSuccessCount(null);
+    setStarting(true);
     try {
-      // @ts-ignore
-      const res = await aiGenerateQuestionsUsingPost(values);
+      const res = await startQuestionAiGenerateTaskUsingPost(values);
       if (res.data) {
-        setSuccessCount(Number(res.data));
-        message.success(`成功生成 ${res.data} 道题目！`);
-        form.resetFields();
+        notifiedTaskIdRef.current = "";
+        setTaskStatus(res.data);
+        message.success("生成任务已启动，正在持续补题…");
       }
     } catch (error: any) {
       message.error("生成失败：" + error.message);
     } finally {
-      setLoading(false);
+      setStarting(false);
     }
   };
+
+  useEffect(() => {
+    if (!taskStatus?.taskId || !isTaskRunning) {
+      return undefined;
+    }
+    let stopped = false;
+    let timerId: number | undefined;
+
+    const pollTaskStatus = async () => {
+      try {
+        const res = await getQuestionAiGenerateTaskUsingGet({ taskId: taskStatus.taskId });
+        if (!stopped && res.data) {
+          setTaskStatus(res.data);
+        }
+      } catch (error: any) {
+        if (!stopped) {
+          setTaskStatus((prev) =>
+            prev
+              ? {
+                  ...prev,
+                  status: "FAILED",
+                  message: error?.message || "生成任务状态查询失败，请重新发起任务",
+                }
+              : prev,
+          );
+        }
+      } finally {
+        if (!stopped) {
+          timerId = window.setTimeout(pollTaskStatus, 1200);
+        }
+      }
+    };
+
+    timerId = window.setTimeout(pollTaskStatus, 1200);
+    return () => {
+      stopped = true;
+      if (timerId !== undefined) {
+        window.clearTimeout(timerId);
+      }
+    };
+  }, [isTaskRunning, taskStatus?.taskId]);
+
+  useEffect(() => {
+    if (!taskStatus?.taskId || notifiedTaskIdRef.current === taskStatus.taskId) {
+      return;
+    }
+    if (taskStatus.status === "SUCCESS") {
+      notifiedTaskIdRef.current = taskStatus.taskId;
+      const generatedCount = Number(taskStatus.successCount || 0);
+      message.success(taskStatus.message || `成功生成 ${generatedCount} 道题目！`);
+      form.resetFields();
+    } else if (taskStatus.status === "FAILED") {
+      notifiedTaskIdRef.current = taskStatus.taskId;
+      message.error(taskStatus.message || "生成任务失败，请稍后重试");
+    }
+  }, [form, taskStatus]);
 
   return (
     <div className="mx-auto max-w-7xl space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-700">
@@ -139,21 +204,50 @@ const AiGenerateQuestionPage: React.FC = () => {
         ))}
       </div>
 
-      {successCount !== null && (
+      {taskStatus && (
         <Alert
           message={
-            <div className="flex items-start gap-3 py-1">
-              <CheckCircle2 className="mt-0.5 h-5 w-5 text-emerald-500" />
-              <div>
-                <div className="text-base font-black text-emerald-800">生成成功</div>
-                <div className="mt-1 text-sm font-medium leading-6 text-emerald-700">
-                  已成功生成 {successCount} 道题目。建议现在回到题目管理查看结果，优先筛掉重复题和表达不稳的题干。
+            <div className="py-1">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <div className="text-base font-black text-slate-900">
+                    {taskStatus.status === "SUCCESS"
+                      ? "生成任务已完成"
+                      : taskStatus.status === "FAILED"
+                        ? "生成任务失败"
+                        : "生成任务进行中"}
+                  </div>
+                  <div className="mt-1 text-sm font-medium leading-6 text-slate-600">
+                    {taskStatus.message || "系统正在生成题目，请稍候。"}
+                  </div>
                 </div>
+                <div className="rounded-2xl bg-white/80 px-4 py-3 text-center shadow-sm ring-1 ring-slate-200">
+                  <div className="text-lg font-black text-slate-900">
+                    {progressSuccess}/{progressTotal || selectedCount || 0}
+                  </div>
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+                    已生成
+                  </div>
+                </div>
+              </div>
+              <div className="mt-4">
+                <Progress
+                  percent={progressPercent}
+                  strokeColor={taskStatus.status === "FAILED" ? "#ef4444" : "#2563eb"}
+                  trailColor="#e2e8f0"
+                  format={() => `${progressSuccess}/${progressTotal || 0}`}
+                />
               </div>
             </div>
           }
-          type="success"
-          className="rounded-[1.75rem] border-emerald-200 bg-emerald-50"
+          type={taskStatus.status === "FAILED" ? "error" : taskStatus.status === "SUCCESS" ? "success" : "info"}
+          className={`rounded-[1.75rem] ${
+            taskStatus.status === "FAILED"
+              ? "border-rose-200 bg-rose-50"
+              : taskStatus.status === "SUCCESS"
+                ? "border-emerald-200 bg-emerald-50"
+                : "border-blue-200 bg-blue-50"
+          }`}
           showIcon={false}
         />
       )}
@@ -174,7 +268,7 @@ const AiGenerateQuestionPage: React.FC = () => {
               </Text>
             </div>
             <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-600">
-              默认会同时生成题干、标签、难度和详细参考答案
+              现在会在后台持续生成，并实时回报 `已生成 x / n`
             </div>
           </div>
 
@@ -194,6 +288,7 @@ const AiGenerateQuestionPage: React.FC = () => {
               <Input
                 placeholder="例如：Redis 分布式锁实现、Kafka 消息可靠性保障..."
                 className="h-14 rounded-2xl border-slate-200 bg-slate-50 px-5 text-base font-medium transition-colors focus:bg-white"
+                disabled={starting || isTaskRunning}
               />
             </Form.Item>
 
@@ -209,6 +304,7 @@ const AiGenerateQuestionPage: React.FC = () => {
                   max={20}
                   className="h-14 w-full rounded-2xl border-slate-200 bg-slate-50 px-4"
                   size="large"
+                  disabled={starting || isTaskRunning}
                 />
               </Form.Item>
 
@@ -230,6 +326,7 @@ const AiGenerateQuestionPage: React.FC = () => {
                         key={count}
                         type="button"
                         onClick={() => form.setFieldValue("number", count)}
+                        disabled={starting || isTaskRunning}
                         className={`rounded-full px-4 py-2 text-sm font-bold transition ${
                           active
                             ? "bg-slate-900 text-white"
@@ -270,13 +367,14 @@ const AiGenerateQuestionPage: React.FC = () => {
                 建议先生成一小批，筛掉不满意的题目后，再继续补相邻专题。
               </div>
               <Button
-                loading={loading}
+                loading={starting || isTaskRunning}
                 type="primary"
                 htmlType="submit"
+                disabled={isTaskRunning}
                 size="large"
                 className="h-14 min-w-[220px] rounded-2xl border-none bg-slate-900 px-8 text-base font-black shadow-lg shadow-slate-300/60 hover:bg-slate-800 [&>span]:inline-flex [&>span]:items-center [&>span]:gap-2"
               >
-                {loading ? "正在生成题目..." : (
+                {starting || isTaskRunning ? `正在生成 ${progressSuccess}/${progressTotal || selectedCount || 0}` : (
                   <span className="inline-flex items-center gap-2 whitespace-nowrap">
                     <Wand2 className="h-5 w-5" />
                     开始生成

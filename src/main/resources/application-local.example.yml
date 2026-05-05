@@ -191,6 +191,7 @@ ai:
     api-key: your_deepseek_api_key
     host: https://api.deepseek.com
     model: deepseek-v4-flash
+    timeout-seconds: 300
   speech:
     # 语音转写：openai / openai-compatible / volcengine / doubao
     provider: volcengine

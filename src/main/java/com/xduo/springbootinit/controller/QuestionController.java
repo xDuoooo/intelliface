@@ -23,6 +23,7 @@ import com.xduo.springbootinit.constant.UserConstant;
 import com.xduo.springbootinit.exception.BusinessException;
 import com.xduo.springbootinit.exception.ThrowUtils;
 import com.xduo.springbootinit.manager.SystemAccessManager;
+import com.xduo.springbootinit.manager.QuestionAiGenerateTaskManager;
 import com.xduo.springbootinit.mapper.CounterManager;
 import com.xduo.springbootinit.model.dto.question.*;
 import com.xduo.springbootinit.model.entity.Question;
@@ -62,6 +63,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
@@ -118,6 +120,9 @@ public class QuestionController {
 
     @Resource
     private TagSyncService tagSyncService;
+
+    @Resource
+    private QuestionAiGenerateTaskManager questionAiGenerateTaskManager;
 
     @Resource
     private SystemAccessManager systemAccessManager;
@@ -660,6 +665,53 @@ public class QuestionController {
     }
 
     /**
+     * AI 批量生成题目（异步任务）
+     *
+     * @param questionAiGenerateRequest
+     * @param request
+     * @return
+     */
+    @PostMapping("/ai/generate/question/task")
+    @SaCheckRole(UserConstant.ADMIN_ROLE)
+    public BaseResponse<QuestionAiGenerateTaskManager.AiGenerateTaskStatus> startGenerateQuestionsTask(
+            @RequestBody QuestionAIGenerateRequest questionAiGenerateRequest,
+            HttpServletRequest request) {
+        validateAiGenerateRequest(questionAiGenerateRequest);
+        User loginUser = userService.getLoginUser(request);
+        String questionType = questionAiGenerateRequest.getQuestionType().trim();
+        int targetCount = questionAiGenerateRequest.getNumber();
+        QuestionAiGenerateTaskManager.AiGenerateTaskStatus taskStatus =
+                questionAiGenerateTaskManager.createTask(loginUser.getId(), questionType, targetCount);
+        CompletableFuture.runAsync(() -> runGenerateQuestionsTask(taskStatus.getTaskId(), questionType, targetCount, loginUser.getId()));
+        return ResultUtils.success(taskStatus);
+    }
+
+    /**
+     * 查询 AI 批量生成题目任务状态
+     *
+     * @param taskId
+     * @param request
+     * @return
+     */
+    @GetMapping("/ai/generate/question/task")
+    @SaCheckRole(UserConstant.ADMIN_ROLE)
+    public BaseResponse<QuestionAiGenerateTaskManager.AiGenerateTaskStatus> getGenerateQuestionsTask(
+            @RequestParam String taskId,
+            HttpServletRequest request) {
+        ThrowUtils.throwIf(StringUtils.isBlank(taskId), ErrorCode.PARAMS_ERROR, "任务 id 不能为空");
+        User loginUser = userService.getLoginUser(request);
+        QuestionAiGenerateTaskManager.AiGenerateTaskStatus taskStatus = questionAiGenerateTaskManager.getTask(taskId);
+        ThrowUtils.throwIf(taskStatus == null, ErrorCode.NOT_FOUND_ERROR, "任务不存在或已过期");
+        ThrowUtils.throwIf(
+                taskStatus.getCreatorUserId() != null
+                        && !Objects.equals(taskStatus.getCreatorUserId(), loginUser.getId())
+                        && !userService.isAdmin(loginUser),
+                ErrorCode.NO_AUTH_ERROR
+        );
+        return ResultUtils.success(taskStatus);
+    }
+
+    /**
      * AI 批量生成题目
      *
      * @param questionAiGenerateRequest
@@ -669,45 +721,141 @@ public class QuestionController {
     @SaCheckRole(UserConstant.ADMIN_ROLE)
     public BaseResponse<Integer> batchGenerateQuestionsByAi(@RequestBody QuestionAIGenerateRequest questionAiGenerateRequest,
                                                             HttpServletRequest request) {
-        ThrowUtils.throwIf(questionAiGenerateRequest == null, ErrorCode.PARAMS_ERROR);
-        String questionType = questionAiGenerateRequest.getQuestionType();
-        Integer number = questionAiGenerateRequest.getNumber();
-        ThrowUtils.throwIf(StringUtils.isBlank(questionType), ErrorCode.PARAMS_ERROR, "题目方向不能为空");
-        ThrowUtils.throwIf(number == null || number < 1 || number > 20, ErrorCode.PARAMS_ERROR, "生成数量需在 1 到 20 之间");
-
-        // 获取登录用户
+        validateAiGenerateRequest(questionAiGenerateRequest);
         User loginUser = userService.getLoginUser(request);
+        String questionType = questionAiGenerateRequest.getQuestionType().trim();
+        int targetCount = questionAiGenerateRequest.getNumber();
 
         try {
-            List<AiGeneratedQuestion> generatedQuestionList = generateQuestionSkeletons(questionType, number);
-            enrichGeneratedQuestionAnswers(generatedQuestionList);
-            int successCount = 0;
-            for (AiGeneratedQuestion generatedQuestion : generatedQuestionList) {
-                if (StringUtils.isAnyBlank(generatedQuestion.getTitle(), generatedQuestion.getContent(), generatedQuestion.getAnswer())) {
-                    continue;
-                }
-                Question question = new Question();
-                question.setTitle(generatedQuestion.getTitle().trim());
-                question.setContent(generatedQuestion.getContent().trim());
-                question.setAnswer(generatedQuestion.getAnswer().trim());
-                question.setDifficulty(normalizeGeneratedDifficulty(generatedQuestion.getDifficulty()));
-                if (generatedQuestion.getTags() != null) {
-                    question.setTags(JSONUtil.toJsonStr(generatedQuestion.getTags()));
-                }
-                question.setUserId(loginUser.getId());
-                question.setReviewStatus(QuestionConstant.REVIEW_STATUS_APPROVED);
-                questionService.validQuestion(question, true);
-                questionService.save(question);
-                questionService.syncQuestionToEs(question);
-                tagSyncService.syncQuestionTags(null, question.getTags());
-                successCount++;
-            }
+            int successCount = generateAndPersistQuestionsByAi(questionType, targetCount, loginUser.getId(), null);
             ThrowUtils.throwIf(successCount == 0, ErrorCode.SYSTEM_ERROR, "AI 未生成可保存的题目");
             return ResultUtils.success(successCount);
         } catch (Exception e) {
             log.error("AI 结果解析失败", e);
             throw new BusinessException(ErrorCode.SYSTEM_ERROR, "AI 生成数据格式不正确");
         }
+    }
+
+    private void validateAiGenerateRequest(QuestionAIGenerateRequest questionAiGenerateRequest) {
+        ThrowUtils.throwIf(questionAiGenerateRequest == null, ErrorCode.PARAMS_ERROR);
+        String questionType = questionAiGenerateRequest.getQuestionType();
+        Integer number = questionAiGenerateRequest.getNumber();
+        ThrowUtils.throwIf(StringUtils.isBlank(questionType), ErrorCode.PARAMS_ERROR, "题目方向不能为空");
+        ThrowUtils.throwIf(number == null || number < 1 || number > 20, ErrorCode.PARAMS_ERROR, "生成数量需在 1 到 20 之间");
+    }
+
+    private void runGenerateQuestionsTask(String taskId, String questionType, int targetCount, Long userId) {
+        int successCount = 0;
+        int failedCount = 0;
+        try {
+            questionAiGenerateTaskManager.markRunning(taskId, "正在准备生成任务");
+            successCount = generateAndPersistQuestionsByAi(questionType, targetCount, userId, taskId);
+            failedCount = Math.max(0, targetCount - successCount);
+            ThrowUtils.throwIf(successCount <= 0, ErrorCode.SYSTEM_ERROR, "AI 未生成出可保存的题目");
+            String successMessage = successCount >= targetCount
+                    ? String.format("已完成，成功生成 %d/%d 道题目", successCount, targetCount)
+                    : String.format("已完成，成功生成 %d/%d 道题目。建议缩小方向后再补一次", successCount, targetCount);
+            questionAiGenerateTaskManager.markSuccess(taskId, successCount, failedCount, successMessage);
+        } catch (Exception e) {
+            log.error("AI 异步增题任务失败，taskId={}, questionType={}", taskId, questionType, e);
+            String errorMessage = StringUtils.defaultIfBlank(e.getMessage(), "AI 增题失败，请稍后重试");
+            questionAiGenerateTaskManager.markFailed(taskId, successCount, failedCount, errorMessage);
+        }
+    }
+
+    private int generateAndPersistQuestionsByAi(String questionType, int targetCount, Long userId, String taskId) {
+        List<AiGeneratedQuestion> acceptedQuestionList = new ArrayList<>();
+        int successCount = 0;
+        for (int round = 0; round < AI_GENERATE_QUESTION_MAX_ROUNDS && successCount < targetCount; round++) {
+            int remaining = targetCount - successCount;
+            int requestCount = Math.min(AI_GENERATE_QUESTION_BATCH_SIZE, Math.max(1, remaining + 1));
+            try {
+                updateGenerateTaskHeartbeat(taskId, String.format(
+                        "正在生成第 %d/%d 到第 %d/%d 道题的题干",
+                        successCount + 1,
+                        targetCount,
+                        Math.min(targetCount, successCount + requestCount),
+                        targetCount
+                ));
+                String result = aiManager.doChat(
+                        buildQuestionGenerationSystemPrompt(),
+                        buildQuestionGenerationUserPrompt(questionType, requestCount, acceptedQuestionList)
+                );
+                List<AiGeneratedQuestion> parsedQuestionList = parseAiGeneratedQuestions(result);
+                List<AiGeneratedQuestion> normalizedQuestionList = normalizeAndFilterGeneratedQuestions(
+                        parsedQuestionList,
+                        questionType,
+                        acceptedQuestionList
+                );
+                if (normalizedQuestionList.isEmpty()) {
+                    continue;
+                }
+                updateGenerateTaskHeartbeat(taskId, String.format(
+                        "正在补全第 %d/%d 到第 %d/%d 道题的参考答案",
+                        successCount + 1,
+                        targetCount,
+                        Math.min(targetCount, successCount + normalizedQuestionList.size()),
+                        targetCount
+                ));
+                enrichGeneratedQuestionAnswers(normalizedQuestionList);
+                for (AiGeneratedQuestion generatedQuestion : normalizedQuestionList) {
+                    if (successCount >= targetCount) {
+                        break;
+                    }
+                    if (!isSavableGeneratedQuestion(generatedQuestion)) {
+                        continue;
+                    }
+                    Question question = buildGeneratedQuestionEntity(generatedQuestion, userId);
+                    questionService.validQuestion(question, true);
+                    questionService.save(question);
+                    questionService.syncQuestionToEs(question);
+                    tagSyncService.syncQuestionTags(null, question.getTags());
+                    acceptedQuestionList.add(generatedQuestion);
+                    successCount++;
+                    updateGenerateTaskProgress(taskId, successCount, targetCount);
+                }
+            } catch (Exception e) {
+                log.warn("AI 题目异步生成失败，questionType={}, round={}", questionType, round + 1, e);
+                updateGenerateTaskHeartbeat(taskId, "本轮生成遇到波动，正在尝试下一轮补齐");
+            }
+        }
+        return successCount;
+    }
+
+    private boolean isSavableGeneratedQuestion(AiGeneratedQuestion generatedQuestion) {
+        return generatedQuestion != null
+                && StringUtils.isNoneBlank(generatedQuestion.getTitle(), generatedQuestion.getContent(), generatedQuestion.getAnswer());
+    }
+
+    private Question buildGeneratedQuestionEntity(AiGeneratedQuestion generatedQuestion, Long userId) {
+        Question question = new Question();
+        question.setTitle(generatedQuestion.getTitle().trim());
+        question.setContent(generatedQuestion.getContent().trim());
+        question.setAnswer(generatedQuestion.getAnswer().trim());
+        question.setDifficulty(normalizeGeneratedDifficulty(generatedQuestion.getDifficulty()));
+        if (generatedQuestion.getTags() != null) {
+            question.setTags(JSONUtil.toJsonStr(generatedQuestion.getTags()));
+        }
+        question.setUserId(userId);
+        question.setReviewStatus(QuestionConstant.REVIEW_STATUS_APPROVED);
+        return question;
+    }
+
+    private void updateGenerateTaskHeartbeat(String taskId, String message) {
+        if (StringUtils.isBlank(taskId)) {
+            return;
+        }
+        questionAiGenerateTaskManager.heartbeat(taskId, message);
+    }
+
+    private void updateGenerateTaskProgress(String taskId, int successCount, int targetCount) {
+        if (StringUtils.isBlank(taskId)) {
+            return;
+        }
+        String message = successCount >= targetCount
+                ? String.format("已生成 %d/%d，正在收尾", successCount, targetCount)
+                : String.format("已生成 %d/%d，正在继续生成下一道", successCount, targetCount);
+        questionAiGenerateTaskManager.markProgress(taskId, successCount, 0, message);
     }
 
     private List<AiGeneratedQuestion> generateQuestionSkeletons(String questionType, int targetCount) {

@@ -104,6 +104,7 @@ ai:
   chat:
     host: https://api.deepseek.com
     model: deepseek-v4-flash
+    timeout-seconds: 300
   speech:
     provider: volcengine
     endpoint: https://openspeech.bytedance.com/api/v3/auc/bigmodel/recognize/flash

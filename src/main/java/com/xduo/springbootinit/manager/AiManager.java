@@ -58,6 +58,9 @@ public class AiManager {
     @Value("${ai.chat.model:${ai.model:deepseek-chat}}")
     private String chatModel;
 
+    @Value("${ai.chat.timeout-seconds:300}")
+    private long chatTimeoutSeconds;
+
     @Value("${ai.speech.provider:openai}")
     private String speechProvider;
 
@@ -450,7 +453,7 @@ public class AiManager {
             throws IOException, InterruptedException {
         HttpRequest request = HttpRequest.newBuilder()
                 .uri(buildUri(baseUrl, path))
-                .timeout(Duration.ofSeconds(60))
+                .timeout(Duration.ofSeconds(chatTimeoutSeconds > 0 ? chatTimeoutSeconds : 300))
                 .header("Authorization", "Bearer " + apiKey)
                 .header("Content-Type", "application/json")
                 .POST(HttpRequest.BodyPublishers.ofString(json, StandardCharsets.UTF_8))

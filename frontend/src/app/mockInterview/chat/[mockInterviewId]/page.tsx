@@ -541,17 +541,17 @@ export default function InterviewRoomPage({ params }: { params: { mockInterviewI
         oscillator.stop(context.currentTime + 0.02);
       }
       setAudioAutoplayReady(true);
-      setVoiceStatus("已启用自动播报，后续新题会尽量自动朗读");
+      setVoiceStatus("已开启语音面试模式，后续提问会尽量自动朗读");
       if (!silent) {
-        message.success("已启用自动播报");
+        message.success("已开启语音面试模式");
       }
       return true;
     } catch (error: any) {
       setAudioAutoplayReady(false);
-      const errorText = error?.message || "浏览器暂时未开放自动播报";
-      setVoiceStatus(`${errorText}，请先手动点击“播报当前题目”`);
+      const errorText = error?.message || "浏览器暂时未开放自动朗读";
+      setVoiceStatus(`${errorText}，请先手动点击“朗读当前问题”`);
       if (!silent) {
-        message.warning("当前浏览器还没有开放自动播报，请先手动点击“播报当前题目”");
+        message.warning("当前浏览器还没有开放自动朗读，请先手动点击“朗读当前问题”");
       }
       return false;
     }
@@ -666,7 +666,7 @@ export default function InterviewRoomPage({ params }: { params: { mockInterviewI
         setAudioAutoplayReady(false);
       }
       const errorText = blocked && !manual
-        ? "浏览器拦截了自动播放，请先点一次“启用自动播报”"
+        ? "浏览器拦截了自动播放，请先点一次“开启语音面试模式”"
         : error?.message || "豆包语音播报失败";
       setVoiceStatus(errorText);
       if (manual || !blocked) {
@@ -714,7 +714,7 @@ export default function InterviewRoomPage({ params }: { params: { mockInterviewI
     }
     if (autoSpeakEnabled && audioAutoplayReady) {
       setAutoSpeakEnabled(false);
-      setVoiceStatus("已关闭自动播报");
+      setVoiceStatus("已关闭语音面试模式");
       stopSpeaking();
       return;
     }
@@ -762,7 +762,7 @@ export default function InterviewRoomPage({ params }: { params: { mockInterviewI
     return () => window.removeEventListener("beforeunload", handleBeforeUnload);
   }, [inputMessage, isListening, isRecording, submitting]);
 
-  const cancelStreaming = useCallback((reason = "已停止当前实时输出，稍后会刷新面试结果。") => {
+  const cancelStreaming = useCallback((reason = "已打断当前追问，稍后会刷新面试结果。") => {
     if (streamAbortControllerRef.current) {
       streamAbortControllerRef.current.abort();
       streamAbortControllerRef.current = null;
@@ -847,7 +847,7 @@ export default function InterviewRoomPage({ params }: { params: { mockInterviewI
     }
     stopSpeaking();
     if (submitting && streamAbortControllerRef.current) {
-      cancelStreaming("检测到你开始作答，已停止面试官实时输出。");
+      cancelStreaming("检测到你开始作答，已打断面试官当前追问。");
     }
     speechRecognitionRef.current?.abort();
     const recognition = new SpeechRecognition();
@@ -906,7 +906,7 @@ export default function InterviewRoomPage({ params }: { params: { mockInterviewI
       stopVoiceInput();
     }
     if (submitting && streamAbortControllerRef.current) {
-      cancelStreaming("检测到你开始录音作答，已停止面试官实时输出。");
+      cancelStreaming("检测到你开始录音作答，已打断面试官当前追问。");
     }
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -1238,11 +1238,14 @@ export default function InterviewRoomPage({ params }: { params: { mockInterviewI
     className: string,
     emptyText: string,
     limit?: number | null,
+    preferExpanded = false,
   ) => {
     const normalized = (content || "").trim();
     const textKey = `${roundKey}:${sectionKey}`;
     const shouldCollapse = typeof limit === "number" && limit > 0 && normalized.length > limit;
-    const isExpandedText = expandedRoundTextKeys.includes(textKey);
+    const isExpandedText = preferExpanded
+      ? !expandedRoundTextKeys.includes(textKey)
+      : expandedRoundTextKeys.includes(textKey);
     const displayText = shouldCollapse && !isExpandedText
       ? buildCollapsedPreview(normalized, limit)
       : (normalized || emptyText);
@@ -1315,7 +1318,7 @@ export default function InterviewRoomPage({ params }: { params: { mockInterviewI
                   模拟面试 #{interview.id}
                 </Title>
                 <Paragraph className="!mb-0 text-slate-500">
-                  这一轮会尽量按真实面试节奏追问。你可以直接说话作答；如果想让每次新题自动朗读，先点一次“启用自动播报”。
+                  这一轮会尽量按真实面试节奏追问。你可以直接说话作答；如果想让每次新题自动朗读，先点一次“开启语音面试模式”。
                 </Paragraph>
               </div>
               <Tag color={status.color} className="status-tag">
@@ -1670,7 +1673,7 @@ export default function InterviewRoomPage({ params }: { params: { mockInterviewI
                       className="tool-button"
                     >
                       <Volume2 size={16} />
-                      播报当前题目
+                      朗读当前问题
                     </Button>
                   </div>
                   <div className="tool-group secondary">
@@ -1713,9 +1716,9 @@ export default function InterviewRoomPage({ params }: { params: { mockInterviewI
                       {autoSpeakEnabled && audioAutoplayReady ? <Volume2 size={14} /> : <VolumeX size={14} />}
                       {autoSpeakEnabled
                         ? audioAutoplayReady
-                          ? "自动播报已开"
-                          : "启用自动播报"
-                        : "自动播报已关"}
+                          ? "语音面试已开"
+                          : "开启语音面试模式"
+                        : "语音面试已关"}
                     </Button>
                     {isStreaming ? (
                       <Button
@@ -1726,7 +1729,7 @@ export default function InterviewRoomPage({ params }: { params: { mockInterviewI
                         className="tool-button compact danger-soft"
                       >
                         <Square size={14} />
-                        停止实时输出
+                        打断当前追问
                       </Button>
                     ) : null}
                   </div>
@@ -2092,6 +2095,7 @@ export default function InterviewRoomPage({ params }: { params: { mockInterviewI
                                 "record-answer",
                                 "暂无改进版回答骨架",
                                 320,
+                                true,
                               )}
                             </div>
                           ) : null}

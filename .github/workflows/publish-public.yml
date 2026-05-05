@@ -15,18 +15,20 @@ concurrency:
   cancel-in-progress: true
 
 env:
+  PRIVATE_REPO: xDuoooo/Intelligent_interview_question_bank_system
   PUBLIC_REPO_URL: https://github.com/xDuoooo/intelliface.git
   PUBLIC_REPO_BRANCH: main
 
 jobs:
   publish:
-    name: Sync Code To Public Repo
+    if: github.repository == 'xDuoooo/Intelligent_interview_question_bank_system'
+    name: Mirror Git History To Public Repo
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout private repo
+      - name: Checkout private repo with full history
         uses: actions/checkout@v5
         with:
-          fetch-depth: 1
+          fetch-depth: 0
           persist-credentials: false
 
       - name: Validate publish secret
@@ -39,50 +41,27 @@ jobs:
             exit 1
           fi
 
-      - name: Clone public repo
+      - name: Fetch tags
+        shell: bash
+        run: |
+          git fetch --force --tags origin
+
+      - name: Add public remote
         env:
           PUBLIC_REPO_PUSH_TOKEN: ${{ secrets.PUBLIC_REPO_PUSH_TOKEN }}
-          PUBLIC_REPO_DIR: ${{ runner.temp }}/public-repo
         shell: bash
         run: |
-          rm -rf "$PUBLIC_REPO_DIR"
-          git clone "https://x-access-token:${PUBLIC_REPO_PUSH_TOKEN}@github.com/xDuoooo/intelliface.git" "$PUBLIC_REPO_DIR"
+          git remote remove public 2>/dev/null || true
+          git remote add public "https://x-access-token:${PUBLIC_REPO_PUSH_TOKEN}@github.com/xDuoooo/intelliface.git"
 
-      - name: Replace public repo contents
+      - name: Push branch history to public repo
         env:
-          PUBLIC_REPO_DIR: ${{ runner.temp }}/public-repo
-        shell: bash
-        run: |
-          find "$PUBLIC_REPO_DIR" -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
-          rsync -av --delete \
-            --exclude ".git/" \
-            --exclude ".github/" \
-            --exclude ".idea/" \
-            --exclude ".vscode/" \
-            --exclude ".DS_Store" \
-            --exclude "node_modules/" \
-            --exclude "target/" \
-            --exclude "frontend/node_modules/" \
-            --exclude "frontend/.next/" \
-            --exclude "frontend/out/" \
-            --exclude "frontend/coverage/" \
-            --exclude "uploads/" \
-            --exclude "src/main/resources/application-local.yml" \
-            "$GITHUB_WORKSPACE"/ "$PUBLIC_REPO_DIR"/
-
-      - name: Commit and push public snapshot
-        env:
-          PUBLIC_REPO_DIR: ${{ runner.temp }}/public-repo
           PUBLIC_REPO_BRANCH: ${{ env.PUBLIC_REPO_BRANCH }}
         shell: bash
         run: |
-          cd "$PUBLIC_REPO_DIR"
-          git config user.name "repo-sync-bot"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -A
-          if git diff --cached --quiet; then
-            echo "No public repo changes to publish."
-            exit 0
-          fi
-          git commit -m "sync: update public snapshot"
-          git push origin "HEAD:${PUBLIC_REPO_BRANCH}"
+          git push public --force "HEAD:refs/heads/${PUBLIC_REPO_BRANCH}"
+
+      - name: Push tags to public repo
+        shell: bash
+        run: |
+          git push public --force --tags

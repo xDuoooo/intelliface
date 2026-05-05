@@ -165,7 +165,13 @@ public class QuestionServiceImpl extends ServiceImpl<QuestionMapper, Question> i
         Integer reviewStatus = questionQueryRequest.getReviewStatus();
         // 从多字段中搜索
         if (StringUtils.isNotBlank(searchText)) {
-            queryWrapper.and(qw -> qw.like("title", searchText).or().like("content", searchText));
+            queryWrapper.and(qw -> qw.like("title", searchText)
+                    .or()
+                    .like("content", searchText)
+                    .or()
+                    .like("answer", searchText)
+                    .or()
+                    .like("tags", "\"" + searchText + "\""));
         }
         // 模糊查询
         queryWrapper.like(StringUtils.isNotBlank(title), "title", title);

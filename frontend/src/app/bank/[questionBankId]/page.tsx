@@ -211,9 +211,7 @@ export default async function BankPage({
           cardTitle={`题目列表 (${total})`}
           collapsibleOnMobile
           mobileInitialCount={5}
-          getQuestionHref={(item) =>
-            `/bank/${questionBankId}/question/${item.id}${questionNavigationQueryString ? `?${questionNavigationQueryString}` : ""}`
-          }
+          questionHrefSuffix={questionNavigationQueryString ? `?${questionNavigationQueryString}` : ""}
         />
       </section>
     </div>

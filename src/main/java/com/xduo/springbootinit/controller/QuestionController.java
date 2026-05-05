@@ -567,6 +567,7 @@ public class QuestionController {
                 log.warn("题目搜索 ES 不可用，已降级到数据库查询，searchText={}", questionQueryRequest.getSearchText(), e);
                 questionPage = questionService.listQuestionByPage(questionQueryRequest);
                 fallbackToDb = true;
+                syncQuestionPageToEs(questionPage);
             }
         } else {
             questionPage = questionService.listQuestionByPage(questionQueryRequest);

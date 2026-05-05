@@ -1,0 +1,88 @@
+name: Publish Public Repo
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-public-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PUBLIC_REPO_URL: https://github.com/xDuoooo/intelliface.git
+  PUBLIC_REPO_BRANCH: main
+
+jobs:
+  publish:
+    name: Sync Code To Public Repo
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout private repo
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Validate publish secret
+        env:
+          PUBLIC_REPO_PUSH_TOKEN: ${{ secrets.PUBLIC_REPO_PUSH_TOKEN }}
+        shell: bash
+        run: |
+          if [ -z "$PUBLIC_REPO_PUSH_TOKEN" ]; then
+            echo "::error::Missing required secret: PUBLIC_REPO_PUSH_TOKEN"
+            exit 1
+          fi
+
+      - name: Clone public repo
+        env:
+          PUBLIC_REPO_PUSH_TOKEN: ${{ secrets.PUBLIC_REPO_PUSH_TOKEN }}
+          PUBLIC_REPO_DIR: ${{ runner.temp }}/public-repo
+        shell: bash
+        run: |
+          rm -rf "$PUBLIC_REPO_DIR"
+          git clone "https://x-access-token:${PUBLIC_REPO_PUSH_TOKEN}@github.com/xDuoooo/intelliface.git" "$PUBLIC_REPO_DIR"
+
+      - name: Replace public repo contents
+        env:
+          PUBLIC_REPO_DIR: ${{ runner.temp }}/public-repo
+        shell: bash
+        run: |
+          find "$PUBLIC_REPO_DIR" -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
+          rsync -av --delete \
+            --exclude ".git/" \
+            --exclude ".github/" \
+            --exclude ".idea/" \
+            --exclude ".vscode/" \
+            --exclude ".DS_Store" \
+            --exclude "node_modules/" \
+            --exclude "target/" \
+            --exclude "frontend/node_modules/" \
+            --exclude "frontend/.next/" \
+            --exclude "frontend/out/" \
+            --exclude "frontend/coverage/" \
+            --exclude "uploads/" \
+            --exclude "src/main/resources/application-local.yml" \
+            "$GITHUB_WORKSPACE"/ "$PUBLIC_REPO_DIR"/
+
+      - name: Commit and push public snapshot
+        env:
+          PUBLIC_REPO_DIR: ${{ runner.temp }}/public-repo
+          PUBLIC_REPO_BRANCH: ${{ env.PUBLIC_REPO_BRANCH }}
+        shell: bash
+        run: |
+          cd "$PUBLIC_REPO_DIR"
+          git config user.name "repo-sync-bot"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "No public repo changes to publish."
+            exit 0
+          fi
+          git commit -m "sync: update public snapshot"
+          git push origin "HEAD:${PUBLIC_REPO_BRANCH}"

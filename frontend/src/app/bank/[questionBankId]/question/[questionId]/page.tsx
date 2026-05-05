@@ -6,7 +6,7 @@ import { getLoginUserUsingGet } from "@/api/userController";
 import QuestionCard from "@/components/QuestionCard";
 import QuestionOwnerPanel from "@/app/question/[questionId]/QuestionOwnerPanel";
 import { cn } from "@/lib/utils";
-import { ChevronLeft, ListFilter, Bookmark, Sparkles } from "lucide-react";
+import { ChevronDown, ChevronLeft, ListFilter, Bookmark, Sparkles } from "lucide-react";
 import { buildServerRequestOptions } from "@/libs/serverRequestOptions";
 
 export const dynamic = "force-dynamic";
@@ -103,6 +103,33 @@ export default async function BankQuestionPage({ params }: { params: { questionB
 
   const isOwner = Boolean(loginUser?.id) && String(loginUser?.id) === String(question.userId);
   const isAdmin = loginUser?.userRole === "admin";
+  const questionList = bank.questionPage?.records || [];
+  const totalQuestionCount = Number(bank.questionPage?.total) || questionList.length;
+
+  const questionNavigation = (
+    <nav className="p-2 max-h-[calc(100vh-250px)] overflow-y-auto custom-scrollbar">
+      {questionList.map((q) => (
+        <Link
+          key={q.id}
+          href={`/bank/${questionBankId}/question/${q.id}`}
+          className={cn(
+            "flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold transition-all mb-1",
+            String(questionId) === String(q.id)
+              ? "bg-primary text-primary-foreground shadow-lg shadow-primary/20"
+              : "text-muted-foreground hover:bg-slate-50 hover:text-foreground"
+          )}
+        >
+          <Bookmark
+            className={cn(
+              "h-4 w-4 shrink-0",
+              String(questionId) === String(q.id) ? "fill-current" : "opacity-40"
+            )}
+          />
+          <span className="truncate">{q.title}</span>
+        </Link>
+      ))}
+    </nav>
+  );
 
   return (
     <div id="bankQuestionPage" className="flex flex-col lg:flex-row gap-8 pb-20">
@@ -117,31 +144,37 @@ export default async function BankQuestionPage({ params }: { params: { questionB
             返回题库主页
           </Link>
 
-          <div className="bg-white rounded-[2rem] border border-slate-100 shadow-xl shadow-slate-200/50 overflow-hidden">
+          <details
+            className="group overflow-hidden rounded-[2rem] border border-slate-100 bg-white shadow-xl shadow-slate-200/50 lg:hidden"
+            open
+          >
+            <summary className="flex cursor-pointer list-none items-center justify-between gap-3 border-b border-slate-50 bg-slate-50/50 p-6 [&::-webkit-details-marker]:hidden">
+              <div className="min-w-0">
+                <div className="flex items-center gap-2">
+                  <ListFilter className="h-4 w-4 text-primary shrink-0" />
+                  <h2 className="font-black text-foreground truncate" title={bank.title}>
+                    {bank.title}
+                  </h2>
+                </div>
+                <p className="mt-2 text-sm font-medium text-slate-500">
+                  点击收起或展开题目列表，共 {totalQuestionCount} 道
+                </p>
+              </div>
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-white text-slate-500">
+                <ChevronDown className="h-5 w-5 transition-transform group-open:rotate-180" />
+              </div>
+            </summary>
+            {questionNavigation}
+          </details>
+
+          <div className="hidden overflow-hidden rounded-[2rem] border border-slate-100 bg-white shadow-xl shadow-slate-200/50 lg:block">
             <div className="p-6 border-b border-slate-50 bg-slate-50/50 flex items-center gap-2">
               <ListFilter className="h-4 w-4 text-primary" />
               <h2 className="font-black text-foreground truncate max-w-[200px]" title={bank.title}>
                 {bank.title}
               </h2>
             </div>
-
-            <nav className="p-2 max-h-[calc(100vh-250px)] overflow-y-auto custom-scrollbar">
-              {(bank.questionPage?.records || []).map((q) => (
-                <Link
-                  key={q.id}
-                  href={`/bank/${questionBankId}/question/${q.id}`}
-                  className={cn(
-                    "flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold transition-all mb-1",
-                    String(questionId) === String(q.id)
-                      ? "bg-primary text-primary-foreground shadow-lg shadow-primary/20"
-                      : "text-muted-foreground hover:bg-slate-50 hover:text-foreground"
-                  )}
-                >
-                  <Bookmark className={cn("h-4 w-4 shrink-0", String(questionId) === String(q.id) ? "fill-current" : "opacity-40")} />
-                  <span className="truncate">{q.title}</span>
-                </Link>
-              ))}
-            </nav>
+            {questionNavigation}
           </div>
         </div>
       </aside>

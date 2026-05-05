@@ -7,18 +7,37 @@ import { getLoginUserUsingGet } from "@/api/userController";
 import QuestionList from "@/components/QuestionList";
 import QuestionBankLeaderboardCard from "@/components/QuestionBankLeaderboardCard";
 import QuestionBankOwnerPanel from "./QuestionBankOwnerPanel";
+import BankQuestionPagination from "./BankQuestionPagination";
 import { Play, BookOpen, Clock, Users, Sparkles } from "lucide-react";
 import { cn, validateImageSrc } from "@/lib/utils";
 import { buildServerRequestOptions } from "@/libs/serverRequestOptions";
 
 export const dynamic = "force-dynamic";
 
+const QUESTION_PAGE_SIZE = 20;
+
+function getSingleParam(value?: string | string[]) {
+  if (Array.isArray(value)) {
+    return value[0] || "";
+  }
+  return value || "";
+}
+
 /**
  * 题库详情页
  * @constructor
  */
-export default async function BankPage({ params }: { params: { questionBankId: string } }) {
+export default async function BankPage({
+  params,
+  searchParams,
+}: {
+  params: { questionBankId: string };
+  searchParams: {
+    page?: string | string[];
+  };
+}) {
   const { questionBankId } = params;
+  const current = Math.max(1, Number(getSingleParam(searchParams.page)) || 1);
   let bank: API.QuestionBankVO | undefined = undefined;
   let leaderboard: API.QuestionBankLeaderboardVO | undefined = undefined;
   let loginUser: API.LoginUserVO | undefined = undefined;
@@ -30,7 +49,8 @@ export default async function BankPage({ params }: { params: { questionBankId: s
       {
         id: questionBankId,
         needQueryQuestionList: true,
-        pageSize: 20,
+        current,
+        pageSize: QUESTION_PAGE_SIZE,
       },
       requestOptions,
     ),
@@ -91,6 +111,7 @@ export default async function BankPage({ params }: { params: { questionBankId: s
   const isOwner = Boolean(loginUser?.id) && String(loginUser?.id) === String(bank.userId);
   const isAdmin = loginUser?.userRole === "admin";
   const firstQuestionId = bank.questionPage?.records?.[0]?.id;
+  const total = Number(bank.questionPage?.total) || 0;
 
   return (
     <div id="bankPage" className="space-y-10 pb-20">
@@ -161,14 +182,22 @@ export default async function BankPage({ params }: { params: { questionBankId: s
       <QuestionBankLeaderboardCard leaderboard={leaderboard} />
 
       {/* Questions Explorer */}
-      <section className="space-y-8">
+      <section id="question-list" className="space-y-8">
         <QuestionList
           questionBankId={questionBankId as any}
           questionList={bank.questionPage?.records ?? []}
-          cardTitle={`题目列表 (${bank.questionPage?.total || 0})`}
+          cardTitle={`题目列表 (${total})`}
           collapsibleOnMobile
           mobileInitialCount={6}
         />
+        {total > QUESTION_PAGE_SIZE ? (
+          <BankQuestionPagination
+            current={current}
+            pageSize={QUESTION_PAGE_SIZE}
+            total={total}
+            anchorId="question-list"
+          />
+        ) : null}
       </section>
     </div>
   );

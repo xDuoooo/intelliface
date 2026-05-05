@@ -15,7 +15,7 @@ interface Props {
   defaultSearchParams?: API.QuestionQueryRequest;
 }
 
-const PAGE_SIZE = 12;
+const PAGE_SIZE = 5;
 
 const SORT_OPTIONS = [
   { label: "最新发布", value: "createTime_descend", sortField: "createTime", sortOrder: "descend" },

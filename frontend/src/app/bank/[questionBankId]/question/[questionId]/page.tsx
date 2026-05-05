@@ -12,7 +12,7 @@ import BankQuestionSidebarControls from "./BankQuestionSidebarControls";
 
 export const dynamic = "force-dynamic";
 
-const QUESTION_NAV_PAGE_SIZE = 12;
+const QUESTION_NAV_PAGE_SIZE = 5;
 
 function getSingleParam(value?: string | string[]) {
   if (Array.isArray(value)) {
@@ -39,6 +39,14 @@ export default async function BankQuestionPage({
   const requestOptions = buildServerRequestOptions();
   const listCurrent = Math.max(1, Number(getSingleParam(searchParams.listPage)) || 1);
   const listQuery = getSingleParam(searchParams.listQuery).trim();
+  const bankPageSearchParams = new URLSearchParams();
+  if (listQuery) {
+    bankPageSearchParams.set("q", listQuery);
+  }
+  if (listCurrent > 1) {
+    bankPageSearchParams.set("page", String(listCurrent));
+  }
+  const bankPageHref = `/bank/${questionBankId}${bankPageSearchParams.toString() ? `?${bankPageSearchParams.toString()}` : ""}#question-list`;
 
   // 获取题库详情
   let bank: API.QuestionBankVO | undefined = undefined;
@@ -52,7 +60,7 @@ export default async function BankQuestionPage({
         needQueryQuestionList: true,
         current: listCurrent,
         pageSize: QUESTION_NAV_PAGE_SIZE,
-        title: listQuery || undefined,
+        searchText: listQuery || undefined,
       },
       requestOptions,
     ),
@@ -115,7 +123,7 @@ export default async function BankQuestionPage({
         <h1 className="text-xl font-bold text-foreground">{errorTitle}</h1>
         <p className="text-muted-foreground">{errorDesc}</p>
         <Link
-          href={isNotLogin ? `/user/login?redirect=/bank/${questionBankId}/question/${questionId}` : `/bank/${questionBankId}`}
+          href={isNotLogin ? `/user/login?redirect=/bank/${questionBankId}/question/${questionId}` : bankPageHref}
           className="h-11 px-8 rounded-full bg-primary text-primary-foreground font-bold flex items-center justify-center transition-all shadow-lg shadow-primary/20 hover:scale-105 active:scale-95"
         >
           {isNotLogin ? "立即登录" : "返回题库"}
@@ -174,7 +182,7 @@ export default async function BankQuestionPage({
       <aside className="lg:w-80 shrink-0">
         <div className="sticky top-24 space-y-6">
           <Link
-            href={`/bank/${questionBankId}`}
+            href={bankPageHref}
             className="group flex items-center gap-2 text-sm font-bold text-muted-foreground hover:text-primary transition-colors px-2"
           >
             <ChevronLeft className="h-4 w-4 group-hover:-translate-x-1 transition-transform" />

@@ -10,6 +10,7 @@ interface Props {
   cardTitle?: string;
   collapsibleOnMobile?: boolean;
   mobileInitialCount?: number;
+  getQuestionHref?: (item: API.QuestionVO) => string;
 }
 
 /**
@@ -24,6 +25,7 @@ const QuestionList = (props: Props) => {
     questionBankId,
     collapsibleOnMobile = false,
     mobileInitialCount = 6,
+    getQuestionHref,
   } = props;
   const [expanded, setExpanded] = useState(false);
   const [mobileSectionExpanded, setMobileSectionExpanded] = useState(true);
@@ -44,9 +46,11 @@ const QuestionList = (props: Props) => {
     <Link
       key={item.id}
       href={
-        questionBankId
-          ? `/bank/${questionBankId}/question/${item.id}`
-          : `/question/${item.id}`
+        getQuestionHref
+          ? getQuestionHref(item)
+          : questionBankId
+            ? `/bank/${questionBankId}/question/${item.id}`
+            : `/question/${item.id}`
       }
       className="group flex w-full min-w-0 flex-col justify-between overflow-hidden rounded-3xl border border-slate-100 bg-white p-5 transition-all duration-300 hover:border-primary/30 hover:shadow-xl hover:shadow-primary/5 sm:flex-row sm:items-center"
     >

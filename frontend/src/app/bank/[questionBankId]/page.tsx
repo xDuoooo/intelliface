@@ -7,14 +7,14 @@ import { getLoginUserUsingGet } from "@/api/userController";
 import QuestionList from "@/components/QuestionList";
 import QuestionBankLeaderboardCard from "@/components/QuestionBankLeaderboardCard";
 import QuestionBankOwnerPanel from "./QuestionBankOwnerPanel";
-import BankQuestionPagination from "./BankQuestionPagination";
+import BankQuestionListControls from "./BankQuestionListControls";
 import { Play, BookOpen, Clock, Users, Sparkles } from "lucide-react";
 import { cn, validateImageSrc } from "@/lib/utils";
 import { buildServerRequestOptions } from "@/libs/serverRequestOptions";
 
 export const dynamic = "force-dynamic";
 
-const QUESTION_PAGE_SIZE = 20;
+const QUESTION_PAGE_SIZE = 5;
 
 function getSingleParam(value?: string | string[]) {
   if (Array.isArray(value)) {
@@ -34,10 +34,12 @@ export default async function BankPage({
   params: { questionBankId: string };
   searchParams: {
     page?: string | string[];
+    q?: string | string[];
   };
 }) {
   const { questionBankId } = params;
   const current = Math.max(1, Number(getSingleParam(searchParams.page)) || 1);
+  const searchText = getSingleParam(searchParams.q).trim();
   let bank: API.QuestionBankVO | undefined = undefined;
   let leaderboard: API.QuestionBankLeaderboardVO | undefined = undefined;
   let loginUser: API.LoginUserVO | undefined = undefined;
@@ -51,6 +53,7 @@ export default async function BankPage({
         needQueryQuestionList: true,
         current,
         pageSize: QUESTION_PAGE_SIZE,
+        searchText: searchText || undefined,
       },
       requestOptions,
     ),
@@ -112,6 +115,14 @@ export default async function BankPage({
   const isAdmin = loginUser?.userRole === "admin";
   const firstQuestionId = bank.questionPage?.records?.[0]?.id;
   const total = Number(bank.questionPage?.total) || 0;
+  const navigationParams = new URLSearchParams();
+  if (searchText) {
+    navigationParams.set("listQuery", searchText);
+  }
+  if (current > 1) {
+    navigationParams.set("listPage", String(current));
+  }
+  const questionNavigationQueryString = navigationParams.toString();
 
   return (
     <div id="bankPage" className="space-y-10 pb-20">
@@ -154,7 +165,11 @@ export default async function BankPage({
 
             <div className="pt-4">
               <Link
-                href={`/bank/${questionBankId}/question/${firstQuestionId}`}
+                href={
+                  firstQuestionId
+                    ? `/bank/${questionBankId}/question/${firstQuestionId}${questionNavigationQueryString ? `?${questionNavigationQueryString}` : ""}`
+                    : "#"
+                }
                 className={cn(
                   "inline-flex h-14 px-10 rounded-2xl bg-primary text-primary-foreground font-black text-lg items-center gap-3 transition-all shadow-xl shadow-primary/20",
                   !firstQuestionId ? "opacity-50 pointer-events-none grayscale" : "hover:scale-105 active:scale-95"
@@ -183,21 +198,23 @@ export default async function BankPage({
 
       {/* Questions Explorer */}
       <section id="question-list" className="space-y-8">
+        <BankQuestionListControls
+          current={current}
+          pageSize={QUESTION_PAGE_SIZE}
+          total={total}
+          defaultQuery={searchText}
+          anchorId="question-list"
+        />
         <QuestionList
           questionBankId={questionBankId as any}
           questionList={bank.questionPage?.records ?? []}
           cardTitle={`题目列表 (${total})`}
           collapsibleOnMobile
-          mobileInitialCount={6}
+          mobileInitialCount={5}
+          getQuestionHref={(item) =>
+            `/bank/${questionBankId}/question/${item.id}${questionNavigationQueryString ? `?${questionNavigationQueryString}` : ""}`
+          }
         />
-        {total > QUESTION_PAGE_SIZE ? (
-          <BankQuestionPagination
-            current={current}
-            pageSize={QUESTION_PAGE_SIZE}
-            total={total}
-            anchorId="question-list"
-          />
-        ) : null}
       </section>
     </div>
   );

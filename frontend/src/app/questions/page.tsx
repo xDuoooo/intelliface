@@ -145,7 +145,7 @@ export default async function QuestionsPage({
     sortField: normalizeSortField(searchParams.sortField),
     sortOrder: normalizeSortOrder(searchParams.sortOrder),
     current: Number(getSingleParam(searchParams.page)) || 1,
-    pageSize: 12,
+    pageSize: 5,
   };
   // 题目列表和总数
   let questionList: API.QuestionVO[] = [];

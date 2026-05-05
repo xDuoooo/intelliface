@@ -81,7 +81,7 @@ const BankQuestionSidebarControls = ({
           <input
             value={draftQuery}
             onChange={(event) => setDraftQuery(event.target.value)}
-            placeholder="搜索题目标题"
+            placeholder="搜索题目标题或内容"
             className="h-11 w-full rounded-2xl border border-slate-200 bg-slate-50 pl-10 pr-10 text-sm font-medium text-slate-700 outline-none transition-all placeholder:text-slate-400 focus:border-primary/40 focus:bg-white focus:ring-4 focus:ring-primary/10"
           />
           {draftQuery ? (

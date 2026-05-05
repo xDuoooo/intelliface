@@ -1237,11 +1237,11 @@ export default function InterviewRoomPage({ params }: { params: { mockInterviewI
     content: string | undefined,
     className: string,
     emptyText: string,
-    limit: number,
+    limit?: number | null,
   ) => {
     const normalized = (content || "").trim();
     const textKey = `${roundKey}:${sectionKey}`;
-    const shouldCollapse = normalized.length > limit;
+    const shouldCollapse = typeof limit === "number" && limit > 0 && normalized.length > limit;
     const isExpandedText = expandedRoundTextKeys.includes(textKey);
     const displayText = shouldCollapse && !isExpandedText
       ? buildCollapsedPreview(normalized, limit)
@@ -2084,17 +2084,15 @@ export default function InterviewRoomPage({ params }: { params: { mockInterviewI
                                   <div className="focus-text">{item.followUpReason}</div>
                                 </div>
                               ) : null}
-                              {item.answerRewriteSuggestion ? (
-                                renderExpandableRoundBlock(
-                                  roundKey,
-                                  "rewrite",
-                                  "改进版回答骨架",
-                                  item.answerRewriteSuggestion,
-                                  "record-answer",
-                                  "暂无改进版回答骨架",
-                                  240,
-                                )
-                              ) : null}
+                              {renderExpandableRoundBlock(
+                                roundKey,
+                                "rewrite",
+                                "改进版回答骨架",
+                                item.answerRewriteSuggestion,
+                                "record-answer",
+                                "暂无改进版回答骨架",
+                                320,
+                              )}
                             </div>
                           ) : null}
                         </div>

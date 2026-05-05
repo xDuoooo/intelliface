@@ -26,9 +26,12 @@ const QuestionList = (props: Props) => {
     mobileInitialCount = 6,
   } = props;
   const [expanded, setExpanded] = useState(false);
+  const [mobileSectionExpanded, setMobileSectionExpanded] = useState(true);
 
   const canCollapseOnMobile =
     collapsibleOnMobile && questionList.length > mobileInitialCount;
+  const canToggleSectionOnMobile =
+    collapsibleOnMobile && questionList.length > 0;
 
   const mobileVisibleQuestionList = useMemo(() => {
     if (!canCollapseOnMobile || expanded) {
@@ -64,46 +67,78 @@ const QuestionList = (props: Props) => {
   return (
     <div className="space-y-4">
       {cardTitle && (
-        <h2 className="text-2xl font-black text-foreground mb-6 pl-4 border-l-4 border-primary">
-          {cardTitle}
-        </h2>
+        <>
+          {canToggleSectionOnMobile ? (
+            <button
+              type="button"
+              className="flex w-full items-center justify-between gap-3 rounded-[1.75rem] border border-slate-200 bg-white px-5 py-4 text-left shadow-sm sm:hidden"
+              onClick={() => setMobileSectionExpanded((prev) => !prev)}
+              aria-expanded={mobileSectionExpanded}
+            >
+              <div className="min-w-0">
+                <div className="text-lg font-black text-foreground">
+                  {cardTitle}
+                </div>
+                <div className="mt-1 text-sm text-slate-500">
+                  {mobileSectionExpanded ? "点击收起题目列表" : `点击展开题目列表，共 ${questionList.length} 道`}
+                </div>
+              </div>
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-slate-50 text-slate-500">
+                <ChevronDown
+                  className={`h-5 w-5 transition-transform ${mobileSectionExpanded ? "" : "-rotate-90"}`}
+                />
+              </div>
+            </button>
+          ) : null}
+          <h2
+            className={`mb-6 border-l-4 border-primary pl-4 text-2xl font-black text-foreground ${
+              canToggleSectionOnMobile ? "hidden sm:block" : ""
+            }`}
+          >
+            {cardTitle}
+          </h2>
+        </>
       )}
       {questionList.length ? (
         <>
-          {canCollapseOnMobile ? (
+          {mobileSectionExpanded ? (
             <>
-              <div className="grid gap-3 sm:hidden">
-                {mobileVisibleQuestionList.map(renderQuestionItem)}
-              </div>
-              <div className="hidden gap-3 sm:grid">
-                {questionList.map(renderQuestionItem)}
-              </div>
+              {canCollapseOnMobile ? (
+                <>
+                  <div className="grid gap-3 sm:hidden">
+                    {mobileVisibleQuestionList.map(renderQuestionItem)}
+                  </div>
+                  <div className="hidden gap-3 sm:grid">
+                    {questionList.map(renderQuestionItem)}
+                  </div>
+                </>
+              ) : (
+                <div className="grid gap-3">
+                  {questionList.map(renderQuestionItem)}
+                </div>
+              )}
+              {canCollapseOnMobile ? (
+                <div className="rounded-[1.75rem] border border-slate-200 bg-slate-50/80 px-4 py-4 sm:hidden">
+                  <div className="flex flex-col gap-3">
+                    <div className="text-sm font-medium text-slate-500">
+                      当前显示 <span className="font-bold text-slate-700">{mobileVisibleQuestionList.length}</span> /{" "}
+                      <span className="font-bold text-slate-700">{questionList.length}</span> 道题目
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setExpanded((prev) => !prev)}
+                      className="inline-flex h-11 items-center justify-center gap-2 rounded-2xl border border-primary/15 bg-white px-4 text-sm font-bold text-primary transition-all active:scale-95"
+                    >
+                      {expanded ? "收起到摘要" : "展开全部题目"}
+                      <ChevronDown
+                        className={`h-4 w-4 transition-transform ${expanded ? "rotate-180" : ""}`}
+                      />
+                    </button>
+                  </div>
+                </div>
+              ) : null}
             </>
-          ) : (
-            <div className="grid gap-3">
-              {questionList.map(renderQuestionItem)}
-            </div>
-          )}
-        {canCollapseOnMobile ? (
-          <div className="rounded-[1.75rem] border border-slate-200 bg-slate-50/80 px-4 py-4 sm:hidden">
-            <div className="flex flex-col gap-3">
-              <div className="text-sm font-medium text-slate-500">
-                当前显示 <span className="font-bold text-slate-700">{mobileVisibleQuestionList.length}</span> /{" "}
-                <span className="font-bold text-slate-700">{questionList.length}</span> 道题目
-              </div>
-              <button
-                type="button"
-                onClick={() => setExpanded((prev) => !prev)}
-                className="inline-flex h-11 items-center justify-center gap-2 rounded-2xl border border-primary/15 bg-white px-4 text-sm font-bold text-primary transition-all active:scale-95"
-              >
-                {expanded ? "收起题目列表" : "展开全部题目"}
-                <ChevronDown
-                  className={`h-4 w-4 transition-transform ${expanded ? "rotate-180" : ""}`}
-                />
-              </button>
-            </div>
-          </div>
-        ) : null}
+          ) : null}
         </>
       ) : (
         <div className="flex min-h-44 flex-col items-center justify-center rounded-[2rem] border border-dashed border-slate-200 bg-white/70 px-6 py-12 text-center">

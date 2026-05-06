@@ -3,6 +3,9 @@ HELP.md
 target/
 .DS_Store
 node_modules/
+.npm-cache/
+npm-cache/
+.codex/
 src/main/resources/application-local.yml
 !.mvn/wrapper/maven-wrapper.jar
 !**/src/main/**/target/

@@ -22,13 +22,13 @@ env:
 jobs:
   publish:
     if: github.repository == 'xDuoooo/Intelligent_interview_question_bank_system'
-    name: Mirror Git History To Public Repo
+    name: Sync Snapshot To Public Repo
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout private repo with full history
+      - name: Checkout private repo
         uses: actions/checkout@v5
         with:
-          fetch-depth: 0
+          fetch-depth: 1
           persist-credentials: false
 
       - name: Validate publish secret
@@ -41,22 +41,54 @@ jobs:
             exit 1
           fi
 
-      - name: Add public remote
+      - name: Prepare public repo workspace
         env:
+          PUBLIC_REPO_BRANCH: ${{ env.PUBLIC_REPO_BRANCH }}
           PUBLIC_REPO_PUSH_TOKEN: ${{ secrets.PUBLIC_REPO_PUSH_TOKEN }}
         shell: bash
         run: |
-          git remote remove public 2>/dev/null || true
-          git remote add public "https://x-access-token:${PUBLIC_REPO_PUSH_TOKEN}@github.com/xDuoooo/intelliface.git"
+          set -euo pipefail
 
-      - name: Push branch history to public repo
+          public_repo_dir="${RUNNER_TEMP}/public-repo"
+          public_repo_url="https://x-access-token:${PUBLIC_REPO_PUSH_TOKEN}@github.com/xDuoooo/intelliface.git"
+
+          echo "PUBLIC_REPO_DIR=${public_repo_dir}" >> "$GITHUB_ENV"
+
+          if git ls-remote --exit-code --heads "${public_repo_url}" "${PUBLIC_REPO_BRANCH}" >/dev/null 2>&1; then
+            git clone --branch "${PUBLIC_REPO_BRANCH}" --single-branch "${public_repo_url}" "${public_repo_dir}"
+          else
+            mkdir -p "${public_repo_dir}"
+            git init "${public_repo_dir}"
+            git -C "${public_repo_dir}" checkout -b "${PUBLIC_REPO_BRANCH}"
+            git -C "${public_repo_dir}" remote add origin "${public_repo_url}"
+          fi
+
+      - name: Export snapshot without paper directory
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          find "${PUBLIC_REPO_DIR}" -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
+          git archive --format=tar HEAD -- . ':(top,exclude)paper' ':(top,exclude)paper/**' | tar -xf - -C "${PUBLIC_REPO_DIR}"
+
+      - name: Commit and push public snapshot
         env:
           PUBLIC_REPO_BRANCH: ${{ env.PUBLIC_REPO_BRANCH }}
         shell: bash
         run: |
-          git push public --force "HEAD:refs/heads/${PUBLIC_REPO_BRANCH}"
+          set -euo pipefail
 
-      - name: Push tags to public repo
-        shell: bash
-        run: |
-          git push public --force --tags
+          cd "${PUBLIC_REPO_DIR}"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add -A
+
+          if git diff --cached --quiet; then
+            echo "No changes to publish."
+            exit 0
+          fi
+
+          git commit -m "chore: sync snapshot from private repo ${GITHUB_SHA}"
+          git push origin "${PUBLIC_REPO_BRANCH}"

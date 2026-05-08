@@ -15,7 +15,9 @@ import org.springframework.boot.test.context.SpringBootTest;
 import java.util.HashMap;
 import java.util.Map;
 
-import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @SpringBootTest
 public class ElasticsearchClientTest {
@@ -47,7 +49,7 @@ public class ElasticsearchClientTest {
 
         IndexResponse response = elasticsearchClient.index(request);
 
-        assertThat(response.id()).isNotNull();
+        assertNotNull(response.id());
     }
 
     // Get (Retrieve) a document by ID
@@ -62,9 +64,9 @@ public class ElasticsearchClientTest {
 
         GetResponse<Map> response = elasticsearchClient.get(getRequest, Map.class);
 
-        assertThat(response.found()).isTrue();
-        assertThat(response.source()).isNotNull();
-        assertThat(response.source().get("title")).isEqualTo("Elasticsearch Introduction");
+        assertTrue(response.found());
+        assertNotNull(response.source());
+        assertEquals("Elasticsearch Introduction", response.source().get("title"));
     }
 
     // Update a document
@@ -85,7 +87,7 @@ public class ElasticsearchClientTest {
         elasticsearchClient.update(updateRequest, Map.class);
 
         GetResponse<Map> response = elasticsearchClient.get(g -> g.index(INDEX_NAME).id(documentId), Map.class);
-        assertThat(response.source().get("title")).isEqualTo("Updated Elasticsearch Title");
+        assertEquals("Updated Elasticsearch Title", response.source().get("title"));
     }
 
     // Delete a document
@@ -99,7 +101,7 @@ public class ElasticsearchClientTest {
         );
 
         co.elastic.clients.elasticsearch.core.DeleteResponse result = elasticsearchClient.delete(deleteRequest);
-        assertThat(result.id()).isNotNull();
+        assertNotNull(result.id());
     }
 
     // Delete the entire index
@@ -110,6 +112,6 @@ public class ElasticsearchClientTest {
         );
 
         co.elastic.clients.elasticsearch.indices.DeleteIndexResponse deleted = elasticsearchClient.indices().delete(deleteIndexRequest);
-        assertThat(deleted.acknowledged()).isTrue();
+        assertTrue(deleted.acknowledged());
     }
 }

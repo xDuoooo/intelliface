@@ -18,17 +18,18 @@ env:
   PRIVATE_REPO: xDuoooo/Intelligent_interview_question_bank_system
   PUBLIC_REPO_URL: https://github.com/xDuoooo/intelliface.git
   PUBLIC_REPO_BRANCH: main
+  EXCLUDE_PATH: paper
 
 jobs:
   publish:
     if: github.repository == 'xDuoooo/Intelligent_interview_question_bank_system'
-    name: Sync Snapshot To Public Repo
+    name: Sync Filtered History To Public Repo
     runs-on: ubuntu-latest
     steps:
       - name: Checkout private repo
         uses: actions/checkout@v5
         with:
-          fetch-depth: 1
+          fetch-depth: 0
           persist-credentials: false
 
       - name: Validate publish secret
@@ -41,54 +42,44 @@ jobs:
             exit 1
           fi
 
-      - name: Prepare public repo workspace
+      - name: Rewrite history without paper directory
+        env:
+          SOURCE_BRANCH: ${{ github.ref_name }}
+          EXCLUDE_PATH: ${{ env.EXCLUDE_PATH }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          git checkout -B "${SOURCE_BRANCH}" "${GITHUB_SHA}"
+
+          export FILTER_BRANCH_SQUELCH_WARNING=1
+          git filter-branch --force --prune-empty \
+            --index-filter "git rm -r --cached --ignore-unmatch -- ${EXCLUDE_PATH}" \
+            -- "${SOURCE_BRANCH}"
+
+      - name: Push filtered history to public repo
         env:
           PUBLIC_REPO_BRANCH: ${{ env.PUBLIC_REPO_BRANCH }}
+          PUBLIC_REPO_URL: ${{ env.PUBLIC_REPO_URL }}
           PUBLIC_REPO_PUSH_TOKEN: ${{ secrets.PUBLIC_REPO_PUSH_TOKEN }}
         shell: bash
         run: |
           set -euo pipefail
 
-          public_repo_dir="${RUNNER_TEMP}/public-repo"
-          public_repo_url="https://x-access-token:${PUBLIC_REPO_PUSH_TOKEN}@github.com/xDuoooo/intelliface.git"
+          public_repo_url="https://x-access-token:${PUBLIC_REPO_PUSH_TOKEN}@${PUBLIC_REPO_URL#https://github.com/}"
+          remote_ref="refs/heads/${PUBLIC_REPO_BRANCH}"
 
-          echo "PUBLIC_REPO_DIR=${public_repo_dir}" >> "$GITHUB_ENV"
+          git remote add public "${public_repo_url}"
 
-          if git ls-remote --exit-code --heads "${public_repo_url}" "${PUBLIC_REPO_BRANCH}" >/dev/null 2>&1; then
-            git clone --branch "${PUBLIC_REPO_BRANCH}" --single-branch "${public_repo_url}" "${public_repo_dir}"
+          if git ls-remote --exit-code --heads public "${PUBLIC_REPO_BRANCH}" >/dev/null 2>&1; then
+            git fetch --no-tags public "${PUBLIC_REPO_BRANCH}"
+
+            if git merge-base --is-ancestor "refs/remotes/public/${PUBLIC_REPO_BRANCH}" HEAD; then
+              git push public "HEAD:${remote_ref}"
+            else
+              echo "Public history diverged; replacing it with the filtered private history."
+              git push --force-with-lease public "HEAD:${remote_ref}"
+            fi
           else
-            mkdir -p "${public_repo_dir}"
-            git init "${public_repo_dir}"
-            git -C "${public_repo_dir}" checkout -b "${PUBLIC_REPO_BRANCH}"
-            git -C "${public_repo_dir}" remote add origin "${public_repo_url}"
+            git push public "HEAD:${remote_ref}"
           fi
-
-      - name: Export snapshot without paper directory
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          find "${PUBLIC_REPO_DIR}" -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
-          git archive --format=tar HEAD -- . ':(top,exclude)paper' ':(top,exclude)paper/**' | tar -xf - -C "${PUBLIC_REPO_DIR}"
-
-      - name: Commit and push public snapshot
-        env:
-          PUBLIC_REPO_BRANCH: ${{ env.PUBLIC_REPO_BRANCH }}
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          cd "${PUBLIC_REPO_DIR}"
-
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-
-          git add -A
-
-          if git diff --cached --quiet; then
-            echo "No changes to publish."
-            exit 0
-          fi
-
-          git commit -m "chore: sync snapshot from private repo ${GITHUB_SHA}"
-          git push origin "${PUBLIC_REPO_BRANCH}"

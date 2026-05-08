@@ -66,7 +66,8 @@ jobs:
         run: |
           set -euo pipefail
 
-          public_repo_url="https://x-access-token:${PUBLIC_REPO_PUSH_TOKEN}@${PUBLIC_REPO_URL#https://github.com/}"
+          public_repo_url="${PUBLIC_REPO_URL#https://}"
+          public_repo_url="https://x-access-token:${PUBLIC_REPO_PUSH_TOKEN}@${public_repo_url}"
           remote_ref="refs/heads/${PUBLIC_REPO_BRANCH}"
 
           git remote add public "${public_repo_url}"

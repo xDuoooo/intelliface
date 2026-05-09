@@ -161,7 +161,7 @@ export default async function PostsPage({
               去个人中心查看全部
             </Link>
           </div>
-          <PostList postList={myPendingPostList} getHref={() => "/user/center?tab=posts"} />
+          <PostList postList={myPendingPostList} itemHref="/user/center?tab=posts" />
         </section>
       ) : null}
 

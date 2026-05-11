@@ -26,8 +26,9 @@ import {
   message,
 } from "antd";
 import { Megaphone } from "lucide-react";
+import AdminTableEllipsis from "@/components/AdminTableEllipsis";
 
-const { Paragraph, Text } = Typography;
+const { Text } = Typography;
 
 interface NotificationRecord {
   id: number;
@@ -128,12 +129,12 @@ export default function NotificationRecordCard({ refreshToken = 0 }: Props) {
     {
       title: "标题 / 内容",
       dataIndex: "title",
+      width: 340,
+      ellipsis: true,
       render: (_: any, record: NotificationRecord) => (
-        <div className="min-w-[260px]">
-          <div className="font-bold text-slate-800">{record.title}</div>
-          <Paragraph className="mb-0 mt-1 text-slate-500" ellipsis={{ rows: 2, expandable: false }}>
-            {record.content}
-          </Paragraph>
+        <div className="min-w-0 space-y-1">
+          <AdminTableEllipsis value={record.title} className="font-bold text-slate-800" />
+          <AdminTableEllipsis value={record.content} className="text-slate-500" />
         </div>
       ),
     },

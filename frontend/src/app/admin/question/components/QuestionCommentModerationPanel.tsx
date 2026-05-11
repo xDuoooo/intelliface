@@ -4,6 +4,7 @@ import React, { useRef, useState } from "react";
 import type { ActionType, ProColumns } from "@ant-design/pro-components";
 import { Input, message, Modal, Radio, Tag } from "antd";
 import { CheckCheck } from "lucide-react";
+import AdminTableEllipsis from "@/components/AdminTableEllipsis";
 import ProTable from "@/components/DynamicProTable";
 import { listAdminCommentsByPage, reviewComment, type CommentVO } from "@/api/commentController";
 
@@ -71,10 +72,11 @@ export default function QuestionCommentModerationPanel() {
     {
       title: "评论内容",
       dataIndex: "content",
+      width: 420,
       ellipsis: true,
       render: (text, record) => (
-        <div className="max-w-[520px] space-y-1">
-          <div className="line-clamp-3 text-sm leading-6 text-slate-700">{text}</div>
+        <div className="max-w-[520px] min-w-0 space-y-1">
+          <AdminTableEllipsis value={text} className="text-sm text-slate-700" />
           {record.replyToUser?.userName ? (
             <div className="text-xs text-slate-400">回复 @{record.replyToUser.userName}</div>
           ) : null}
@@ -85,8 +87,9 @@ export default function QuestionCommentModerationPanel() {
       title: "审核意见",
       dataIndex: "reviewMessage",
       hideInSearch: true,
+      width: 220,
       ellipsis: true,
-      render: (text) => text || <span className="text-slate-300">-</span>,
+      render: (text) => <AdminTableEllipsis value={text} className="text-slate-600" />,
     },
     {
       title: "时间",

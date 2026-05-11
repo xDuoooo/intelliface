@@ -14,6 +14,7 @@ import {
   Terminal,
   User as UserIcon,
 } from "lucide-react";
+import AdminTableEllipsis from "@/components/AdminTableEllipsis";
 import request, { buildApiUrl } from "@/libs/request";
 import { extractSortParams, formatDateTime } from "@/lib/utils";
 
@@ -77,7 +78,13 @@ export default function AdminLogsPage() {
       ellipsis: true,
       copyable: true,
       hideInSearch: true,
-      render: (text) => <span className="font-semibold text-slate-700">{text || "未记录操作描述"}</span>,
+      render: (text) => (
+        <AdminTableEllipsis
+          value={text}
+          fallback="未记录操作描述"
+          className="font-semibold text-slate-700"
+        />
+      ),
     },
     {
       title: "操作方法",
@@ -112,13 +119,7 @@ export default function AdminLogsPage() {
       ellipsis: true,
       copyable: true,
       hideInSearch: true,
-      render: (text) => (
-        <Tooltip title={text || "-"}>
-          <span className="block max-w-[280px] truncate font-mono text-xs text-slate-500">
-            {text || "-"}
-          </span>
-        </Tooltip>
-      ),
+      render: (text) => <AdminTableEllipsis value={text} className="font-mono text-xs text-slate-500" />,
     },
     {
       title: "操作时间",

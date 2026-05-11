@@ -9,6 +9,7 @@ import {
   listQuestionByPageUsingPost,
 } from "@/api/questionController";
 import { Plus, Trash2, Edit3, Database, Wand2, Link2 } from "lucide-react";
+import AdminTableEllipsis from "@/components/AdminTableEllipsis";
 import ProTable from "@/components/DynamicProTable";
 import type { ActionType, ProColumns } from "@ant-design/pro-components";
 import { Button, message, Popconfirm, Skeleton, Space, Table, Tag } from "antd";
@@ -168,7 +169,9 @@ const QuestionAdminPage: React.FC = () => {
       title: "标题",
       dataIndex: "title",
       valueType: "text",
-      render: (text) => <span className="font-bold text-slate-700">{text}</span>,
+      width: 260,
+      ellipsis: true,
+      render: (text) => <AdminTableEllipsis value={text} className="font-bold text-slate-700" />,
     },
     {
       title: "内容",
@@ -241,8 +244,9 @@ const QuestionAdminPage: React.FC = () => {
       valueType: "textarea",
       hideInSearch: true,
       hideInForm: true,
+      width: 220,
       ellipsis: true,
-      render: (text) => text || <span className="text-slate-300">-</span>,
+      render: (text) => <AdminTableEllipsis value={text} className="text-slate-600" />,
     },
     {
       title: "审核时间",

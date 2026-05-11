@@ -4,9 +4,10 @@ import React, { useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { useSearchParams } from "next/navigation";
 import type { ActionType, ProColumns } from "@ant-design/pro-components";
-import { Button, Input, message, Modal, Popconfirm, Radio, Skeleton, Switch, Tag } from "antd";
+import { Button, Input, message, Modal, Popconfirm, Radio, Skeleton, Switch, Tag, Tooltip } from "antd";
 import Link from "next/link";
 import { AlertTriangle, CheckCheck, Edit3, FilePlus2, ShieldCheck, Sparkles, Trash2 } from "lucide-react";
+import AdminTableEllipsis from "@/components/AdminTableEllipsis";
 import ProTable from "@/components/DynamicProTable";
 import {
   addPostUsingPost,
@@ -188,13 +189,16 @@ const PostAdminPage: React.FC = () => {
       dataIndex: "title",
       valueType: "text",
       width: 260,
+      ellipsis: true,
       render: (_, record) => (
-        <Link
-          href={`/post/${record.id}`}
-          className="block max-w-[380px] text-sm font-black leading-6 text-slate-800 transition-colors hover:text-primary"
-        >
-          <span className="line-clamp-2">{record.title}</span>
-        </Link>
+        <Tooltip title={record.title} placement="topLeft" mouseEnterDelay={0.25}>
+          <Link
+            href={`/post/${record.id}`}
+            className="block max-w-[260px] truncate text-sm font-black text-slate-800 transition-colors hover:text-primary"
+          >
+            {record.title}
+          </Link>
+        </Tooltip>
       ),
     },
     {
@@ -222,7 +226,13 @@ const PostAdminPage: React.FC = () => {
       dataIndex: ["user", "userName"],
       width: 140,
       hideInSearch: true,
-      render: (_, record) => record.user?.userName || `用户 ${record.userId || "-"}`,
+      ellipsis: true,
+      render: (_, record) => (
+        <AdminTableEllipsis
+          value={record.user?.userName || `用户 ${record.userId || "-"}`}
+          className="text-slate-600"
+        />
+      ),
     },
     {
       title: "作者 ID",
@@ -301,12 +311,8 @@ const PostAdminPage: React.FC = () => {
       dataIndex: "reviewMessage",
       hideInSearch: true,
       width: 220,
-      render: (text) =>
-        text ? (
-          <div className="max-w-[260px] whitespace-normal break-words leading-6 line-clamp-3 text-slate-600">{text}</div>
-        ) : (
-          <span className="text-slate-300">-</span>
-        ),
+      ellipsis: true,
+      render: (text) => <AdminTableEllipsis value={text} className="text-slate-600" />,
     },
     {
       title: "创建时间",

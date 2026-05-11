@@ -8,6 +8,7 @@ import {
   reviewQuestionBankUsingPost,
 } from "@/api/questionBankController";
 import { Plus, Trash2, Edit3, Briefcase } from "lucide-react";
+import AdminTableEllipsis from "@/components/AdminTableEllipsis";
 import ProTable from "@/components/DynamicProTable";
 import type { ActionType, ProColumns } from "@ant-design/pro-components";
 import { message, Space, Image, Input, Modal, Radio, Tag } from "antd";
@@ -127,13 +128,17 @@ const QuestionBankAdminPage: React.FC = () => {
       title: "标题",
       dataIndex: "title",
       valueType: "text",
-      render: (text) => <span className="font-bold text-slate-700">{text}</span>,
+      width: 240,
+      ellipsis: true,
+      render: (text) => <AdminTableEllipsis value={text} className="font-bold text-slate-700" />,
     },
     {
       title: "描述",
       dataIndex: "description",
       valueType: "text",
+      width: 280,
       ellipsis: true,
+      render: (text) => <AdminTableEllipsis value={text} className="text-slate-600" />,
     },
     {
       title: "审核状态",
@@ -155,8 +160,9 @@ const QuestionBankAdminPage: React.FC = () => {
       dataIndex: "reviewMessage",
       valueType: "textarea",
       hideInSearch: true,
+      width: 220,
       ellipsis: true,
-      render: (text) => text || <span className="text-slate-300">-</span>,
+      render: (text) => <AdminTableEllipsis value={text} className="text-slate-600" />,
     },
     {
       title: "审核时间",

@@ -4,6 +4,7 @@ import React, { useRef } from "react";
 import type { ActionType, ProColumns } from "@ant-design/pro-components";
 import { Button, Card, message, Popconfirm, Tag, Typography } from "antd";
 import { AlertTriangle, Ban, RefreshCw, ShieldAlert, ShieldCheck } from "lucide-react";
+import AdminTableEllipsis from "@/components/AdminTableEllipsis";
 import ProTable from "@/components/DynamicProTable";
 import {
   banUserByAlertUsingPost,
@@ -143,15 +144,22 @@ export default function AdminSecurityPage() {
     {
       title: "告警原因",
       dataIndex: "reason",
-      width: 240,
+      width: 260,
       hideInSearch: true,
-      render: (text) => <span className="block max-w-[260px] break-words font-medium leading-6 text-slate-700">{text || "-"}</span>,
+      ellipsis: true,
+      render: (text) => (
+        <AdminTableEllipsis value={text} className="font-medium text-slate-700" />
+      ),
     },
     {
       title: "详情",
       dataIndex: "detail",
+      width: 260,
       hideInSearch: true,
-      render: (text) => <span className="block max-w-[260px] break-words leading-6 text-slate-500">{text || "-"}</span>,
+      ellipsis: true,
+      render: (text) => (
+        <AdminTableEllipsis value={text} className="text-slate-500" />
+      ),
     },
     {
       title: "IP",
@@ -178,9 +186,10 @@ export default function AdminSecurityPage() {
     {
       title: "处理动作",
       dataIndex: "handleAction",
-      width: 140,
+      width: 160,
       hideInSearch: true,
-      render: (text) => text || <span className="text-slate-300">-</span>,
+      ellipsis: true,
+      render: (text) => <AdminTableEllipsis value={text} className="text-slate-600" />,
     },
     {
       title: "操作",

@@ -4,6 +4,7 @@ import React, { useRef } from "react";
 import type { ActionType, ProColumns } from "@ant-design/pro-components";
 import { Button, Card, message, Popconfirm, Tag, Typography } from "antd";
 import { BrainCircuit, Download, FileSearch, RefreshCw, Trash2 } from "lucide-react";
+import AdminTableEllipsis from "@/components/AdminTableEllipsis";
 import ProTable from "@/components/DynamicProTable";
 import {
   deleteMockInterviewUsingPost,
@@ -95,8 +96,15 @@ export default function AdminMockInterviewPage() {
     {
       title: "岗位",
       dataIndex: "jobPosition",
+      width: 220,
       ellipsis: true,
-      render: (text) => <span className="block max-w-[240px] break-words font-bold leading-6 text-slate-800">{text || "未命名面试"}</span>,
+      render: (text) => (
+        <AdminTableEllipsis
+          value={text}
+          fallback="未命名面试"
+          className="font-bold text-slate-800"
+        />
+      ),
     },
     {
       title: "用户 ID",
@@ -113,9 +121,10 @@ export default function AdminMockInterviewPage() {
     {
       title: "技术方向",
       dataIndex: "techStack",
+      width: 220,
       ellipsis: true,
       hideInSearch: true,
-      render: (text) => text ? <span className="block max-w-[220px] break-words leading-6 text-slate-700">{text}</span> : <span className="text-slate-300">-</span>,
+      render: (text) => <AdminTableEllipsis value={text} className="text-slate-700" />,
     },
     {
       title: "难度",
@@ -150,7 +159,15 @@ export default function AdminMockInterviewPage() {
       title: "工作年限",
       dataIndex: "workExperience",
       hideInSearch: true,
-      render: (text) => text || <span className="text-slate-300">不限</span>,
+      width: 140,
+      ellipsis: true,
+      render: (text) => (
+        <AdminTableEllipsis
+          value={text}
+          fallback={<span className="text-slate-300">不限</span>}
+          className="text-slate-600"
+        />
+      ),
     },
     {
       title: "创建时间",

@@ -4,6 +4,7 @@ import React, { useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { deleteUserUsingPost, listUserByPageUsingPost } from "@/api/userController";
 import { Plus, Trash2, Edit3, UserCog } from "lucide-react";
+import AdminTableEllipsis from "@/components/AdminTableEllipsis";
 import ProTable from "@/components/DynamicProTable";
 import UserAvatar from "@/components/UserAvatar";
 import type { ActionType, ProColumns } from "@ant-design/pro-components";
@@ -61,12 +62,17 @@ const UserAdminPage: React.FC = () => {
       title: "账号",
       dataIndex: "userAccount",
       valueType: "text",
-      render: (text) => <span className="font-bold text-slate-700">{text}</span>,
+      width: 180,
+      ellipsis: true,
+      render: (text) => <AdminTableEllipsis value={text} className="font-bold text-slate-700" />,
     },
     {
       title: "用户名",
       dataIndex: "userName",
       valueType: "text",
+      width: 160,
+      ellipsis: true,
+      render: (text) => <AdminTableEllipsis value={text} className="text-slate-600" />,
     },
     {
       title: "最近登录城市",
@@ -79,13 +85,29 @@ const UserAdminPage: React.FC = () => {
         optionFilterProp: "label",
         popupMatchSelectWidth: false,
       },
-      render: (text) => text || <span className="text-slate-300">暂未识别</span>,
+      width: 160,
+      ellipsis: true,
+      render: (text) => (
+        <AdminTableEllipsis
+          value={text}
+          fallback={<span className="text-slate-300">暂未识别</span>}
+          className="text-slate-600"
+        />
+      ),
     },
     {
       title: "就业方向",
       dataIndex: "careerDirection",
       valueType: "text",
-      render: (text) => text || <span className="text-slate-300">未填写</span>,
+      width: 180,
+      ellipsis: true,
+      render: (text) => (
+        <AdminTableEllipsis
+          value={text}
+          fallback={<span className="text-slate-300">未填写</span>}
+          className="text-slate-600"
+        />
+      ),
     },
     {
       title: "头像",

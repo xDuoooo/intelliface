@@ -4,7 +4,7 @@ import React, { useRef, useState } from "react";
 import type { ActionType, ProColumns } from "@ant-design/pro-components";
 import { Input, message, Modal, Radio, Tag } from "antd";
 import { CheckCheck } from "lucide-react";
-import AdminTableEllipsis from "@/components/AdminTableEllipsis";
+import AdminTableEllipsis from "@/app/admin/components/AdminTableEllipsis";
 import ProTable from "@/components/DynamicProTable";
 import {
   listAdminPostCommentsByPage,
@@ -68,7 +68,7 @@ export default function PostCommentModerationPanel() {
         2: { text: "已驳回" },
       },
       render: (_, record) => (
-        <Tag color={COMMENT_STATUS_COLOR_MAP[Number(record.status ?? 0)] || "default"} className="rounded-full px-3 py-1 font-bold">
+        <Tag color={COMMENT_STATUS_COLOR_MAP[Number(record.status ?? 0)] || "default"} className="whitespace-nowrap rounded-full px-3 py-1 font-bold">
           {COMMENT_STATUS_TEXT_MAP[Number(record.status ?? 0)] || "未知"}
         </Tag>
       ),

@@ -9,11 +9,11 @@ import {
   listQuestionByPageUsingPost,
 } from "@/api/questionController";
 import { Plus, Trash2, Edit3, Database, Wand2, Link2 } from "lucide-react";
-import AdminTableEllipsis from "@/components/AdminTableEllipsis";
+import AdminTableEllipsis from "@/app/admin/components/AdminTableEllipsis";
 import ProTable from "@/components/DynamicProTable";
 import type { ActionType, ProColumns } from "@ant-design/pro-components";
 import { Button, message, Popconfirm, Skeleton, Space, Table, Tag } from "antd";
-import TagList from "@/components/TagList";
+import AdminTagList from "@/app/admin/components/AdminTagList";
 import Link from "next/link";
 import { extractSortParams } from "@/lib/utils";
 import {
@@ -184,10 +184,11 @@ const QuestionAdminPage: React.FC = () => {
       title: "标签",
       dataIndex: "tags",
       valueType: "select",
+      width: 220,
       fieldProps: { mode: "tags" },
       render: (_, record) => {
         const tagList = parseTagList(record.tags);
-        return <TagList tagList={tagList} />;
+        return <AdminTagList tagList={tagList} maxVisible={3} maxTagWidth={88} className="max-w-[200px]" />;
       },
     },
     {
@@ -201,7 +202,7 @@ const QuestionAdminPage: React.FC = () => {
       width: 100,
       render: (_, record) =>
         record.difficulty ? (
-          <Tag color={QUESTION_DIFFICULTY_COLOR_MAP[record.difficulty] || "default"} className="rounded-full px-3 py-1 font-semibold">
+          <Tag color={QUESTION_DIFFICULTY_COLOR_MAP[record.difficulty] || "default"} className="whitespace-nowrap rounded-full px-3 py-1 font-semibold">
             {record.difficulty}
           </Tag>
         ) : (
@@ -232,7 +233,7 @@ const QuestionAdminPage: React.FC = () => {
       render: (_, record) => {
         const reviewStatus = Number(record.reviewStatus ?? 1);
         return (
-          <Tag color={QUESTION_REVIEW_STATUS_COLOR_MAP[reviewStatus] || "default"} className="rounded-full px-3 py-1 font-semibold">
+          <Tag color={QUESTION_REVIEW_STATUS_COLOR_MAP[reviewStatus] || "default"} className="whitespace-nowrap rounded-full px-3 py-1 font-semibold">
             {QUESTION_REVIEW_STATUS_TEXT_MAP[reviewStatus] || "未知状态"}
           </Tag>
         );
@@ -252,6 +253,7 @@ const QuestionAdminPage: React.FC = () => {
       title: "审核时间",
       dataIndex: "reviewTime",
       valueType: "dateTime",
+      width: 180,
       hideInSearch: true,
       hideInForm: true,
     },
@@ -260,6 +262,7 @@ const QuestionAdminPage: React.FC = () => {
       sorter: true,
       dataIndex: "createTime",
       valueType: "dateTime",
+      width: 180,
       hideInSearch: true,
       hideInForm: true,
     },
@@ -267,14 +270,15 @@ const QuestionAdminPage: React.FC = () => {
       title: "操作",
       dataIndex: "option",
       valueType: "option",
+      width: 360,
       render: (_, record) => (
-        <Space size="middle">
+        <div className="flex w-[340px] flex-nowrap items-center gap-4 whitespace-nowrap">
           <button
             onClick={() => {
               setCurrentRow(record);
               setUpdateModalVisible(true);
             }}
-            className="flex items-center gap-1.5 text-primary hover:text-primary/80 font-bold transition-colors"
+            className="flex shrink-0 items-center gap-1.5 text-primary hover:text-primary/80 font-bold transition-colors"
           >
             <Edit3 className="h-4 w-4" />
             修改
@@ -284,7 +288,7 @@ const QuestionAdminPage: React.FC = () => {
               setCurrentRow(record);
               setUpdateBankModalVisible(true);
             }}
-            className="flex items-center gap-1.5 text-orange-500 hover:text-orange-600 font-bold transition-colors"
+            className="flex shrink-0 items-center gap-1.5 text-orange-500 hover:text-orange-600 font-bold transition-colors"
           >
             <Link2 className="h-4 w-4" />
             修改题库
@@ -294,7 +298,7 @@ const QuestionAdminPage: React.FC = () => {
               setCurrentRow(record);
               setReviewModalVisible(true);
             }}
-            className="flex items-center gap-1.5 text-emerald-600 hover:text-emerald-700 font-bold transition-colors"
+            className="flex shrink-0 items-center gap-1.5 text-emerald-600 hover:text-emerald-700 font-bold transition-colors"
           >
             审核
           </button>
@@ -307,13 +311,13 @@ const QuestionAdminPage: React.FC = () => {
             onConfirm={() => handleDelete(record)}
           >
             <button
-              className="flex items-center gap-1.5 text-red-500 hover:text-red-600 font-bold transition-colors"
+              className="flex shrink-0 items-center gap-1.5 text-red-500 hover:text-red-600 font-bold transition-colors"
             >
               <Trash2 className="h-4 w-4" />
               删除
             </button>
           </Popconfirm>
-        </Space>
+        </div>
       ),
     },
   ];
@@ -457,7 +461,7 @@ const QuestionAdminPage: React.FC = () => {
               }
             }}
             columns={columns}
-            scroll={{ x: true }}
+            scroll={{ x: 1560 }}
             pagination={{
               pageSize: 10,
               showSizeChanger: true,

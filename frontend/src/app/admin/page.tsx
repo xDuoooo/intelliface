@@ -25,6 +25,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import dayjs from "dayjs";
+import AdminTableEllipsis from "@/app/admin/components/AdminTableEllipsis";
 import { getDashboardOverviewUsingGet } from "@/api/adminDashboardController";
 import { banUserByAlertUsingPost, ignoreAlertUsingPost } from "@/api/securityAlertController";
 
@@ -694,12 +695,12 @@ export default function AdminDashboardPage() {
                             {index + 1}
                           </div>
                           <div className="min-w-0">
-                            <div className="line-clamp-2 break-all font-semibold leading-6 text-slate-800">{item.city}</div>
+                            <AdminTableEllipsis value={item.city} className="font-semibold text-slate-800" />
                             <div className="text-xs text-slate-500 mt-1">用户 {item.userCount || 0} 人</div>
                           </div>
                         </div>
                         <div className="shrink-0 text-left sm:text-right">
-                          <Tag color="blue">{item.practiceCount || 0} 次练习</Tag>
+                          <Tag color="blue" className="whitespace-nowrap">{item.practiceCount || 0} 次练习</Tag>
                           <div className="text-xs text-slate-500 mt-1">人均 {item.avgPracticeCount || 0}</div>
                         </div>
                       </div>
@@ -768,10 +769,10 @@ export default function AdminDashboardPage() {
                           </div>
                         </div>
                         <div className="flex flex-col items-end gap-2">
-                          <Tag color="processing" className="m-0">
+                          <Tag color="processing" className="m-0 whitespace-nowrap">
                             CTR {item.clickThroughRate || 0}%
                           </Tag>
-                          <Tag color="purple" className="m-0">
+                          <Tag color="purple" className="m-0 whitespace-nowrap">
                             掌握转化 {item.masteredConversionRate || 0}%
                           </Tag>
                         </div>
@@ -834,12 +835,12 @@ export default function AdminDashboardPage() {
                       {(searchAnalytics.topKeywords || []).slice(0, 8).map((item: any, index: number) => (
                         <div key={`${item.keyword}-${index}`} className="flex flex-col gap-3 rounded-2xl border border-slate-100 bg-slate-50/70 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
                           <div className="min-w-0">
-                            <div className="line-clamp-2 break-all font-semibold leading-6 text-slate-800">{item.keyword}</div>
+                            <AdminTableEllipsis value={item.keyword} className="font-semibold text-slate-800" />
                             <div className="text-xs text-slate-500 mt-1">
                               平均命中 {item.avgResultCount || 0} 条
                             </div>
                           </div>
-                          <Tag color="geekblue" className="m-0 self-start sm:self-auto">搜索 {item.count || 0} 次</Tag>
+                          <Tag color="geekblue" className="m-0 whitespace-nowrap self-start sm:self-auto">搜索 {item.count || 0} 次</Tag>
                         </div>
                       ))}
                     </div>
@@ -853,7 +854,7 @@ export default function AdminDashboardPage() {
                     {(searchAnalytics.zeroResultKeywords || []).length ? (
                       <div className="flex flex-wrap gap-3">
                         {(searchAnalytics.zeroResultKeywords || []).slice(0, 10).map((item: any, index: number) => (
-                          <Tag key={`${item.keyword}-empty-${index}`} color="error" className="m-0 px-3 py-1 rounded-full">
+                          <Tag key={`${item.keyword}-empty-${index}`} color="error" className="m-0 max-w-[180px] truncate whitespace-nowrap rounded-full px-3 py-1">
                             {item.keyword} · {item.count || 0}
                           </Tag>
                         ))}
@@ -891,7 +892,7 @@ export default function AdminDashboardPage() {
                   ].map((item) => (
                     <div key={item.label} className="rounded-2xl border border-slate-100 bg-slate-50/70 px-5 py-4 flex items-center justify-between">
                       <Text className="font-medium text-slate-600">{item.label}</Text>
-                      <Tag color={item.color} className="m-0 text-base px-3 py-1">{item.value}</Tag>
+                      <Tag color={item.color} className="m-0 whitespace-nowrap px-3 py-1 text-base">{item.value}</Tag>
                     </div>
                   ))}
                 </div>
@@ -913,13 +914,13 @@ export default function AdminDashboardPage() {
                     <List.Item>
                       <div className="flex w-full flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                         <div className="min-w-0">
-                          <div className="line-clamp-2 break-all font-semibold leading-6 text-slate-800">{item.title || "未命名题目"}</div>
+                          <AdminTableEllipsis value={item.title || "未命名题目"} className="font-semibold text-slate-800" />
                           <div className="text-xs text-slate-400 mt-1">
                             最近更新时间：{item.updateTime ? dayjs(item.updateTime).format("YYYY-MM-DD HH:mm") : "-"}
                           </div>
                         </div>
                         <div className="shrink-0 text-left sm:text-right">
-                          <Tag color={item.status === "待激活" ? "red" : item.status === "低热度" ? "gold" : "green"}>{item.status}</Tag>
+                          <Tag color={item.status === "待激活" ? "red" : item.status === "低热度" ? "gold" : "green"} className="whitespace-nowrap">{item.status}</Tag>
                           <div className="text-xs text-slate-500 mt-1">练习 {item.practiceCount} 次</div>
                         </div>
                       </div>
@@ -971,10 +972,10 @@ export default function AdminDashboardPage() {
                   <div className="w-full flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
-                        <Tag color={item.riskLevel === "high" ? "error" : "warning"}>
+                        <Tag color={item.riskLevel === "high" ? "error" : "warning"} className="whitespace-nowrap">
                           {item.riskLevel === "high" ? "高风险" : "中风险"}
                         </Tag>
-                        <span className="break-words font-semibold text-slate-800">{item.reason || "异常访问告警"}</span>
+                        <AdminTableEllipsis value={item.reason || "异常访问告警"} className="max-w-[520px] font-semibold text-slate-800" />
                       </div>
                       <div className="mt-2 text-sm text-slate-500">
                         {(item.userName || "未知用户")}
@@ -982,10 +983,10 @@ export default function AdminDashboardPage() {
                         {item.ip ? ` · IP: ${item.ip}` : ""}
                       </div>
                       {item.detail ? (
-                        <div className="mt-2 text-sm text-slate-500">{item.detail}</div>
+                        <AdminTableEllipsis value={item.detail} className="mt-2 text-sm text-slate-500" />
                       ) : null}
                     </div>
-                    <Tag color="red" className="shrink-0">
+                    <Tag color="red" className="shrink-0 whitespace-nowrap">
                       {item.createTime ? dayjs(item.createTime).format("MM-DD HH:mm") : "-"}
                     </Tag>
                   </div>
@@ -1011,12 +1012,12 @@ export default function AdminDashboardPage() {
                 <List.Item>
                   <div className="w-full flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
                     <div>
-                      <div className="break-words font-semibold text-slate-800">{item.operation || item.method}</div>
+                      <AdminTableEllipsis value={item.operation || item.method} className="font-semibold text-slate-800" />
                       <div className="text-xs text-slate-500 mt-1">
                         {item.userName || "未知管理员"} · {item.ip || "-"} · {item.method || "-"}
                       </div>
                     </div>
-                    <Tag color="blue">{item.createTime ? dayjs(item.createTime).format("MM-DD HH:mm") : "-"}</Tag>
+                    <Tag color="blue" className="whitespace-nowrap">{item.createTime ? dayjs(item.createTime).format("MM-DD HH:mm") : "-"}</Tag>
                   </div>
                 </List.Item>
               )}

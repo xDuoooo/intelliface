@@ -4,11 +4,11 @@ import React, { useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { deleteUserUsingPost, listUserByPageUsingPost } from "@/api/userController";
 import { Plus, Trash2, Edit3, UserCog } from "lucide-react";
-import AdminTableEllipsis from "@/components/AdminTableEllipsis";
+import AdminTableEllipsis from "@/app/admin/components/AdminTableEllipsis";
 import ProTable from "@/components/DynamicProTable";
 import UserAvatar from "@/components/UserAvatar";
 import type { ActionType, ProColumns } from "@ant-design/pro-components";
-import { message, Space, Tag, Popconfirm } from "antd";
+import { message, Tag, Popconfirm } from "antd";
 import { useSelector } from "react-redux";
 import { RootState } from "@/stores";
 import { CITY_GROUP_OPTIONS, CITY_VALUE_ENUM } from "@/config/cityOptions";
@@ -112,6 +112,7 @@ const UserAdminPage: React.FC = () => {
     {
       title: "头像",
       dataIndex: "userAvatar",
+      width: 90,
       hideInSearch: true,
       render: (_, record) => (
         <UserAvatar src={record.userAvatar} name={record.userName} size={48} className="border border-slate-100" />
@@ -120,6 +121,7 @@ const UserAdminPage: React.FC = () => {
     {
       title: "角色",
       dataIndex: "userRole",
+      width: 110,
       valueEnum: {
         user: { text: "用户", status: "Default" },
         admin: { text: "管理员", status: "Success" },
@@ -127,7 +129,7 @@ const UserAdminPage: React.FC = () => {
       render: (_, record) => {
         const isAdmin = record.userRole === "admin";
         return (
-          <Tag color={isAdmin ? "gold" : "blue"} className="rounded-lg font-bold border-none px-3 py-1">
+          <Tag color={isAdmin ? "gold" : "blue"} className="whitespace-nowrap rounded-lg border-none px-3 py-1 font-bold">
             {isAdmin ? "管理员" : "用户"}
           </Tag>
         );
@@ -138,6 +140,7 @@ const UserAdminPage: React.FC = () => {
       sorter: true,
       dataIndex: "createTime",
       valueType: "dateTime",
+      width: 180,
       hideInSearch: true,
       hideInForm: true,
     },
@@ -145,16 +148,17 @@ const UserAdminPage: React.FC = () => {
       title: "操作",
       dataIndex: "option",
       valueType: "option",
+      width: 150,
       render: (_, record) => {
         const isCurrentLoginUser = Boolean(loginUser?.id && record.id === loginUser.id);
         return (
-        <Space size="middle">
+        <div className="flex w-[130px] flex-nowrap items-center gap-4 whitespace-nowrap">
           <button
             onClick={() => {
               setCurrentRow(record);
               setUpdateModalVisible(true);
             }}
-            className="flex items-center gap-1.5 text-primary hover:text-primary/80 font-bold transition-colors"
+            className="flex shrink-0 items-center gap-1.5 text-primary hover:text-primary/80 font-bold transition-colors"
           >
             <Edit3 className="h-4 w-4" />
             修改
@@ -169,7 +173,7 @@ const UserAdminPage: React.FC = () => {
             onConfirm={() => handleDelete(record)}
           >
             <button
-              className={`flex items-center gap-1.5 font-bold transition-colors ${
+              className={`flex shrink-0 items-center gap-1.5 font-bold transition-colors ${
                 isCurrentLoginUser ? "cursor-not-allowed text-slate-300" : "text-red-500 hover:text-red-600"
               }`}
             >
@@ -177,7 +181,7 @@ const UserAdminPage: React.FC = () => {
               {isCurrentLoginUser ? "当前账号" : "删除"}
             </button>
           </Popconfirm>
-        </Space>
+        </div>
       )},
     },
   ];
@@ -244,6 +248,7 @@ const UserAdminPage: React.FC = () => {
             }
           }}
           columns={columns}
+          scroll={{ x: 1180 }}
           pagination={{
             pageSize: 10,
             showSizeChanger: true,

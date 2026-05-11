@@ -26,7 +26,7 @@ import {
   message,
 } from "antd";
 import { Megaphone } from "lucide-react";
-import AdminTableEllipsis from "@/components/AdminTableEllipsis";
+import AdminTableEllipsis from "@/app/admin/components/AdminTableEllipsis";
 
 const { Text } = Typography;
 
@@ -143,7 +143,7 @@ export default function NotificationRecordCard({ refreshToken = 0 }: Props) {
       dataIndex: "type",
       width: 150,
       render: (value: string) => (
-        <Tag color={NOTIFICATION_TYPE_COLOR_MAP[value] || "blue"}>
+        <Tag color={NOTIFICATION_TYPE_COLOR_MAP[value] || "blue"} className="whitespace-nowrap">
           {getNotificationTypeLabel(value)}
         </Tag>
       ),
@@ -153,7 +153,7 @@ export default function NotificationRecordCard({ refreshToken = 0 }: Props) {
       dataIndex: "status",
       width: 110,
       render: (value: number) =>
-        value === 1 ? <Tag color="green">已读</Tag> : <Tag color="gold">未读</Tag>,
+        value === 1 ? <Tag color="green" className="whitespace-nowrap">已读</Tag> : <Tag color="gold" className="whitespace-nowrap">未读</Tag>,
     },
     {
       title: "目标 ID",

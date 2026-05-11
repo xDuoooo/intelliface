@@ -7,8 +7,9 @@ import type { ActionType, ProColumns } from "@ant-design/pro-components";
 import { Button, Input, message, Modal, Popconfirm, Radio, Skeleton, Switch, Tag, Tooltip } from "antd";
 import Link from "next/link";
 import { AlertTriangle, CheckCheck, Edit3, FilePlus2, ShieldCheck, Sparkles, Trash2 } from "lucide-react";
-import AdminTableEllipsis from "@/components/AdminTableEllipsis";
+import AdminTableEllipsis from "@/app/admin/components/AdminTableEllipsis";
 import ProTable from "@/components/DynamicProTable";
+import AdminTagList from "@/app/admin/components/AdminTagList";
 import {
   addPostUsingPost,
   deletePostUsingPost,
@@ -191,7 +192,12 @@ const PostAdminPage: React.FC = () => {
       width: 260,
       ellipsis: true,
       render: (_, record) => (
-        <Tooltip title={record.title} placement="topLeft" mouseEnterDelay={0.25}>
+        <Tooltip
+          title={<span style={{ color: "rgba(255, 255, 255, 0.95)" }}>{record.title}</span>}
+          placement="topLeft"
+          mouseEnterDelay={0.25}
+          overlayInnerStyle={{ color: "rgba(255, 255, 255, 0.95)" }}
+        >
           <Link
             href={`/post/${record.id}`}
             className="block max-w-[260px] truncate text-sm font-black text-slate-800 transition-colors hover:text-primary"
@@ -204,21 +210,11 @@ const PostAdminPage: React.FC = () => {
     {
       title: "标签",
       dataIndex: "tags",
+      width: 240,
       hideInForm: true,
       hideInSearch: true,
       render: (_, record) => (
-        <div className="flex flex-wrap gap-2">
-          {(record.tagList || []).slice(0, 3).map((tag) => (
-            <Tag key={tag} className="m-0 rounded-full border-slate-200 bg-slate-50 px-3 py-1">
-              {tag}
-            </Tag>
-          ))}
-          {(record.tagList?.length || 0) > 3 ? (
-            <Tag className="m-0 rounded-full border-slate-200 bg-white px-3 py-1 text-slate-500">
-              +{(record.tagList?.length || 0) - 3}
-            </Tag>
-          ) : null}
-        </div>
+        <AdminTagList tagList={record.tagList || []} maxVisible={3} maxTagWidth={86} className="max-w-[220px]" />
       ),
     },
     {
@@ -287,7 +283,7 @@ const PostAdminPage: React.FC = () => {
         2: { text: "已驳回" },
       },
       render: (_, record) => (
-        <Tag color={POST_REVIEW_STATUS_COLOR_MAP[Number(record.reviewStatus ?? 1)] || "default"} className="rounded-full px-3 py-1 font-bold">
+        <Tag color={POST_REVIEW_STATUS_COLOR_MAP[Number(record.reviewStatus ?? 1)] || "default"} className="whitespace-nowrap rounded-full px-3 py-1 font-bold">
           {POST_REVIEW_STATUS_TEXT_MAP[Number(record.reviewStatus ?? 1)] || "未知状态"}
         </Tag>
       ),
@@ -295,11 +291,12 @@ const PostAdminPage: React.FC = () => {
     {
       title: "运营标签",
       dataIndex: "operation",
+      width: 140,
       hideInSearch: true,
       render: (_, record) => (
         <div className="flex flex-wrap gap-2">
-          {Number(record.isTop || 0) > 0 ? <Tag color="gold" className="m-0 rounded-full px-3 py-1 font-bold">置顶</Tag> : null}
-          {Number(record.isFeatured || 0) > 0 ? <Tag color="purple" className="m-0 rounded-full px-3 py-1 font-bold">精选</Tag> : null}
+          {Number(record.isTop || 0) > 0 ? <Tag color="gold" className="m-0 whitespace-nowrap rounded-full px-3 py-1 font-bold">置顶</Tag> : null}
+          {Number(record.isFeatured || 0) > 0 ? <Tag color="purple" className="m-0 whitespace-nowrap rounded-full px-3 py-1 font-bold">精选</Tag> : null}
           {Number(record.isTop || 0) === 0 && Number(record.isFeatured || 0) === 0 ? (
             <span className="text-slate-300">-</span>
           ) : null}
@@ -639,9 +636,10 @@ const PostAdminPage: React.FC = () => {
           <div>
             <div className="text-xs font-black uppercase tracking-[0.2em] text-amber-600">Post Reports</div>
             <h3 className="mt-2 text-2xl font-black text-slate-900">帖子举报处理</h3>
-            <p className="mt-2 break-words text-sm text-slate-500">
-              当前帖子：{reportingPost?.title || "未命名帖子"}。你可以查看举报原因，并逐条采纳或驳回。
-            </p>
+            <AdminTableEllipsis
+              value={`当前帖子：${reportingPost?.title || "未命名帖子"}。你可以查看举报原因，并逐条采纳或驳回。`}
+              className="mt-2 text-sm text-slate-500"
+            />
           </div>
 
           {reportListLoading ? (

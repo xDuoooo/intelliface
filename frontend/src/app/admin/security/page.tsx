@@ -4,7 +4,7 @@ import React, { useRef } from "react";
 import type { ActionType, ProColumns } from "@ant-design/pro-components";
 import { Button, Card, message, Popconfirm, Tag, Typography } from "antd";
 import { AlertTriangle, Ban, RefreshCw, ShieldAlert, ShieldCheck } from "lucide-react";
-import AdminTableEllipsis from "@/components/AdminTableEllipsis";
+import AdminTableEllipsis from "@/app/admin/components/AdminTableEllipsis";
 import ProTable from "@/components/DynamicProTable";
 import {
   banUserByAlertUsingPost,
@@ -107,7 +107,12 @@ export default function AdminSecurityPage() {
         SEARCH_ABUSE: { text: "搜索滥用" },
         UNKNOWN: { text: "其他" },
       },
-      render: (_, record) => <Tag className="rounded-full px-3 py-1">{record.alertType || "UNKNOWN"}</Tag>,
+      render: (_, record) => (
+        <AdminTableEllipsis
+          value={record.alertType || "UNKNOWN"}
+          className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs text-slate-600"
+        />
+      ),
     },
     {
       title: "风险等级",
@@ -120,7 +125,7 @@ export default function AdminSecurityPage() {
         low: { text: "低风险" },
       },
       render: (_, record) => (
-        <Tag color={RISK_LEVEL_COLOR_MAP[String(record.riskLevel || "medium")] || "default"} className="rounded-full px-3 py-1 font-bold">
+        <Tag color={RISK_LEVEL_COLOR_MAP[String(record.riskLevel || "medium")] || "default"} className="whitespace-nowrap rounded-full px-3 py-1 font-bold">
           {RISK_LEVEL_TEXT_MAP[String(record.riskLevel || "medium")] || "未知"}
         </Tag>
       ),
@@ -136,7 +141,7 @@ export default function AdminSecurityPage() {
         2: { text: "已忽略" },
       },
       render: (_, record) => (
-        <Tag color={STATUS_COLOR_MAP[Number(record.status ?? 0)] || "default"} className="rounded-full px-3 py-1 font-bold">
+        <Tag color={STATUS_COLOR_MAP[Number(record.status ?? 0)] || "default"} className="whitespace-nowrap rounded-full px-3 py-1 font-bold">
           {STATUS_TEXT_MAP[Number(record.status ?? 0)] || "未知"}
         </Tag>
       ),

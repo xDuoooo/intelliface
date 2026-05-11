@@ -14,7 +14,7 @@ import {
   Terminal,
   User as UserIcon,
 } from "lucide-react";
-import AdminTableEllipsis from "@/components/AdminTableEllipsis";
+import AdminTableEllipsis from "@/app/admin/components/AdminTableEllipsis";
 import request, { buildApiUrl } from "@/libs/request";
 import { extractSortParams, formatDateTime } from "@/lib/utils";
 
@@ -93,8 +93,11 @@ export default function AdminLogsPage() {
       ellipsis: true,
       hideInSearch: true,
       render: (text) => (
-        <Tooltip title={text}>
-          <Tag className="max-w-[220px] truncate rounded-lg border-slate-200 bg-slate-50 font-mono text-xs text-slate-500">
+        <Tooltip
+          title={<span style={{ color: "rgba(255, 255, 255, 0.95)" }}>{text}</span>}
+          overlayInnerStyle={{ color: "rgba(255, 255, 255, 0.95)" }}
+        >
+          <Tag className="max-w-[220px] truncate whitespace-nowrap rounded-lg border-slate-200 bg-slate-50 font-mono text-xs text-slate-500">
             {String(text || "-").split(".").pop()}
           </Tag>
         </Tooltip>

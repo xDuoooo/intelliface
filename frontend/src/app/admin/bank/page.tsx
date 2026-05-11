@@ -8,10 +8,10 @@ import {
   reviewQuestionBankUsingPost,
 } from "@/api/questionBankController";
 import { Plus, Trash2, Edit3, Briefcase } from "lucide-react";
-import AdminTableEllipsis from "@/components/AdminTableEllipsis";
+import AdminTableEllipsis from "@/app/admin/components/AdminTableEllipsis";
 import ProTable from "@/components/DynamicProTable";
 import type { ActionType, ProColumns } from "@ant-design/pro-components";
-import { message, Space, Image, Input, Modal, Radio, Tag } from "antd";
+import { message, Image, Input, Modal, Radio, Tag } from "antd";
 import {
   QUESTION_REVIEW_STATUS_COLOR_MAP,
   QUESTION_REVIEW_STATUS_ENUM,
@@ -149,7 +149,7 @@ const QuestionBankAdminPage: React.FC = () => {
       render: (_, record) => {
         const reviewStatus = Number(record.reviewStatus ?? QUESTION_REVIEW_STATUS_ENUM.APPROVED);
         return (
-          <Tag color={QUESTION_REVIEW_STATUS_COLOR_MAP[reviewStatus] || "default"} className="rounded-full px-3 py-1 font-semibold">
+          <Tag color={QUESTION_REVIEW_STATUS_COLOR_MAP[reviewStatus] || "default"} className="whitespace-nowrap rounded-full px-3 py-1 font-semibold">
             {QUESTION_REVIEW_STATUS_TEXT_MAP[reviewStatus] || "未知状态"}
           </Tag>
         );
@@ -168,6 +168,7 @@ const QuestionBankAdminPage: React.FC = () => {
       title: "审核时间",
       dataIndex: "reviewTime",
       valueType: "dateTime",
+      width: 180,
       hideInSearch: true,
       hideInForm: true,
     },
@@ -175,6 +176,7 @@ const QuestionBankAdminPage: React.FC = () => {
       title: "图片",
       dataIndex: "picture",
       valueType: "image",
+      width: 110,
       fieldProps: { width: 64 },
       hideInSearch: true,
       render: (_, record) => (
@@ -192,6 +194,7 @@ const QuestionBankAdminPage: React.FC = () => {
       sorter: true,
       dataIndex: "createTime",
       valueType: "dateTime",
+      width: 180,
       hideInSearch: true,
       hideInForm: true,
     },
@@ -199,14 +202,15 @@ const QuestionBankAdminPage: React.FC = () => {
       title: "操作",
       dataIndex: "option",
       valueType: "option",
+      width: 260,
       render: (_, record) => (
-        <Space size="middle">
+        <div className="flex w-[240px] flex-nowrap items-center gap-4 whitespace-nowrap">
           <button
             onClick={() => {
               setCurrentRow(record);
               setUpdateModalVisible(true);
             }}
-            className="flex items-center gap-1.5 text-primary hover:text-primary/80 font-bold transition-colors"
+            className="flex shrink-0 items-center gap-1.5 text-primary hover:text-primary/80 font-bold transition-colors"
           >
             <Edit3 className="h-4 w-4" />
             修改
@@ -223,21 +227,21 @@ const QuestionBankAdminPage: React.FC = () => {
                 setReviewMessage(record.reviewMessage || "");
                 setReviewModalVisible(true);
               }}
-              className="flex items-center gap-1.5 text-emerald-600 hover:text-emerald-700 font-bold transition-colors"
+              className="flex shrink-0 items-center gap-1.5 text-emerald-600 hover:text-emerald-700 font-bold transition-colors"
             >
               审核
             </button>
           ) : (
-            <span className="text-slate-300 font-bold">待用户提交</span>
+            <span className="shrink-0 text-slate-300 font-bold">待用户提交</span>
           )}
           <button
             onClick={() => handleDelete(record)}
-            className="flex items-center gap-1.5 text-red-500 hover:text-red-600 font-bold transition-colors"
+            className="flex shrink-0 items-center gap-1.5 text-red-500 hover:text-red-600 font-bold transition-colors"
           >
             <Trash2 className="h-4 w-4" />
             删除
           </button>
-        </Space>
+        </div>
       ),
     },
   ];
@@ -306,6 +310,7 @@ const QuestionBankAdminPage: React.FC = () => {
             }
           }}
           columns={columns}
+          scroll={{ x: 1280 }}
           pagination={{
             pageSize: 10,
             showSizeChanger: true,

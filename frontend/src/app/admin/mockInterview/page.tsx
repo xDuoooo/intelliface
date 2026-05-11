@@ -4,7 +4,7 @@ import React, { useRef } from "react";
 import type { ActionType, ProColumns } from "@ant-design/pro-components";
 import { Button, Card, message, Popconfirm, Tag, Typography } from "antd";
 import { BrainCircuit, Download, FileSearch, RefreshCw, Trash2 } from "lucide-react";
-import AdminTableEllipsis from "@/components/AdminTableEllipsis";
+import AdminTableEllipsis from "@/app/admin/components/AdminTableEllipsis";
 import ProTable from "@/components/DynamicProTable";
 import {
   deleteMockInterviewUsingPost,
@@ -116,7 +116,12 @@ export default function AdminMockInterviewPage() {
       title: "面试类型",
       dataIndex: "interviewType",
       valueType: "select",
-      render: (text) => <Tag className="rounded-full px-3 py-1">{text || "技术深挖"}</Tag>,
+      render: (text) => (
+        <AdminTableEllipsis
+          value={text || "技术深挖"}
+          className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs text-slate-600"
+        />
+      ),
     },
     {
       title: "技术方向",
@@ -145,7 +150,7 @@ export default function AdminMockInterviewPage() {
       },
       render: (_, record) => {
         const status = STATUS_MAP[Number(record.status ?? 0)] || STATUS_MAP[0];
-        return <Tag color={status.color} className="rounded-full px-3 py-1 font-bold">{status.text}</Tag>;
+        return <Tag color={status.color} className="whitespace-nowrap rounded-full px-3 py-1 font-bold">{status.text}</Tag>;
       },
     },
     {

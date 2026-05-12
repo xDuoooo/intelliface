@@ -14,6 +14,7 @@ interface AdminTableEllipsisProps {
   className?: string;
   maxWidth?: number | string;
   placement?: TooltipPlacement;
+  showTooltip?: boolean;
 }
 
 const isEmptyValue = (value: React.ReactNode) =>
@@ -27,16 +28,24 @@ export default function AdminTableEllipsis({
   className,
   maxWidth = "100%",
   placement = "topLeft",
+  showTooltip = false,
 }: AdminTableEllipsisProps) {
   const rawContent = children ?? value;
   const isEmpty = isEmptyValue(rawContent);
   const content = isEmpty ? fallback : rawContent;
-  const tooltipTitle = isEmpty ? undefined : tooltip ?? rawContent;
+  const shouldShowTooltip = showTooltip || tooltip !== undefined;
+  const tooltipTitle = shouldShowTooltip && !isEmpty ? tooltip ?? rawContent : undefined;
+  const accessibleLabel =
+    typeof rawContent === "string" || typeof rawContent === "number" ? String(rawContent) : undefined;
   const style: React.CSSProperties = {
     maxWidth: typeof maxWidth === "number" ? `${maxWidth}px` : maxWidth,
   };
   const node = (
-    <span className={cn("block min-w-0 max-w-full truncate", className)} style={style}>
+    <span
+      aria-label={accessibleLabel}
+      className={cn("block min-w-0 max-w-full truncate", className)}
+      style={style}
+    >
       {content}
     </span>
   );

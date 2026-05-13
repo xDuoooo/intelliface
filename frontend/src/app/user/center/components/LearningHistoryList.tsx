@@ -41,7 +41,7 @@ const LearningHistoryList: React.FC<Props> = ({ limit }) => {
   const [total, setTotal] = useState<number>(0);
   const [loading, setLoading] = useState<boolean>(true);
   const [statusFilter, setStatusFilter] = useState<StatusFilterValue>("all");
-  const [params, setParams] = useState({ current: 1, pageSize: limit || 12 });
+  const [params, setParams] = useState({ current: 1, pageSize: limit || 4 });
 
   const requestParams = useMemo(
     () => ({

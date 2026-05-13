@@ -75,9 +75,19 @@ import java.util.stream.Collectors;
 public class QuestionServiceImpl extends ServiceImpl<QuestionMapper, Question> implements QuestionService {
 
     private static final int USER_INTERACTION_LIMIT = 120;
+    private static final int USER_INTEREST_TAG_WEIGHT = 3;
     private static final double MAX_COLLABORATIVE_SCORE = 3D;
-    private static final int COLLABORATIVE_SCORE_SCALE = 12;
     private static final double MIN_COLLABORATIVE_SIMILARITY = 0.01D;
+    private static final double TAG_SCORE_NORMALIZE_CAP = 40D;
+    private static final double RESUME_KEYWORD_HIT_NORMALIZE_CAP = 5D;
+    private static final double PERSONAL_TAG_SCORE_WEIGHT = 0.45D;
+    private static final double PERSONAL_COLLABORATIVE_SCORE_WEIGHT = 0.40D;
+    private static final double PERSONAL_DIFFICULTY_SCORE_WEIGHT = 0.15D;
+    private static final double RELATED_TAG_SCORE_WEIGHT = 0.75D;
+    private static final double RELATED_COLLABORATIVE_SCORE_WEIGHT = 0.25D;
+    private static final double RESUME_TAG_SCORE_WEIGHT = 0.60D;
+    private static final double RESUME_KEYWORD_SCORE_WEIGHT = 0.20D;
+    private static final double RESUME_DIFFICULTY_SCORE_WEIGHT = 0.20D;
 
     @Resource
     private UserService userService;
@@ -536,6 +546,10 @@ public class QuestionServiceImpl extends ServiceImpl<QuestionMapper, Question> i
     public List<QuestionVO> listRecommendQuestionVOByUser(long userId, Long currentQuestionId, int size, HttpServletRequest request) {
         size = Math.max(1, Math.min(size, 12));
         Map<String, Integer> tagWeightMap = new HashMap<>();
+        User user = userService.getById(userId);
+        if (user != null) {
+            addTagWeights(tagWeightMap, parseTagList(user.getInterestTags()), USER_INTEREST_TAG_WEIGHT);
+        }
         Map<Long, Integer> interactedQuestionWeightMap = buildUserInteractionWeightMap(userId);
         Set<Long> interactedQuestionIdSet = new HashSet<>(interactedQuestionWeightMap.keySet());
 
@@ -603,9 +617,14 @@ public class QuestionServiceImpl extends ServiceImpl<QuestionMapper, Question> i
                 .map(question -> {
                     QuestionRecommendationScore contentScore = buildRecommendationScore(question, tagWeightMap, "偏好标签");
                     CollaborativeRecommendationDetail collaborativeDetail = collaborativeScoreMap.get(question.getId());
-                    int finalScore = contentScore.getScore()
-                            + (collaborativeDetail == null ? 0 : collaborativeDetail.getScore())
-                            + buildDifficultyScore(question.getDifficulty(), recommendedDifficulty);
+                    int tagScore = normalizeComponentScore(contentScore.getScore(), TAG_SCORE_NORMALIZE_CAP);
+                    int collaborativeScore = collaborativeDetail == null ? 0 : collaborativeDetail.getScore();
+                    int difficultyScore = normalizeDifficultyScore(buildDifficultyScore(question.getDifficulty(), recommendedDifficulty));
+                    int finalScore = roundWeightedScore(
+                            tagScore * PERSONAL_TAG_SCORE_WEIGHT
+                                    + collaborativeScore * PERSONAL_COLLABORATIVE_SCORE_WEIGHT
+                                    + difficultyScore * PERSONAL_DIFFICULTY_SCORE_WEIGHT
+                    );
                     String finalReason = mergeRecommendationReason(
                             contentScore.getReason(),
                             collaborativeDetail == null ? "" : collaborativeDetail.getReason(),
@@ -668,9 +687,13 @@ public class QuestionServiceImpl extends ServiceImpl<QuestionMapper, Question> i
                             .filter(currentTagList::contains)
                             .distinct()
                             .collect(Collectors.toList());
-                    int score = overlapTags.size() * 100;
                     CollaborativeRecommendationDetail collaborativeDetail = collaborativeScoreMap.get(question.getId());
-                    score += collaborativeDetail == null ? 0 : collaborativeDetail.getScore();
+                    int tagScore = normalizeComponentScore(overlapTags.size(), Math.max(1, currentTagList.size()));
+                    int collaborativeScore = collaborativeDetail == null ? 0 : collaborativeDetail.getScore();
+                    int score = roundWeightedScore(
+                            tagScore * RELATED_TAG_SCORE_WEIGHT
+                                    + collaborativeScore * RELATED_COLLABORATIVE_SCORE_WEIGHT
+                    );
                     String reason = mergeRecommendationReason(
                             overlapTags.isEmpty() ? "" : "关联标签：" + String.join(" / ", overlapTags),
                             collaborativeDetail == null ? "" : collaborativeDetail.getReason()
@@ -831,16 +854,16 @@ public class QuestionServiceImpl extends ServiceImpl<QuestionMapper, Question> i
 
     private QuestionRecommendationScore buildRecommendationScore(Question question, Map<String, Integer> tagWeightMap, String reasonPrefix) {
         List<String> matchedTagList = new ArrayList<>();
-        int score = 0;
+        int tagRawScore = 0;
         for (String tag : parseTagList(question.getTags())) {
             Integer weight = tagWeightMap.get(tag);
             if (weight != null && weight > 0) {
-                score += weight;
+                tagRawScore += weight;
                 matchedTagList.add(tag);
             }
         }
         String reason = matchedTagList.isEmpty() ? "" : reasonPrefix + "：" + String.join(" / ", matchedTagList.stream().distinct().limit(3).collect(Collectors.toList()));
-        return new QuestionRecommendationScore(question, score, reason);
+        return new QuestionRecommendationScore(question, tagRawScore, reason);
     }
 
     private QuestionRecommendationScore buildResumeRecommendationScore(Question question,
@@ -848,11 +871,11 @@ public class QuestionServiceImpl extends ServiceImpl<QuestionMapper, Question> i
                                                                        List<String> extractedTags,
                                                                        String recommendedDifficulty) {
         List<String> matchedTagList = new ArrayList<>();
-        int score = 0;
+        int tagRawScore = 0;
         for (String tag : parseTagList(question.getTags())) {
             Integer weight = tagWeightMap.get(tag);
             if (weight != null && weight > 0) {
-                score += weight;
+                tagRawScore += weight;
                 matchedTagList.add(tag);
             }
         }
@@ -863,11 +886,17 @@ public class QuestionServiceImpl extends ServiceImpl<QuestionMapper, Question> i
                 continue;
             }
             if (normalizedQuestionText.contains(normalizeKeyword(tag))) {
-                score += 2;
                 matchedKeywordList.add(tag);
             }
         }
-        score += buildDifficultyScore(question.getDifficulty(), recommendedDifficulty);
+        int tagScore = normalizeComponentScore(tagRawScore, TAG_SCORE_NORMALIZE_CAP);
+        int keywordScore = normalizeComponentScore(matchedKeywordList.size(), RESUME_KEYWORD_HIT_NORMALIZE_CAP);
+        int difficultyScore = normalizeDifficultyScore(buildDifficultyScore(question.getDifficulty(), recommendedDifficulty));
+        int score = roundWeightedScore(
+                tagScore * RESUME_TAG_SCORE_WEIGHT
+                        + keywordScore * RESUME_KEYWORD_SCORE_WEIGHT
+                        + difficultyScore * RESUME_DIFFICULTY_SCORE_WEIGHT
+        );
         String reason = mergeRecommendationReason(
                 buildResumeRecommendationReason(matchedTagList, matchedKeywordList),
                 buildDifficultyReason(question.getDifficulty(), recommendedDifficulty)
@@ -1127,7 +1156,28 @@ public class QuestionServiceImpl extends ServiceImpl<QuestionMapper, Question> i
     }
 
     private int normalizeCollaborativeScore(double rawScore) {
-        return (int) Math.round(Math.min(rawScore, MAX_COLLABORATIVE_SCORE) * COLLABORATIVE_SCORE_SCALE);
+        return normalizeComponentScore(rawScore, MAX_COLLABORATIVE_SCORE);
+    }
+
+    private int normalizeComponentScore(double rawScore, double maxScore) {
+        if (rawScore <= 0D || maxScore <= 0D) {
+            return 0;
+        }
+        return (int) Math.round(Math.min(rawScore, maxScore) * 100D / maxScore);
+    }
+
+    private int normalizeDifficultyScore(int rawDifficultyScore) {
+        if (rawDifficultyScore >= 8) {
+            return 100;
+        }
+        if (rawDifficultyScore >= 3) {
+            return 60;
+        }
+        return 0;
+    }
+
+    private int roundWeightedScore(double score) {
+        return (int) Math.round(Math.max(0D, Math.min(100D, score)));
     }
 
     private String buildCollaborativeReason(Map<Long, Double> sourceContributionMap, Map<Long, String> sourceQuestionTitleMap) {
